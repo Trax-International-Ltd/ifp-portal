@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IFP Design Ltd — Tools</title>
+<link rel="icon" href="assets/logo.png">
+<style>
+  /* House tokens — mirrors the shared stylesheet of both tools */
+  :root{
+    --brand-blue:#0982C1; --brand-blue-dark:#076ca1; --brand-navy:#002039;
+    --ink:#1b2733; --ink-soft:#5b6b7a; --line:#e2e8ee; --bg:#f5f7f9;
+    --radius:8px;
+    --shadow:0 1px 2px rgba(0,32,57,.06),0 4px 16px rgba(0,32,57,.05);
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);color:var(--ink);background:linear-gradient(160deg,#ffffff 0%,var(--bg) 60%);
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:3rem 1.5rem 2rem;-webkit-font-smoothing:antialiased;line-height:1.5}
+  .head{text-align:center;margin-bottom:2.5rem}
+  .head img{max-height:110px;max-width:110px;margin-bottom:1rem}
+  h1{color:var(--brand-navy);font-size:1.6rem;font-weight:700;letter-spacing:-.01em}
+  .sub{color:var(--ink-soft);font-size:.95rem;margin-top:.35rem}
+  .band{height:4px;width:64px;background:var(--brand-blue);border-radius:2px;margin:1.1rem auto 0}
+
+  .tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,320px));gap:1.5rem;justify-content:center;width:100%;max-width:1040px}
+  a.tool{display:block;background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:1.75rem 1.6rem;text-decoration:none;color:inherit;
+    transition:transform .15s,box-shadow .15s,border-color .15s}
+  a.tool:hover{transform:translateY(-3px);border-color:var(--brand-blue);
+    box-shadow:0 2px 4px rgba(0,32,57,.08),0 10px 28px rgba(0,32,57,.10)}
+  .tool h2{color:var(--brand-navy);font-size:1.1rem;font-weight:700;margin-bottom:.4rem}
+  .tool p{color:var(--ink-soft);font-size:.88rem;min-height:3.9em}
+  .tool .go{display:inline-flex;align-items:center;gap:.4rem;margin-top:1.1rem;
+    font-weight:600;font-size:.9rem;color:var(--brand-blue)}
+  a.tool:hover .go{color:var(--brand-blue-dark)}
+
+  footer{margin-top:auto;padding-top:3rem;font-size:.8rem;color:var(--ink-soft);text-align:center}
+  @media (max-width:640px){ body{padding-top:2rem} .head img{max-height:90px} }
+</style>
+</head>
+<body>
+  <div class="head">
+    <img src="assets/logo.png" alt="IFP Design Ltd">
+    <h1>IFP Design Ltd</h1>
+    <p class="sub">Aerodrome Safeguarding &amp; Instrument Flight Procedures</p>
+    <div class="band"></div>
+  </div>
+
+  <div class="tools">
+    <!-- EDIT THESE TWO hrefs to your Railway URLs -->
+    <a class="tool" href="https://YOUR-FILTERING-TOOL.up.railway.app">
+      <h2>IFP Surface Filtering Tool</h2>
+      <p>Assess obstacles against protected surfaces — single or bulk, with mapping, reports, and a full assessment history.</p>
+      <span class="go">Open the tool &#8594;</span>
+    </a>
+    <a class="tool" href="https://YOUR-SURFACE-LIST-GENERATOR.up.railway.app">
+      <h2>IFP Surface List Generator</h2>
+      <p>Define aerodrome procedure surfaces (MOCA &#8722; MOC), with checking, CAD validation, and the AutoCAD data-link workbook.</p>
+      <span class="go">Open the tool &#8594;</span>
+    </a>
+    <a class="tool" href="https://YOUR-AIRCRAFT-TOOL-URL">
+      <h2>Taxi-Route Obstacle Generator</h2>
+      <p>Build CAP 1732 taxiway obstacle surfaces from survey and route data, with a shared, team-verified aircraft library.</p>
+      <span class="go">Open the tool &#8594;</span>
+    </a>
+  </div>
+
+  <footer>&copy; <span id="y"></span> Trax International Ltd</footer>
+  <script>document.getElementById("y").textContent=new Date().getFullYear();</script>
+</body>
+</html>
