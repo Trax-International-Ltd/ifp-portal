@@ -3,44 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0d1e2e">
+<meta name="theme-color" content="#002039">
 <title>XVOD record search</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* ---- IFP Portal shared theme (matches ifp-portal/portal.css) ---- */
+/* ---- IFP house theme (mirrors the shared stylesheet of the Surface Filtering Tool / Surface List Generator) ---- */
 :root{
-  --ifp-bg:#0d1e2e; --ifp-surface:#16324a; --ifp-surface-2:#1a3a55; --ifp-field:#112637;
-  --ifp-text:#e9e9ed; --ifp-n400:#a9b6c2; --ifp-n500:#8496a6; --ifp-n600:#63788a; --ifp-n800:#28425a; --ifp-n900:#1a3046;
-  --ifp-line:#38546e;
-  --ifp-accent:#64afd7; --ifp-accent-300:#b3d9ee; --ifp-accent-400:#8cc5e4; --ifp-accent-600:#4a8cb0; --ifp-accent-700:#386c89; --ifp-accent-800:#244a60; --ifp-accent-900:#142e44;
-  --ifp-orange:#e95318;
-  --ifp-ok:#5fc48e; --ifp-ok-bg:#153b30; --ifp-warn:#e6b45a; --ifp-warn-bg:#3d2f14; --ifp-err:#f0776b; --ifp-err-bg:#4a1f1c;
-  --ifp-divider:color-mix(in srgb,#e9e9ed 16%,transparent);
-  --ifp-font:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ifp-bg:#f5f7f9; --ifp-surface:#ffffff; --ifp-surface-2:#f7f9fb; --ifp-field:#ffffff;
+  --ifp-text:#1b2733; --ifp-navy:#002039;
+  --ifp-n400:#5b6b7a; --ifp-n500:#6f7f8d; --ifp-n600:#8a98a5; --ifp-n800:#e2e8ee; --ifp-n900:#eef2f5;
+  --ifp-line:#cfd8e0;
+  --ifp-accent:#0982C1; --ifp-accent-300:#0982C1; --ifp-accent-400:#076ca1; --ifp-accent-600:#0982C1; --ifp-accent-700:#0982C1; --ifp-accent-800:#e6f2f9; --ifp-accent-900:#eaf1f6;
+  --ifp-orange:#0982C1;
+  --ifp-ok:#1d7a46; --ifp-ok-bg:#e7f3ec; --ifp-warn:#9a6700; --ifp-warn-bg:#fbf3dc; --ifp-err:#b3261e; --ifp-err-bg:#fbe9e7;
+  --ifp-divider:rgba(27,39,51,.12);
+  --ifp-card:0 0 0 1px #e2e8ee,0 1px 2px rgba(0,32,57,.06),0 4px 16px rgba(0,32,57,.05);
+  --ifp-card-hover:0 0 0 1px #0982C1,0 2px 4px rgba(0,32,57,.08),0 10px 28px rgba(0,32,57,.10);
+  --ifp-bar-bg:#002039; --ifp-bar-text:#ffffff; --ifp-bar-muted:#a8bccb; --ifp-bar-line:rgba(255,255,255,.14);
+  --ifp-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --ifp-mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
 }
 .ifp-bar{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 auto;padding:0 18px;
-  background:var(--ifp-bg);color:var(--ifp-text);font-family:var(--ifp-font);font-size:13px;line-height:1;
-  box-shadow:inset 0 -1px 0 var(--ifp-n800);position:relative;z-index:30}
-.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-text);text-decoration:none;font-weight:500;font-size:15px}
-.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:var(--ifp-accent)}
-.ifp-bar a.ifp-home:hover{color:var(--ifp-accent)}
-.ifp-bar .ifp-sep{color:var(--ifp-n600)}
-.ifp-bar .ifp-here{color:var(--ifp-n400)}
-.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-n500)}
+  background:var(--ifp-bar-bg);color:var(--ifp-bar-text);font-family:var(--ifp-font);font-size:13px;line-height:1;position:relative;z-index:30}
+.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-bar-text);text-decoration:none;font-weight:600;font-size:15px}
+.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:#5fb6e6}
+.ifp-bar a.ifp-home:hover{color:#8fd0f3}
+.ifp-bar .ifp-sep{color:var(--ifp-bar-muted)}
+.ifp-bar .ifp-here{color:var(--ifp-bar-muted)}
+.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-bar-muted)}
 :focus-visible{outline:2px solid var(--ifp-accent);outline-offset:2px}
-::selection{background:color-mix(in srgb,var(--ifp-accent) 30%,transparent)}
 
 :root {
   --bg:var(--ifp-bg); --panel:var(--ifp-surface); --panel-2:var(--ifp-surface-2); --field:var(--ifp-field);
   --ink:var(--ifp-text); --ink-2:var(--ifp-n400); --ink-3:var(--ifp-n500);
   --line:var(--ifp-line); --line-2:var(--ifp-n800);
-  --accent:var(--ifp-accent); --accent-ink:var(--ifp-bg); --accent-soft:var(--ifp-accent-800);
-  --point:#f5a05a; --point-soft:#4a2a14;
-  --linec:var(--ifp-accent-400); --line-soft:var(--ifp-accent-900);
+  --accent:var(--ifp-accent); --accent-ink:#fff; --accent-soft:var(--ifp-accent-800);
+  --point:#b3541e; --point-soft:#f6e6da;
+  --linec:#2f5fa8; --line-soft:#dde6f5;
   --warn:var(--ifp-err);
   --radius:8px;
   --font:var(--ifp-font);
@@ -49,7 +47,7 @@
 html, body { height: 100%; margin: 0; }
 body {
   font-family: var(--font); font-size: 14px; line-height: 1.45; color: var(--ink);
-  background: var(--bg); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  background: var(--bg); font-variant-numeric: tabular-nums; 
   display: flex; flex-direction: column;
 }
 button, input, select { font: inherit; color: inherit; }
@@ -72,8 +70,8 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 /* Sidebar */
-.side { padding: 20px 18px 28px; display: flex; flex-direction: column; gap: 22px; background: var(--bg); }
-h1 { font-size: 17px; font-weight: 500; margin: 0 0 2px; letter-spacing: -0.01em; }
+.side { padding: 20px 18px 28px; display: flex; flex-direction: column; gap: 22px; }
+h1 { color: var(--ifp-navy); font-size: 17px; font-weight: 600; margin: 0 0 2px; letter-spacing: -0.01em; }
 .sub { color: var(--ink-2); margin: 0; font-size: 13px; }
 
 .drop {
@@ -103,7 +101,7 @@ label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; co
 label.f span.hint { color: var(--ink-3); font-size: 12px; }
 input[type=text], input[type=number], select {
   width: 100%; border: 1px solid var(--line-2); border-radius: var(--radius);
-  padding: 7px 9px; background: var(--field); color-scheme: dark;
+  padding: 7px 9px; background: var(--field);
 }
 input[type=text]:hover, input[type=number]:hover, select:hover { border-color: var(--line); }
 input[type=text]:focus, input[type=number]:focus, select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
@@ -147,9 +145,9 @@ th.num { text-align: right; }
 .more { padding: 12px 18px; }
 
 /* Detail */
-.detail { padding: 0; background: var(--bg); }
+.detail { padding: 0; }
 .detail-head {
-  position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line-2);
+  position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line-2);
   padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
 .detail-head h2 { margin: 0; font-size: 11px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
@@ -168,7 +166,7 @@ th.num { text-align: right; }
 .coord .dms { font-size: 12.5px; color: var(--ink-2); }
 
 .heights { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
-.heights > div { background: var(--panel); border-radius: var(--radius); padding: 10px 12px; box-shadow: 0 0 0 1px var(--line-2); }
+.heights > div { background: var(--panel); border-radius: var(--radius); padding: 10px 12px; box-shadow: var(--ifp-card); }
 .heights .k { font-size: 12px; color: var(--ink-2); }
 .heights .v { font-size: 20px; font-weight: 500; }
 .heights .v small { font-size: 12px; font-weight: 400; color: var(--ink-3); margin-left: 3px; }
@@ -185,13 +183,13 @@ table.vtx th, table.vtx td { padding: 4px 6px; border-bottom: 1px solid var(--li
 table.vtx th { font-weight: 500; font-size: 12px; color: var(--ink-2); }
 table.vtx th:first-child, table.vtx td:first-child { text-align: left; color: var(--ink-3); }
 pre.raw {
-  background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius);
+  background: var(--ifp-n900); border: 1px solid var(--line-2); border-radius: var(--radius);
   padding: 10px 12px; font-size: 12px; line-height: 1.45; overflow: auto; max-height: 360px; font-family: var(--ifp-mono);
 }
 details summary { cursor: pointer; font-weight: 500; font-size: 13px; margin: 18px 0 8px; }
 .toast {
   position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-  background: var(--ifp-text); color: var(--ifp-bg); padding: 8px 14px; border-radius: var(--radius);
+  background: var(--ifp-navy); color: #fff; padding: 8px 14px; border-radius: var(--radius);
   font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .15s; box-shadow: var(--ifp-shadow, 0 6px 18px rgba(0,0,0,.55));
 }
 .toast.on { opacity: 1; }

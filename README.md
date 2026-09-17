@@ -9,7 +9,7 @@ No build step, no backend. The look follows the IFP Portal Dashboard Design hand
 - `portal.css` — IFP brand token overrides and page layout
 - `portal.js` — layout flags and the announcements feed
 - `assets/logo.png` — company logo (used on the light hero band only)
-- `utilities/` — self-contained single-file utilities hosted alongside the portal, each themed to match it and carrying a breadcrumb back to the portal home
+- `utilities/` — self-contained single-file utilities hosted alongside the portal, each restyled to the house theme shared with the Surface Filtering Tool and Surface List Generator (light ground, white cards, brand blue) with a navy breadcrumb bar back to the portal home
 
 ## Editing
 - **Tool links:** edit the `href` on each `.card` in `index.html` (marked with a comment).

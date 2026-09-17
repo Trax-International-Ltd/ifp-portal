@@ -3,59 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0d1e2e">
+<meta name="theme-color" content="#002039">
 <title>CRM Obs File Generator — ICAO Doc 9274</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* ---- IFP Portal shared theme (matches ifp-portal/portal.css) ---- */
+/* ---- IFP house theme (mirrors the shared stylesheet of the Surface Filtering Tool / Surface List Generator) ---- */
 :root{
-  --ifp-bg:#0d1e2e; --ifp-surface:#16324a; --ifp-surface-2:#1a3a55; --ifp-field:#112637;
-  --ifp-text:#e9e9ed; --ifp-n400:#a9b6c2; --ifp-n500:#8496a6; --ifp-n600:#63788a; --ifp-n800:#28425a; --ifp-n900:#1a3046;
-  --ifp-line:#38546e;
-  --ifp-accent:#64afd7; --ifp-accent-300:#b3d9ee; --ifp-accent-400:#8cc5e4; --ifp-accent-600:#4a8cb0; --ifp-accent-700:#386c89; --ifp-accent-800:#244a60; --ifp-accent-900:#142e44;
-  --ifp-orange:#e95318;
-  --ifp-ok:#5fc48e; --ifp-ok-bg:#153b30; --ifp-warn:#e6b45a; --ifp-warn-bg:#3d2f14; --ifp-err:#f0776b; --ifp-err-bg:#4a1f1c;
-  --ifp-divider:color-mix(in srgb,#e9e9ed 16%,transparent);
-  --ifp-font:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ifp-bg:#f5f7f9; --ifp-surface:#ffffff; --ifp-surface-2:#f7f9fb; --ifp-field:#ffffff;
+  --ifp-text:#1b2733; --ifp-navy:#002039;
+  --ifp-n400:#5b6b7a; --ifp-n500:#6f7f8d; --ifp-n600:#8a98a5; --ifp-n800:#e2e8ee; --ifp-n900:#eef2f5;
+  --ifp-line:#cfd8e0;
+  --ifp-accent:#0982C1; --ifp-accent-300:#0982C1; --ifp-accent-400:#076ca1; --ifp-accent-600:#0982C1; --ifp-accent-700:#0982C1; --ifp-accent-800:#e6f2f9; --ifp-accent-900:#eaf1f6;
+  --ifp-orange:#0982C1;
+  --ifp-ok:#1d7a46; --ifp-ok-bg:#e7f3ec; --ifp-warn:#9a6700; --ifp-warn-bg:#fbf3dc; --ifp-err:#b3261e; --ifp-err-bg:#fbe9e7;
+  --ifp-divider:rgba(27,39,51,.12);
+  --ifp-card:0 0 0 1px #e2e8ee,0 1px 2px rgba(0,32,57,.06),0 4px 16px rgba(0,32,57,.05);
+  --ifp-card-hover:0 0 0 1px #0982C1,0 2px 4px rgba(0,32,57,.08),0 10px 28px rgba(0,32,57,.10);
+  --ifp-bar-bg:#002039; --ifp-bar-text:#ffffff; --ifp-bar-muted:#a8bccb; --ifp-bar-line:rgba(255,255,255,.14);
+  --ifp-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --ifp-mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
 }
 .ifp-bar{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 auto;padding:0 18px;
-  background:var(--ifp-bg);color:var(--ifp-text);font-family:var(--ifp-font);font-size:13px;line-height:1;
-  box-shadow:inset 0 -1px 0 var(--ifp-n800);position:relative;z-index:30}
-.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-text);text-decoration:none;font-weight:500;font-size:15px}
-.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:var(--ifp-accent)}
-.ifp-bar a.ifp-home:hover{color:var(--ifp-accent)}
-.ifp-bar .ifp-sep{color:var(--ifp-n600)}
-.ifp-bar .ifp-here{color:var(--ifp-n400)}
-.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-n500)}
+  background:var(--ifp-bar-bg);color:var(--ifp-bar-text);font-family:var(--ifp-font);font-size:13px;line-height:1;position:relative;z-index:30}
+.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-bar-text);text-decoration:none;font-weight:600;font-size:15px}
+.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:#5fb6e6}
+.ifp-bar a.ifp-home:hover{color:#8fd0f3}
+.ifp-bar .ifp-sep{color:var(--ifp-bar-muted)}
+.ifp-bar .ifp-here{color:var(--ifp-bar-muted)}
+.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-bar-muted)}
 :focus-visible{outline:2px solid var(--ifp-accent);outline-offset:2px}
-::selection{background:color-mix(in srgb,var(--ifp-accent) 30%,transparent)}
 
 :root{
   --ink:var(--ifp-text); --ink-soft:var(--ifp-n400); --paper:var(--ifp-bg); --panel:var(--ifp-surface); --panel-2:var(--ifp-surface-2); --field:var(--ifp-field);
   --line:var(--ifp-line); --line-soft:var(--ifp-n800);
   --accent:var(--ifp-accent); --accent-soft:var(--ifp-accent-800);
   --ok:var(--ifp-ok);
-  --warn-bg:var(--ifp-warn-bg); --warn-line:#8a6a2a; --warn-ink:#f0cd7a;
-  --err-bg:var(--ifp-err-bg); --err-line:#c9584c; --err-ink:#f5a199;
+  --warn-bg:var(--ifp-warn-bg); --warn-line:#e0a336; --warn-ink:#7a5410;
+  --err-bg:var(--ifp-err-bg); --err-line:#c0392b; --err-ink:#8a2318;
   --mono:var(--ifp-mono); --sans:var(--ifp-font);
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
 header{max-width:1200px;margin:0 auto;padding:28px 22px 0;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-header h1{font-size:24px;margin:0;font-weight:500;letter-spacing:-.015em}
+header h1{color:var(--ifp-navy);font-size:24px;margin:0;font-weight:600;letter-spacing:-.015em}
 header .sub{font-family:var(--mono);font-size:11.5px;color:var(--ifp-n500)}
 main{max-width:1200px;margin:0 auto;padding:14px 22px 60px}
 h3{font-weight:500}
 
-.step{background:var(--panel);border-radius:8px;box-shadow:0 0 0 1px var(--line-soft);margin:16px 0;overflow:hidden}
+.step{background:var(--panel);border-radius:8px;box-shadow:var(--ifp-card);margin:16px 0;overflow:hidden}
 .step > .head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line-soft);background:var(--panel-2)}
-.step > .head .n{font-family:var(--mono);font-size:11px;background:var(--accent);color:var(--ifp-bg);border-radius:4px;padding:2px 7px;font-weight:600}
-.step > .head h2{font-size:14px;margin:0;font-weight:500}
+.step > .head .n{font-family:var(--mono);font-size:11px;background:var(--accent);color:#fff;border-radius:4px;padding:2px 7px;font-weight:600}
+.step > .head h2{font-size:14px;margin:0;font-weight:600;color:var(--ifp-navy)}
 .step > .head .hint{margin-left:auto;color:var(--ink-soft);font-size:12px}
 .step .body{padding:14px}
 .step .body h3[style]{border-top-color:var(--line-soft) !important}
@@ -68,7 +66,7 @@ label.f.was-adv{background:var(--accent-soft);border-radius:6px;padding:6px 8px 
 label.f .item{font-family:var(--mono);font-size:10.5px;color:var(--ifp-accent-300)}
 input[type=text],input[type=number],select{
   font-family:var(--mono);font-size:13px;padding:6px 8px;border:1px solid var(--line-soft);
-  border-radius:4px;background:var(--field);color:var(--ink);width:100%;color-scheme:dark}
+  border-radius:4px;background:var(--field);color:var(--ink);width:100%}
 input[readonly]{background:var(--ifp-n900) !important;color:var(--ink-soft) !important}
 input:hover,select:hover{border-color:var(--line)}
 input:focus,select:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
@@ -92,7 +90,7 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:0;border
 .counts .c.bad b{color:var(--ifp-err)}
 
 table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12px}
-thead th{position:sticky;top:0;background:var(--panel-2);color:var(--ifp-accent-300);font-weight:500;text-align:left;padding:6px 8px;font-size:11px;letter-spacing:.04em}
+thead th{position:sticky;top:0;background:var(--ifp-navy);color:#dfe7ec;font-weight:500;text-align:left;padding:6px 8px;font-size:11px;letter-spacing:.04em}
 tbody td{padding:4px 8px;border-bottom:1px solid var(--line-soft);white-space:nowrap}
 tbody tr.off td{color:var(--ifp-n600);text-decoration:line-through;text-decoration-color:var(--ifp-n600)}
 tbody tr:hover td{background:var(--accent-soft)}
@@ -107,7 +105,7 @@ tbody tr:hover td{background:var(--accent-soft)}
 .cat .top .file{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
 .cat .dims{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 
-button{font-family:var(--sans);font-size:13px;font-weight:500;padding:8px 16px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--ifp-bg);cursor:pointer}
+button{font-family:var(--sans);font-size:13px;font-weight:500;padding:8px 16px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
 button:hover{background:var(--ifp-accent-400);border-color:var(--ifp-accent-400)}
 button.ghost{background:transparent;color:var(--ifp-accent-300);border-color:var(--line)}
 button.ghost:hover{background:color-mix(in srgb,var(--ifp-text) 7%,transparent)}
@@ -238,7 +236,7 @@ pre .ruler{color:var(--ifp-n600);user-select:none}
         <label class="f"><span class="item">item 12</span><b>FAF procedure altitude (ft)</b>
           <input type="number" id="i12faf" step="1" value="" placeholder="e.g. 3000"></label>
         <label class="f"><span class="item">item 12</span><b>FAP – THR distance — calculated</b>
-          <input type="text" id="i12" value="" readonly style="background:var(--ifp-n900);color:var(--ink-soft)" title="Earth-curvature formula H = h + 6076·D·tanθ + 0.8833·D², solved for D from the FAF altitude, THR elevation, glide path angle (item 07) and RDH (item 08). Uses the exact (unrounded) survey THR elevation when a runway is selected from the survey; editing item 11 by hand switches to the entered value."></label>
+          <input type="text" id="i12" value="" readonly style="background:#f0f3f5;color:var(--ink-soft)" title="Earth-curvature formula H = h + 6076·D·tanθ + 0.8833·D², solved for D from the FAF altitude, THR elevation, glide path angle (item 07) and RDH (item 08). Uses the exact (unrounded) survey THR elevation when a runway is selected from the survey; editing item 11 by hand switches to the entered value."></label>
         <label class="f was-adv"><span class="item">item 13</span><b>Standard termination of precision segment</b>
           <select id="i13"><option selected>Y</option><option>N</option></select></label>
         <label class="f was-adv"><span class="item">item 15</span><b>Standard MA climb gradient (2.5%)</b>
@@ -265,7 +263,7 @@ pre .ruler{color:var(--ifp-n600);user-select:none}
         <label class="f"><b>Vertical unit</b><select id="i26u"><option selected>M</option><option>F</option></select></label>
         <label class="f"><b>THR latitude</b><input type="text" id="thrLat" value="N 51 28 39.00" placeholder="N dd mm ss.ss"></label>
         <label class="f"><b>THR longitude</b><input type="text" id="thrLon" value="W 0 29 5.97" placeholder="E/W ddd mm ss.ss"></label>
-        <label class="f"><b>THR height (item 26 d) — linked to item 11</b><input type="text" id="thrH" value="" readonly style="background:var(--ifp-n900);color:var(--ink-soft)" title="Locked to the threshold elevation in item 11, converted to the item 26 vertical unit"></label>
+        <label class="f"><b>THR height (item 26 d) — linked to item 11</b><input type="text" id="thrH" value="" readonly style="background:#f0f3f5;color:var(--ink-soft)" title="Locked to the threshold elevation in item 11, converted to the item 26 vertical unit"></label>
         <label class="f"><b>LLZ latitude</b><input type="text" id="llzLat" value="N 51 28 39.70"></label>
         <label class="f"><b>LLZ longitude</b><input type="text" id="llzLon" value="W 0 25 37.04"></label>
       </div>
@@ -851,7 +849,7 @@ CATS.forEach((c,i)=>{
     <div class="dims">
       <label class="f"><b>Wheel–GP ant. (m)</b><input type="number" step="0.1" id="cat_h_${i}" value="${c.h}"></label>
       <label class="f"><b>Wing semispan (m)</b><input type="number" step="0.1" id="cat_s_${i}" value="${c.s}"></label>
-      <label class="f"><b>OCA/H (item 19) — from item 16</b><input type="number" step="1" id="cat_o_${i}" value="${c.oca}" readonly style="background:var(--ifp-n900);color:var(--ink-soft)" title="Linked to the ILS approach category in item 16: CAT I = 200, CAT II = 100"></label>
+      <label class="f"><b>OCA/H (item 19) — from item 16</b><input type="number" step="1" id="cat_o_${i}" value="${c.oca}" readonly style="background:#f0f3f5;color:var(--ink-soft)" title="Linked to the ILS approach category in item 16: CAT I = 200, CAT II = 100"></label>
     </div>
     <p class="small" style="margin:8px 0 0">item 03: “CAT ${c.key}” · item 19: specified OCA/H for speed cat ${c.speeds.join(" &amp; ")}</p>`;
   catsEl.appendChild(div);
