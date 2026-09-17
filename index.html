@@ -3,71 +3,87 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IFP Design Ltd — Tools</title>
+<title>IFP Portal — IFP Design Ltd</title>
+<meta name="description" content="One place for IFP Design Ltd's surface analysis tools and modelling utilities.">
 <link rel="icon" href="assets/logo.png">
-<style>
-  /* House tokens — mirrors the shared stylesheet of both tools */
-  :root{
-    --brand-blue:#0982C1; --brand-blue-dark:#076ca1; --brand-navy:#002039;
-    --ink:#1b2733; --ink-soft:#5b6b7a; --line:#e2e8ee; --bg:#f5f7f9;
-    --radius:8px;
-    --shadow:0 1px 2px rgba(0,32,57,.06),0 4px 16px rgba(0,32,57,.05);
-    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:var(--font);color:var(--ink);background:linear-gradient(160deg,#ffffff 0%,var(--bg) 60%);
-    min-height:100vh;display:flex;flex-direction:column;align-items:center;
-    padding:3rem 1.5rem 2rem;-webkit-font-smoothing:antialiased;line-height:1.5}
-  .head{text-align:center;margin-bottom:2.5rem}
-  .head img{max-height:110px;max-width:110px;margin-bottom:1rem}
-  h1{color:var(--brand-navy);font-size:1.6rem;font-weight:700;letter-spacing:-.01em}
-  .sub{color:var(--ink-soft);font-size:.95rem;margin-top:.35rem}
-  .band{height:4px;width:64px;background:var(--brand-blue);border-radius:2px;margin:1.1rem auto 0}
-
-  .tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,320px));gap:1.5rem;justify-content:center;width:100%;max-width:1040px}
-  a.tool{display:block;background:#fff;border:1px solid var(--line);border-radius:var(--radius);
-    box-shadow:var(--shadow);padding:1.75rem 1.6rem;text-decoration:none;color:inherit;
-    transition:transform .15s,box-shadow .15s,border-color .15s}
-  a.tool:hover{transform:translateY(-3px);border-color:var(--brand-blue);
-    box-shadow:0 2px 4px rgba(0,32,57,.08),0 10px 28px rgba(0,32,57,.10)}
-  .tool h2{color:var(--brand-navy);font-size:1.1rem;font-weight:700;margin-bottom:.4rem}
-  .tool p{color:var(--ink-soft);font-size:.88rem;min-height:3.9em}
-  .tool .go{display:inline-flex;align-items:center;gap:.4rem;margin-top:1.1rem;
-    font-weight:600;font-size:.9rem;color:var(--brand-blue)}
-  a.tool:hover .go{color:var(--brand-blue-dark)}
-
-  footer{margin-top:auto;padding-top:3rem;font-size:.8rem;color:var(--ink-soft);text-align:center}
-  @media (max-width:640px){ body{padding-top:2rem} .head img{max-height:90px} }
-</style>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="portal.css">
 </head>
 <body>
-  <div class="head">
-    <img src="assets/logo.png" alt="IFP Design Ltd">
-    <h1>IFP Design Ltd</h1>
-    <p class="sub">Aerodrome Safeguarding &amp; Instrument Flight Procedures</p>
-    <div class="band"></div>
+
+<nav class="nav" aria-label="Sections">
+  <span class="nav-brand">IFP Portal</span>
+  <a href="#tools" aria-current="page">Tools</a>
+  <a href="#utilities">Utilities</a>
+  <a href="#announcements">Announcements</a>
+</nav>
+
+<div class="hero">
+  <header class="hero-inner">
+    <div class="hero-copy">
+      <div class="kicker">Instrument Flight Procedures</div>
+      <h1>Design tools &amp; utilities</h1>
+      <p>One place for the team's surface analysis tools, modelling utilities and whatever ships next.</p>
+    </div>
+    <img class="hero-logo" src="assets/logo.png" alt="IFP Design Ltd" width="200" height="200">
+  </header>
+</div>
+
+<div class="content">
+  <div class="layout">
+    <main>
+      <section id="tools" aria-labelledby="tools-title">
+        <h2 class="section-title" id="tools-title">Tools</h2>
+        <div class="card-grid">
+          <!-- EDIT hrefs to point at each tool's live URL -->
+          <a class="card" href="https://ifp-filtering-tool.up.railway.app">
+            <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M230.6,49.53A15.81,15.81,0,0,0,216,40H40A16,16,0,0,0,28.19,66.76l.08.09L96,139.17V216a16,16,0,0,0,24.87,13.32l32-21.34A16,16,0,0,0,160,194.66V139.17l67.74-72.32.08-.09A15.8,15.8,0,0,0,230.6,49.53ZM146.18,130.58A8,8,0,0,0,144,136v58.66L112,216V136a8,8,0,0,0-2.16-5.47L40,56H216Z"/></svg>
+            <div class="card-name">Surface Filtering Tool</div>
+            <p class="card-desc">Filter IFP assessment surfaces down to the set you need.</p>
+            <div class="card-open">Open tool <span aria-hidden="true">&#8594;</span></div>
+          </a>
+          <a class="card" href="https://ifp-surface-list-generator.up.railway.app">
+            <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM40,72H216a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16ZM216,184H40a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Z"/></svg>
+            <div class="card-name">Surface List Generator</div>
+            <p class="card-desc">Generate structured surface lists ready for assessment and export.</p>
+            <div class="card-open">Open tool <span aria-hidden="true">&#8594;</span></div>
+          </a>
+        </div>
+      </section>
+
+      <section id="utilities" aria-labelledby="utilities-title">
+        <h2 class="section-title" id="utilities-title">Utilities</h2>
+        <div class="card-grid">
+          <a class="card" href="https://trax-international-ltd.github.io/aircraft-tool/">
+            <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>
+            <div class="card-name">Aircraft Modelling</div>
+            <p class="card-desc">Aircraft performance and geometry models for procedure design.</p>
+            <div class="card-open">Open utility <span aria-hidden="true">&#8594;</span></div>
+          </a>
+        </div>
+      </section>
+
+      <section id="in-development" aria-labelledby="dev-title">
+        <h2 class="section-title" id="dev-title">In development</h2>
+        <div class="dev-row">
+          <span class="tag tag-outline">Coming soon</span>
+          <span>Further tools and utilities are in development and will appear here as they're released.</span>
+        </div>
+      </section>
+    </main>
+
+    <aside id="announcements" class="announcements" aria-labelledby="announcements-title">
+      <h2 class="section-title" id="announcements-title">Announcements</h2>
+      <div class="announcement-list"></div>
+    </aside>
   </div>
 
-  <div class="tools">
-    <!-- EDIT THESE TWO hrefs to your Railway URLs -->
-    <a class="tool" href="https://ifp-filtering-tool.up.railway.app">
-      <h2>IFP Surface Filtering Tool</h2>
-      <p>Assess obstacles against protected surfaces — single or bulk, with mapping, reports, and a full assessment history.</p>
-      <span class="go">Open the tool &#8594;</span>
-    </a>
-    <a class="tool" href="https://ifp-surface-list-generator.up.railway.app">
-      <h2>IFP Surface List Generator</h2>
-      <p>Define aerodrome procedure surfaces (MOCA &#8722; MOC), with checking, CAD validation, and the AutoCAD data-link workbook.</p>
-      <span class="go">Open the tool &#8594;</span>
-    </a>
-    <a class="tool" href="https://trax-international-ltd.github.io/aircraft-tool/">
-      <h2>Aircraft Modelling</h2>
-      <p>Model aircraft ground obstacles along taxi routes (CAP 1732), with a shared, team-verified aircraft library.</p>
-      <span class="go">Open the tool &#8594;</span>
-    </a>
-  </div>
+  <footer class="site-footer">
+    <div class="rule"></div>
+    <div class="credit">IFP Portal &middot; IFP Design Ltd</div>
+  </footer>
+</div>
 
-  <footer>&copy; <span id="y"></span> Trax International Ltd</footer>
-  <script>document.getElementById("y").textContent=new Date().getFullYear();</script>
+<script src="portal.js"></script>
 </body>
 </html>
