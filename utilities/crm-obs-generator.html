@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1e2e">
+<title>CRM Obs File Generator — ICAO Doc 9274</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ---- IFP Portal shared theme (matches ifp-portal/portal.css) ---- */
+:root{
+  --ifp-bg:#0d1e2e; --ifp-surface:#16324a; --ifp-surface-2:#1a3a55; --ifp-field:#112637;
+  --ifp-text:#e9e9ed; --ifp-n400:#a9b6c2; --ifp-n500:#8496a6; --ifp-n600:#63788a; --ifp-n800:#28425a; --ifp-n900:#1a3046;
+  --ifp-line:#38546e;
+  --ifp-accent:#64afd7; --ifp-accent-300:#b3d9ee; --ifp-accent-400:#8cc5e4; --ifp-accent-600:#4a8cb0; --ifp-accent-700:#386c89; --ifp-accent-800:#244a60; --ifp-accent-900:#142e44;
+  --ifp-orange:#e95318;
+  --ifp-ok:#5fc48e; --ifp-ok-bg:#153b30; --ifp-warn:#e6b45a; --ifp-warn-bg:#3d2f14; --ifp-err:#f0776b; --ifp-err-bg:#4a1f1c;
+  --ifp-divider:color-mix(in srgb,#e9e9ed 16%,transparent);
+  --ifp-font:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ifp-mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+}
+.ifp-bar{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 auto;padding:0 18px;
+  background:var(--ifp-bg);color:var(--ifp-text);font-family:var(--ifp-font);font-size:13px;line-height:1;
+  box-shadow:inset 0 -1px 0 var(--ifp-n800);position:relative;z-index:30}
+.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-text);text-decoration:none;font-weight:500;font-size:15px}
+.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:var(--ifp-accent)}
+.ifp-bar a.ifp-home:hover{color:var(--ifp-accent)}
+.ifp-bar .ifp-sep{color:var(--ifp-n600)}
+.ifp-bar .ifp-here{color:var(--ifp-n400)}
+.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-n500)}
+:focus-visible{outline:2px solid var(--ifp-accent);outline-offset:2px}
+::selection{background:color-mix(in srgb,var(--ifp-accent) 30%,transparent)}
+
+:root{
+  --ink:var(--ifp-text); --ink-soft:var(--ifp-n400); --paper:var(--ifp-bg); --panel:var(--ifp-surface); --panel-2:var(--ifp-surface-2); --field:var(--ifp-field);
+  --line:var(--ifp-line); --line-soft:var(--ifp-n800);
+  --accent:var(--ifp-accent); --accent-soft:var(--ifp-accent-800);
+  --ok:var(--ifp-ok);
+  --warn-bg:var(--ifp-warn-bg); --warn-line:#8a6a2a; --warn-ink:#f0cd7a;
+  --err-bg:var(--ifp-err-bg); --err-line:#c9584c; --err-ink:#f5a199;
+  --mono:var(--ifp-mono); --sans:var(--ifp-font);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+header{max-width:1200px;margin:0 auto;padding:28px 22px 0;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+header h1{font-size:24px;margin:0;font-weight:500;letter-spacing:-.015em}
+header .sub{font-family:var(--mono);font-size:11.5px;color:var(--ifp-n500)}
+main{max-width:1200px;margin:0 auto;padding:14px 22px 60px}
+h3{font-weight:500}
+
+.step{background:var(--panel);border-radius:8px;box-shadow:0 0 0 1px var(--line-soft);margin:16px 0;overflow:hidden}
+.step > .head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line-soft);background:var(--panel-2)}
+.step > .head .n{font-family:var(--mono);font-size:11px;background:var(--accent);color:var(--ifp-bg);border-radius:4px;padding:2px 7px;font-weight:600}
+.step > .head h2{font-size:14px;margin:0;font-weight:500}
+.step > .head .hint{margin-left:auto;color:var(--ink-soft);font-size:12px}
+.step .body{padding:14px}
+.step .body h3[style]{border-top-color:var(--line-soft) !important}
+
+.grid{display:grid;gap:10px 16px}
+.g4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink-soft);justify-content:flex-end}
+label.f b{color:var(--ink);font-weight:500}
+label.f.was-adv{background:var(--accent-soft);border-radius:6px;padding:6px 8px 8px}
+label.f .item{font-family:var(--mono);font-size:10.5px;color:var(--ifp-accent-300)}
+input[type=text],input[type=number],select{
+  font-family:var(--mono);font-size:13px;padding:6px 8px;border:1px solid var(--line-soft);
+  border-radius:4px;background:var(--field);color:var(--ink);width:100%;color-scheme:dark}
+input[readonly]{background:var(--ifp-n900) !important;color:var(--ink-soft) !important}
+input:hover,select:hover{border-color:var(--line)}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.unitpair{display:grid;grid-template-columns:1fr 64px;gap:6px}
+
+.drop{border:1px dashed var(--line);border-radius:8px;padding:26px;text-align:center;color:var(--ink-soft);cursor:pointer;transition:background .15s,border-color .15s}
+.drop:hover{border-color:var(--ifp-accent-600)}
+.drop.on{background:var(--accent-soft);border-color:var(--accent);color:var(--ifp-accent-300)}
+.drop b{color:var(--ink);font-weight:500}
+
+.banner{border-radius:6px;padding:10px 13px;margin:10px 0;font-size:13px;display:none}
+.banner.show{display:block}
+.banner.warn{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn-ink)}
+.banner.err{background:var(--err-bg);border:1px solid var(--err-line);color:var(--err-ink)}
+.banner b{font-weight:600}
+
+.counts{display:flex;gap:12px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;margin:8px 0}
+.counts .c{background:var(--panel-2);border:1px solid var(--line-soft);border-radius:6px;padding:6px 10px;color:var(--ink-soft)}
+.counts .c b{font-size:16px;display:block;color:var(--ifp-accent-300)}
+.counts .c.bad b{color:var(--ifp-err)}
+
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12px}
+thead th{position:sticky;top:0;background:var(--panel-2);color:var(--ifp-accent-300);font-weight:500;text-align:left;padding:6px 8px;font-size:11px;letter-spacing:.04em}
+tbody td{padding:4px 8px;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+tbody tr.off td{color:var(--ifp-n600);text-decoration:line-through;text-decoration-color:var(--ifp-n600)}
+tbody tr:hover td{background:var(--accent-soft)}
+.tblwrap{max-height:340px;overflow:auto;border:1px solid var(--line-soft);border-radius:6px;background:var(--paper)}
+.trunc{color:var(--warn-ink);background:var(--warn-bg);border-radius:2px;padding:0 3px}
+
+.cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.cat{border:1px solid var(--line-soft);border-radius:8px;padding:12px;background:var(--panel-2)}
+.cat .top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.cat .top input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+.cat .top b{font-size:13px;font-weight:500}
+.cat .top .file{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+.cat .dims{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+
+button{font-family:var(--sans);font-size:13px;font-weight:500;padding:8px 16px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--ifp-bg);cursor:pointer}
+button:hover{background:var(--ifp-accent-400);border-color:var(--ifp-accent-400)}
+button.ghost{background:transparent;color:var(--ifp-accent-300);border-color:var(--line)}
+button.ghost:hover{background:color-mix(in srgb,var(--ifp-text) 7%,transparent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+
+.out{display:grid;gap:12px;margin-top:8px}
+.outfile{border:1px solid var(--line-soft);border-radius:8px;overflow:hidden}
+.outfile .fh{display:flex;align-items:center;gap:10px;background:var(--panel-2);border-bottom:1px solid var(--line-soft);padding:8px 12px;font-family:var(--mono);font-size:12px}
+.outfile .fh .nm{font-weight:600;color:var(--ifp-accent-300)}
+.outfile .fh .meta{color:var(--ink-soft)}
+.outfile .fh button{margin-left:auto;padding:4px 12px;font-size:12px}
+pre{margin:0;padding:10px 12px;max-height:260px;overflow:auto;font-family:var(--mono);font-size:11.5px;line-height:1.5;background:var(--paper);tab-size:8}
+pre .ruler{color:var(--ifp-n600);user-select:none}
+.small{font-size:11.5px;color:var(--ink-soft)}
+.chk{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink)}
+.chk input{accent-color:var(--accent);width:15px;height:15px}
+.chip{background:var(--panel-2);border:1px solid var(--line-soft);border-radius:6px;padding:3px 9px;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px}
+.chip a{color:var(--ifp-err);text-decoration:none;font-weight:700}
+</style>
+</head>
+<body>
+<div class="ifp-bar">
+  <a class="ifp-home" href="../index.html"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,120v96a8,8,0,0,1-8,8H160a8,8,0,0,1-8-8V164a4,4,0,0,0-4-4H108a4,4,0,0,0-4,4v52a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V120a16,16,0,0,1,4.69-11.31l80-80a16,16,0,0,1,22.62,0l80,80A16,16,0,0,1,224,120Z"/></svg>IFP Portal</a>
+  <span class="ifp-sep">/</span>
+  <span class="ifp-here">CRM Obs File Generator</span>
+  <span class="ifp-kind">Utility</span>
+</div>
+
+<header>
+  <h1>CRM Obs File Generator</h1>
+  <span class="sub">ICAO Doc 9274 · Collision Risk Model · fixed-format .obs output (80 col, CRLF)</span>
+</header>
+<main>
+
+  <!-- STEP 1 : OBSTACLES -->
+  <section class="step">
+    <div class="head"><span class="n">1</span><h2>Obstacle source</h2>
+      <span class="hint">load new obstacles from XML, or import an existing .obs file to amend or check it</span></div>
+    <div class="body">
+
+      <h3 style="font-size:13px;margin:0 0 8px">1a · New from XML (PenetrationCollection)</h3>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Load XML files">
+        <b>Drop XML file(s) here</b> or click to browse
+        <input type="file" id="fileInput" accept=".xml" multiple style="display:none">
+      </div>
+      <p class="small" style="margin:6px 0 0">You can load several files; duplicates are removed by obstacle ID.</p>
+
+      <h3 style="font-size:13px;margin:20px 0 8px;padding-top:16px;border-top:1px solid var(--line-soft)">1b · Import an existing .obs file (amend or check)</h3>
+      <div class="drop" id="obsDrop" tabindex="0" role="button" aria-label="Load .obs files">
+        <b>Drop .obs file(s) here</b> or click to browse
+        <input type="file" id="obsInput" accept=".obs" multiple style="display:none">
+      </div>
+      <p class="small" style="margin:6px 0 0">Reads a previously generated (or hand-edited) .obs file back into this generator: its obstacles are merged into the table below, and the runway/procedure fields (step 2) and matching aircraft case (step 3) are populated from it — so you can check its contents, or amend and regenerate. Load all of a run's files together (e.g. CAT AB + CAT C + CAT D(L)) to populate every aircraft case at once. Item 12's FAF altitude can't be recovered from the file, so item 12 shows the file's stored distance until you re-enter it.</p>
+      <div class="banner warn" id="obsBanner"></div>
+
+      <div class="banner err" id="limitBanner"></div>
+      <div class="banner warn" id="truncBanner"></div>
+
+      <div class="counts" id="counts" style="display:none">
+        <div class="c"><b id="cLoaded">0</b>penetrations read</div>
+        <div class="c"><b id="cUnique">0</b>unique obstacles</div>
+        <div class="c" id="cIncBox"><b id="cInc">0</b>included in output (item 21)</div>
+        <div class="c"><b>500</b>CRM maximum</div>
+      </div>
+
+      <div class="row" id="tblTools" style="display:none;margin-bottom:8px">
+        <input type="text" id="filter" placeholder="filter by ID / description…" style="max-width:260px">
+        <button class="ghost" id="selAll">Include all</button>
+        <button class="ghost" id="selNone">Exclude all</button>
+        <button class="ghost" id="selVis">Toggle filtered rows</button>
+        <button class="ghost" id="clearObs" style="border-color:var(--err-line);color:var(--err-line)">Clear obstacle data</button>
+        <label class="f" style="margin-left:auto;min-width:210px"><b>Output order</b>
+          <select id="orderSel">
+            <option value="rev" selected>Reversed load order (matches examples)</option>
+            <option value="fwd">As loaded</option>
+            <option value="id">Sorted by ID</option>
+          </select>
+        </label>
+      </div>
+      <div class="tblwrap" id="tblwrap" style="display:none">
+        <table>
+          <thead><tr><th></th><th>#</th><th>IDENT (8)</th><th>DESCRIPTION (13)</th><th>Lat</th><th>Long</th><th>Z</th><th>Source file</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <p class="small" id="fmtNote" style="display:none">IDENT is limited to 8 characters and DESCRIPTION to 13 (Doc 9274 Appx C, item 30) — over-length values are highlighted and will be truncated in the output.</p>
+    </div>
+  </section>
+
+  <!-- STEP 2 : HEADER DATA -->
+  <section class="step">
+    <div class="head"><span class="n">2</span><h2>Runway &amp; procedure data</h2>
+      <span class="hint">items 00–26 of the CRM request form, in item-number order · <span style="background:var(--accent-soft);padding:1px 6px;border-radius:3px">shaded</span> fields are rarely changed</span></div>
+    <div class="body">
+
+      <div style="border:1px solid var(--line-soft);border-radius:8px;padding:12px;margin-bottom:16px;background:var(--panel-2)">
+        <div class="row" style="gap:14px">
+          <div class="drop" id="svyDrop" tabindex="0" role="button" style="flex:1;min-width:240px;padding:14px">
+            <b>Drop surveyor AD 2 file(s)</b> (.xlsx / .csv) or click to browse
+            <input type="file" id="svyInput" accept=".xlsx,.csv" multiple style="display:none">
+          </div>
+          <label class="f" style="flex:1;min-width:260px"><b>ILS runway (from survey)</b>
+            <select id="rwySel" disabled><option value="">— load a survey file —</option></select>
+            <span class="small" id="rwyInfo"></span>
+          </label>
+        </div>
+        <div class="banner warn" id="svyBanner"></div>
+        <p class="small" style="margin:8px 0 0">Runways are listed only if the survey contains a localizer record (LLZ/LOC, monitors and field monitors excluded). Selecting a runway fills the THR/LLZ coordinates, threshold elevation (item 11) and the LLZ–THR distance (item 09) — all remain editable. Where the localizer has no runway tag it is matched geometrically along the extended centreline.</p>
+      </div>
+
+      <div class="grid g4" style="margin-top:12px">
+        <label class="f was-adv"><span class="item">item 00</span><b>Header value</b><input type="text" id="i00" value="3"></label>
+        <label class="f"><span class="item">item 01</span><b>ICAO reference</b><input type="text" id="i01" maxlength="40" value="First Contact"></label>
+        <label class="f"><span class="item">item 02</span><b>Request title, line 1</b><input type="text" id="i02" maxlength="40" value="RWY09L CAT I"></label>
+        <label class="f was-adv"><span class="item">item 04</span><b>Requestor</b><input type="text" id="i04" value="Not entered"></label>
+        <label class="f was-adv"><span class="item">item 05</span><b>Address</b><input type="text" id="i05" value="Not entered"></label>
+        <label class="f was-adv"><span class="item">item 06</span><b>Person to contact</b><input type="text" id="i06" value="Not entered"></label>
+        <label class="f"><span class="item">item 07</span><b>Glide path angle (°)</b><input type="number" id="i07" step="0.01" min="2.5" max="3.5" value="3.00"></label>
+        <label class="f"><span class="item">item 08</span><b>ILS reference datum height</b>
+          <span class="unitpair"><input type="number" id="i08" step="0.1" value="50.0"><select id="u08"><option>M</option><option selected>F</option></select></span></label>
+        <label class="f"><span class="item">item 09</span><b>LLZ antenna – THR distance</b>
+          <span class="unitpair"><input type="number" id="i09" step="1" value="4032"><select id="u09"><option selected>M</option><option>F</option></select></span></label>
+        <label class="f"><span class="item">item 10</span><b>LLZ course width at THR</b>
+          <span class="unitpair"><input type="number" id="i10" step="1" value="210"><select id="u10"><option selected>M</option><option>F</option></select></span></label>
+        <label class="f"><span class="item">item 11</span><b>Threshold elevation</b>
+          <span class="unitpair"><input type="number" id="i11" step="1" value="24"><select id="u11"><option selected>M</option><option>F</option></select></span></label>
+        <label class="f"><span class="item">item 12</span><b>FAF procedure altitude (ft)</b>
+          <input type="number" id="i12faf" step="1" value="" placeholder="e.g. 3000"></label>
+        <label class="f"><span class="item">item 12</span><b>FAP – THR distance — calculated</b>
+          <input type="text" id="i12" value="" readonly style="background:var(--ifp-n900);color:var(--ink-soft)" title="Earth-curvature formula H = h + 6076·D·tanθ + 0.8833·D², solved for D from the FAF altitude, THR elevation, glide path angle (item 07) and RDH (item 08). Uses the exact (unrounded) survey THR elevation when a runway is selected from the survey; editing item 11 by hand switches to the entered value."></label>
+        <label class="f was-adv"><span class="item">item 13</span><b>Standard termination of precision segment</b>
+          <select id="i13"><option selected>Y</option><option>N</option></select></label>
+        <label class="f was-adv"><span class="item">item 15</span><b>Standard MA climb gradient (2.5%)</b>
+          <select id="i15"><option selected>Y</option><option>N</option></select></label>
+        <label class="f was-adv" id="i15gWrap" style="display:none"><b>Climb gradient (%)</b><input type="number" id="i15g" step="0.1" value="2.5"></label>
+        <label class="f"><span class="item">item 16</span><b>ILS approach category</b>
+          <select id="i16">
+            <option value="1" selected>1 — Category I</option>
+            <option value="2">2 — Category II</option>
+            <option value="3">3 — Cat I (radio altimeter only)</option>
+            <option value="4">4 — Cat II (autopilot only)</option>
+          </select></label>
+        <label class="f"><span class="item">item 17 / 18</span><b>OCA/H reference &amp; unit</b>
+          <span class="unitpair"><select id="i17"><option value="1">OCA (AMSL)</option><option value="2" selected>OCH (above THR)</option></select>
+          <select id="i18"><option>M</option><option selected>F</option></select></span></label>
+        <label class="f was-adv"><span class="item">item 20</span><b>Report language</b>
+          <select id="i20"><option value="1" selected>English</option><option value="2">French</option><option value="3">Russian</option><option value="4">Spanish</option></select></label>
+        <label class="f"><span class="item">item 22</span><b>Obstacle risk print-out</b>
+          <select id="i22"><option value="1">1 — highest risk only</option><option value="2" selected>2 — risk &gt; 1.0×10⁻¹⁰</option><option value="3">3 — all obstacles</option></select></label>
+      </div>
+
+      <h3 style="font-size:13px;margin:18px 0 8px">Geographical coordinate system — item 26</h3>
+      <div class="grid g4">
+        <label class="f"><b>Vertical unit</b><select id="i26u"><option selected>M</option><option>F</option></select></label>
+        <label class="f"><b>THR latitude</b><input type="text" id="thrLat" value="N 51 28 39.00" placeholder="N dd mm ss.ss"></label>
+        <label class="f"><b>THR longitude</b><input type="text" id="thrLon" value="W 0 29 5.97" placeholder="E/W ddd mm ss.ss"></label>
+        <label class="f"><b>THR height (item 26 d) — linked to item 11</b><input type="text" id="thrH" value="" readonly style="background:var(--ifp-n900);color:var(--ink-soft)" title="Locked to the threshold elevation in item 11, converted to the item 26 vertical unit"></label>
+        <label class="f"><b>LLZ latitude</b><input type="text" id="llzLat" value="N 51 28 39.70"></label>
+        <label class="f"><b>LLZ longitude</b><input type="text" id="llzLon" value="W 0 25 37.04"></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3 : AIRCRAFT CASES -->
+  <section class="step">
+    <div class="head"><span class="n">3</span><h2>Aircraft size cases</h2>
+      <span class="hint">one .obs file is generated per ticked case — item 03, 14 &amp; 19 vary per file</span></div>
+    <div class="body">
+      <div class="cats" id="cats"></div>
+    </div>
+  </section>
+
+  <!-- STEP 4 : GENERATE -->
+  <section class="step">
+    <div class="head"><span class="n">4</span><h2>Generate</h2></div>
+    <div class="body">
+      <div class="banner err" id="genBanner"></div>
+      <div class="btnrow">
+        <button id="genBtn">Generate .obs files</button>
+        <button class="ghost" id="dlAll" disabled>Download all</button>
+        <span class="small">Output: 80-character fixed lines, CRLF, item 21 filled with the included obstacle count.</span>
+      </div>
+      <div class="out" id="out"></div>
+    </div>
+  </section>
+
+  <!-- STEP 5 : RSK RESULTS SUMMARY -->
+  <section class="step">
+    <div class="head"><span class="n">5</span><h2>RSK results summary</h2>
+      <span class="hint">Merge ICAO Collision Risk Model (.RSK) result files from one run into a single summary text file</span></div>
+    <div class="body">
+      <div class="drop" id="rskDrop" tabindex="0" role="button" aria-label="Load RSK files">
+        <b>Drop .RSK file(s) here</b> or click to browse
+        <input type="file" id="rskInput" accept=".rsk" multiple style="display:none">
+      </div>
+      <p class="small" style="margin:8px 0 0">Drop all result files from one CRM run (e.g. one per aircraft category — all the same ILS category). Files mixing different ILS categories will be rejected rather than merged.</p>
+
+      <div class="banner err" id="rskBanner"></div>
+      <div class="row" id="rskFileRow" style="display:none;margin-top:8px;gap:6px"></div>
+
+      <div class="btnrow">
+        <button id="rskGenBtn">Generate summary</button>
+        <button class="ghost" id="rskClear">Clear loaded files</button>
+      </div>
+      <div class="out" id="rskOut"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* ---------------- state ---------------- */
+let obstacles = [];        // {id, desc, lat:{h,d,m,s}, lon:{h,d,m,s}, zM, zF, src, inc, seq}
+let loadedPen = 0;
+let generated = [];        // {name, text}
+
+const CATS = [
+  {key:"AB", label:"CAT A/B", file:"CATAB", h:6.0,  s:30.0, oca:200, on:true,  speeds:["A","B"]},
+  {key:"C",  label:"CAT C",   file:"CATC",  h:7.0,  s:32.5, oca:200, on:true,  speeds:["C"]},
+  {key:"DL", label:"CAT D(L)",file:"CATDL", h:8.0,  s:40.0, oca:200, on:true,  speeds:["D"]},
+];
+
+/* ---------------- helpers: fixed-format writers ---------------- */
+const SP = n => " ".repeat(Math.max(0,n));
+function put(line, col, txt){            // col = 1-based start column
+  const i = col-1;
+  return (line + SP(Math.max(0, i - line.length))).slice(0, i) + txt + line.slice(i + txt.length);
+}
+function rj(v, w){ v = String(v); return v.length>=w ? v.slice(-w) : SP(w-v.length)+v; }
+function lj(v, w){ v = String(v); return (v + SP(w)).slice(0,w); }
+function pad80(l){ return lj(l,80); }
+function impDec(val, dp, w){             // implied decimal, right-justified
+  return rj(Math.round(Number(val) * 10**dp), w);
+}
+
+/* DMS parse: "N 51 28 39.00" or "51:28:45.7956" style */
+function parseDMS(str, isLon){
+  if(!str) return null;
+  str = str.trim();
+  let hemi = null;
+  const hm = str.match(/[NSEW]/i);
+  if(hm){ hemi = hm[0].toUpperCase(); str = str.replace(/[NSEW]/ig," "); }
+  const neg = /-/.test(str);
+  const nums = str.match(/\d+(?:\.\d+)?/g);
+  if(!nums || nums.length<3) return null;
+  const [d,m,s] = nums.map(Number);
+  if(!hemi) hemi = isLon ? (neg?"W":"E") : (neg?"S":"N");
+  return {h:hemi, d, m, s};
+}
+function dmsDigits(p, degW){             // -> "512845 80" style zero-padded block
+  const ss = Math.round(p.s*100);
+  const carryM = p.m + Math.floor(ss/6000);
+  return String(p.d).padStart(degW,"0") + String(carryM).padStart(2,"0") + String(ss%6000).padStart(4,"0");
+}
+
+/* ---------------- XML load ---------------- */
+const drop = document.getElementById("drop"), fileInput = document.getElementById("fileInput");
+drop.addEventListener("click", ()=>fileInput.click());
+drop.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" ") fileInput.click(); });
+["dragover","dragenter"].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault();drop.classList.add("on");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault();drop.classList.remove("on");}));
+drop.addEventListener("drop", e=>loadFiles(e.dataTransfer.files));
+fileInput.addEventListener("change", e=>{ loadFiles(e.target.files); fileInput.value=""; });
+
+function loadFiles(list){
+  const files = Array.from(list).filter(f=>/\.xml$/i.test(f.name));
+  let done = 0;
+  files.forEach(f=>{
+    const r = new FileReader();
+    r.onload = ()=>{ try{ parseXML(r.result, f.name); }catch(err){ alert(f.name+": "+err.message); }
+      if(++done===files.length) refreshTable(); };
+    r.readAsText(f);
+  });
+}
+function parseXML(text, srcName){
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  if(doc.querySelector("parsererror")) throw new Error("not valid XML");
+  const pens = doc.querySelectorAll("Penetration");
+  if(!pens.length) throw new Error("no <Penetration> records found");
+  const seen = new Set(obstacles.map(o=>o.id));
+  pens.forEach(p=>{
+    loadedPen++;
+    const ob = p.querySelector("Obstacle"); if(!ob) return;
+    const id = (ob.querySelector("ID")?.textContent||"").trim();
+    if(!id || seen.has(id)) return;
+    seen.add(id);
+    const lat = parseDMS(ob.querySelector("Geo > Lat")?.textContent, false);
+    const lon = parseDMS(ob.querySelector("Geo > Long")?.textContent, true);
+    if(!lat||!lon) return;
+    obstacles.push({
+      id,
+      desc:(ob.querySelector("Description")?.textContent||"").trim(),
+      lat, lon,
+      zM: Math.round(parseFloat(ob.querySelector("ElevationMetres")?.textContent||"0")),
+      zF: Math.round(parseFloat(ob.querySelector("ElevationFeet")?.textContent||"0")),
+      src: srcName, inc:true, seq: obstacles.length
+    });
+  });
+}
+
+/* ---------------- table ---------------- */
+const tbody = document.getElementById("tbody");
+function refreshTable(){
+  document.getElementById("counts").style.display = obstacles.length ? "flex" : "none";
+  document.getElementById("tblTools").style.display = obstacles.length ? "flex" : "none";
+  document.getElementById("tblwrap").style.display = obstacles.length ? "block" : "none";
+  document.getElementById("fmtNote").style.display = obstacles.length ? "block" : "none";
+  tbody.innerHTML = "";
+  const flt = document.getElementById("filter").value.trim().toLowerCase();
+  let truncCount = 0;
+  obstacles.forEach((o,i)=>{
+    const idBad = o.id.length>8, dBad = o.desc.length>13;
+    if(idBad||dBad) truncCount++;
+    const show = !flt || o.id.toLowerCase().includes(flt) || o.desc.toLowerCase().includes(flt);
+    if(!show) return;
+    const tr = document.createElement("tr");
+    tr.className = o.inc ? "" : "off";
+    tr.innerHTML =
+      `<td><input type="checkbox" ${o.inc?"checked":""} data-i="${i}"></td>`+
+      `<td>${i+1}</td>`+
+      `<td>${idBad?`<span class="trunc" title="truncated to 8">${esc(o.id)}</span>`:esc(o.id)}</td>`+
+      `<td>${dBad?`<span class="trunc" title="truncated to 13">${esc(o.desc)}</span>`:esc(o.desc)}</td>`+
+      `<td>${fmtDMS(o.lat)}</td><td>${fmtDMS(o.lon)}</td>`+
+      `<td>${o.zM} m</td><td>${esc(o.src)}</td>`;
+    tbody.appendChild(tr);
+  });
+  updateCounts(truncCount);
+}
+function esc(s){ return s.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmtDMS(p){ return `${p.h} ${p.d}\u00B0${String(p.m).padStart(2,"0")}'${p.s.toFixed(2)}"`; }
+
+function updateCounts(truncCount){
+  const inc = obstacles.filter(o=>o.inc).length;
+  document.getElementById("cLoaded").textContent = loadedPen;
+  document.getElementById("cUnique").textContent = obstacles.length;
+  document.getElementById("cInc").textContent = inc;
+  document.getElementById("cIncBox").classList.toggle("bad", inc>500);
+  const lb = document.getElementById("limitBanner");
+  if(inc>500){
+    lb.classList.add("show");
+    lb.innerHTML = `<b>CRM limit exceeded:</b> ${inc} obstacles are selected but the Collision Risk Model accepts a maximum of <b>500</b>. Exclude ${inc-500} obstacle(s) (use the filter and checkboxes below) before generating.`;
+  } else lb.classList.remove("show");
+  const tb = document.getElementById("truncBanner");
+  if(truncCount>0){
+    tb.classList.add("show");
+    tb.innerHTML = `<b>${truncCount}</b> obstacle(s) have an IDENT longer than 8 characters or a DESCRIPTION longer than 13 — these fields will be truncated in the output (highlighted in the table). Check that truncated IDENTs remain unique.`;
+  } else tb.classList.remove("show");
+}
+tbody.addEventListener("change", e=>{
+  const i = e.target.dataset.i; if(i===undefined) return;
+  obstacles[i].inc = e.target.checked; refreshTable();
+});
+document.getElementById("filter").addEventListener("input", refreshTable);
+document.getElementById("selAll").onclick = ()=>{ obstacles.forEach(o=>o.inc=true); refreshTable(); };
+document.getElementById("selNone").onclick = ()=>{ obstacles.forEach(o=>o.inc=false); refreshTable(); };
+document.getElementById("selVis").onclick = ()=>{
+  const flt = document.getElementById("filter").value.trim().toLowerCase();
+  obstacles.forEach(o=>{ if(!flt || o.id.toLowerCase().includes(flt) || o.desc.toLowerCase().includes(flt)) o.inc=!o.inc; });
+  refreshTable();
+};
+
+document.getElementById("clearObs").onclick = ()=>{
+  if(!confirm("Remove all loaded obstacle data? Runway/survey data and settings are kept.")) return;
+  obstacles = []; loadedPen = 0;
+  document.getElementById("filter").value = "";
+  ["limitBanner","truncBanner"].forEach(id=>document.getElementById(id).classList.remove("show"));
+  generated = []; document.getElementById("out").innerHTML = "";
+  document.getElementById("dlAll").disabled = true;
+  refreshTable();
+};
+
+/* ---------------- STEP 1b: import existing .obs file(s) for amendment/checking ---------------- */
+function padTo(s,n){ return s.length>=n ? s : s + " ".repeat(n-s.length); }
+
+function parseObsText(text){
+  const items = {};     // "00".."26" -> raw line (first occurrence wins)
+  const obsLines = [];  // item 30 lines, in file order
+  text.split(/\r\n|\r|\n/).forEach(raw=>{
+    if(raw.trim()==="") return;
+    const m = /^(\d{2}) /.exec(raw);
+    if(!m) return;
+    const num = m[1];
+    const line = padTo(raw, 80);
+    if(num==="30") obsLines.push(line);
+    else if(!(num in items)) items[num] = line;
+  });
+  return {items, obsLines};
+}
+
+function extractShared(items){
+  const g = {};
+  const has = n=>n in items;
+  if(has("00")) g.i00 = items["00"].slice(3).replace(/\s+$/,"");
+  if(has("01")) g.i01 = items["01"].slice(3).replace(/\s+$/,"");
+  if(has("02")) g.i02 = items["02"].slice(3).replace(/\s+$/,"");
+  if(has("04")) g.i04 = items["04"].slice(3).replace(/\s+$/,"");
+  if(has("05")) g.i05 = items["05"].slice(3).replace(/\s+$/,"");
+  if(has("06")) g.i06 = items["06"].slice(3).replace(/\s+$/,"");
+  if(has("07")){ const n=parseInt(items["07"].slice(3,6)); if(!isNaN(n)) g.i07=(n/100).toFixed(2); }
+  if(has("08")){ const n=parseInt(items["08"].slice(3,6)); if(!isNaN(n)){ g.i08=(n/10).toFixed(1); g.u08=items["08"].charAt(6); } }
+  if(has("09")){ const n=parseInt(items["09"].slice(3,8)); if(!isNaN(n)){ g.i09=n; g.u09=items["09"].charAt(8); } }
+  if(has("10")){ const n=parseInt(items["10"].slice(3,6)); if(!isNaN(n)){ g.i10=n; g.u10=items["10"].charAt(6); } }
+  if(has("11")){ const n=parseInt(items["11"].slice(3,8)); if(!isNaN(n)){ g.i11=n; g.u11=items["11"].charAt(8); } }
+  if(has("12")){ const n=parseInt(items["12"].slice(3,8)); if(!isNaN(n)) g.fapM=n; }
+  if(has("13")) g.i13 = items["13"].charAt(3);
+  if(has("15")){
+    if(items["15"].charAt(3)==="Y") g.i15="Y";
+    else { g.i15="N"; const n=parseInt(items["15"].slice(5,7)); if(!isNaN(n)) g.i15g=(n/10).toFixed(1); }
+  }
+  if(has("16")) g.i16 = items["16"].charAt(3);
+  if(has("17")) g.i17 = items["17"].charAt(3);
+  if(has("18")) g.i18 = items["18"].charAt(3);
+  if(has("20")) g.i20 = items["20"].charAt(3);
+  if(has("22")) g.i22 = items["22"].charAt(3);
+  if(has("26")){
+    const L = items["26"];
+    g.i26u = L.charAt(5);
+    const dms=(hIdx,dStart,dLen,mStart,sStart)=>({
+      h:(L.charAt(hIdx)||"").toUpperCase(),
+      d:parseInt(L.slice(dStart,dStart+dLen)),
+      m:parseInt(L.slice(mStart,mStart+2)),
+      s:parseInt(L.slice(sStart,sStart+4))/100
+    });
+    g.thr = {lat:dms(7,9,2,12,15), lon:dms(20,22,3,26,29)};
+    g.llz = {lat:dms(40,42,2,45,48), lon:dms(53,55,3,59,62)};
+    const hgt = parseInt(L.slice(34,39));
+    if(!isNaN(hgt)) g.thrHeight26 = hgt;
+  }
+  return g;
+}
+
+function extractCategory(items){
+  const c = {};
+  if("03" in items){ const m=/^03 CAT (\S+)/.exec(items["03"]); if(m) c.key=m[1]; }
+  if("14" in items){
+    const L = items["14"];
+    const h=parseInt(L.slice(5,8)), s=parseInt(L.slice(10,14));
+    if(!isNaN(h)) c.h = h/10;
+    if(!isNaN(s)) c.s = s/10;
+  }
+  if("19" in items){
+    const L = items["19"];
+    const bases = {A:4,B:14,C:24,D:34};
+    const active = []; let oca = null;
+    for(const sc of ["A","B","C","D"]){
+      const b = bases[sc];
+      if(L.charAt(b-1)==="Y"){
+        active.push(sc);
+        const o = parseInt(L.slice(b+1,b+6));
+        if(!isNaN(o)) oca = o;
+      }
+    }
+    c.speeds = active;
+    if(oca!==null) c.oca = oca;
+  }
+  return c;
+}
+
+function parseObsObstacleLine(line, srcName){
+  line = padTo(line, 80);
+  const id = line.slice(3,11).replace(/\s+$/,"");
+  const desc = line.slice(12,25).replace(/\s+$/,"");
+  const latH = (line.charAt(26)||"").toUpperCase(), lonH = (line.charAt(37)||"").toUpperCase();
+  if(!/[NS]/.test(latH) || !/[EW]/.test(lonH)) return null;
+  const latDig = line.slice(28,36), lonDig = line.slice(39,48);
+  const latD=parseInt(latDig.slice(0,2)), latM=parseInt(latDig.slice(2,4)), latS=parseInt(latDig.slice(4,8))/100;
+  const lonD=parseInt(lonDig.slice(0,3)), lonM=parseInt(lonDig.slice(3,5)), lonS=parseInt(lonDig.slice(5,9))/100;
+  const zRaw = parseInt(line.slice(56,61).trim());
+  if(!id || isNaN(latD) || isNaN(lonD) || isNaN(zRaw)) return null;
+  return {id, desc, lat:{h:latH,d:latD,m:latM,s:latS}, lon:{h:lonH,d:lonD,m:lonM,s:lonS}, zRaw, src:srcName};
+}
+
+function applySharedToForm(g){
+  const set=(id,val)=>{ if(val!==undefined && val!==null) document.getElementById(id).value = val; };
+  set("i00",g.i00); set("i01",g.i01); set("i02",g.i02);
+  set("i04",g.i04); set("i05",g.i05); set("i06",g.i06);
+  set("i07",g.i07); set("i08",g.i08); if(g.u08) set("u08",g.u08);
+  set("i09",g.i09); if(g.u09) set("u09",g.u09);
+  set("i10",g.i10); if(g.u10) set("u10",g.u10);
+  set("i11",g.i11); if(g.u11) set("u11",g.u11);
+  exactThrFt = null;   // now using the value read from the file, not a survey source
+  set("i13",g.i13);
+  if(g.i15){
+    set("i15", g.i15);
+    document.getElementById("i15gWrap").style.display = g.i15==="N" ? "flex" : "none";
+    if(g.i15g) set("i15g", g.i15g);
+  }
+  set("i16",g.i16); set("i17",g.i17); set("i18",g.i18);
+  set("i20",g.i20); set("i22",g.i22);
+  if(g.i26u) set("i26u", g.i26u);
+  if(g.thr){ set("thrLat", dmsStr(g.thr.lat)); set("thrLon", dmsStr(g.thr.lon)); }
+  if(g.llz){ set("llzLat", dmsStr(g.llz.lat)); set("llzLon", dmsStr(g.llz.lon)); }
+  refreshCatNames();
+}
+
+const obsDrop = document.getElementById("obsDrop"), obsInput = document.getElementById("obsInput");
+obsDrop.addEventListener("click", ()=>obsInput.click());
+obsDrop.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" ") obsInput.click(); });
+["dragover","dragenter"].forEach(ev=>obsDrop.addEventListener(ev, e=>{e.preventDefault();obsDrop.classList.add("on");}));
+["dragleave","drop"].forEach(ev=>obsDrop.addEventListener(ev, e=>{e.preventDefault();obsDrop.classList.remove("on");}));
+obsDrop.addEventListener("drop", e=>loadObsFiles(e.dataTransfer.files));
+obsInput.addEventListener("change", e=>{ loadObsFiles(e.target.files); obsInput.value=""; });
+
+function loadObsFiles(list){
+  const files = Array.from(list).filter(f=>/\.obs$/i.test(f.name));
+  if(!files.length) return;
+  if(!confirm(`Import ${files.length} .obs file(s)? This overwrites the runway/procedure fields in step 2 and the ticked aircraft case(s) in step 3. Existing obstacle data is kept and merged (duplicates removed by ID), not replaced.`)) return;
+  let done = 0;
+  const results = new Array(files.length);
+  files.forEach((f,i)=>{
+    const r = new FileReader();
+    r.onload = ()=>{ results[i] = {name:f.name, text:r.result}; if(++done===files.length) processImportedObs(results); };
+    r.readAsText(f);
+  });
+}
+
+function processImportedObs(results){
+  const bn = document.getElementById("obsBanner");
+  bn.classList.remove("show"); bn.innerHTML = "";
+  const notes = [];
+  let shared0 = null, firstName = null;
+  let obsAdded = 0;
+  // Dedup key is ID + lat/lon + elevation, not just ID: real CRM files sometimes reuse the
+  // same IDENT for several distinct physical obstacles, so ID-alone would wrongly drop them.
+  const obsPosKey = (lat,lon,zM) => `${lat.h}${lat.d}.${lat.m}.${lat.s.toFixed(2)}|${lon.h}${lon.d}.${lon.m}.${lon.s.toFixed(2)}|${zM}`;
+  const seenKeys = new Set(obstacles.map(o=>o.id+"~"+obsPosKey(o.lat,o.lon,o.zM)));
+  const matchedIdx = new Set();
+
+  results.forEach(({name, text})=>{
+    const {items, obsLines} = parseObsText(text);
+    if(!Object.keys(items).length){ notes.push(`${name}: no recognisable CRM header items found — is this a valid .obs file?`); return; }
+
+    const shared = extractShared(items);
+    if(!shared0){
+      applySharedToForm(shared);
+      shared0 = shared; firstName = name;
+    } else {
+      for(const k of Object.keys(shared)){
+        if(k==="thr" || k==="llz") continue;
+        if(shared0[k]!==undefined && shared[k]!==undefined && String(shared0[k])!==String(shared[k])){
+          notes.push(`${name}: item differs from ${firstName} for ${k} (${shared[k]} vs ${shared0[k]}) — using ${firstName}'s value.`);
+        }
+      }
+    }
+
+    const cat = extractCategory(items);
+    let ci = cat.key ? CATS.findIndex(c=>c.key===cat.key) : -1;
+    if(ci===-1 && cat.speeds && cat.speeds.length){
+      ci = CATS.findIndex(c=>c.speeds.length===cat.speeds.length && c.speeds.every(s=>cat.speeds.includes(s)));
+    }
+    if(ci>=0){
+      matchedIdx.add(ci);
+      document.getElementById(`cat_on_${ci}`).checked = true;
+      if(cat.h!==undefined) document.getElementById(`cat_h_${ci}`).value = cat.h;
+      if(cat.s!==undefined) document.getElementById(`cat_s_${ci}`).value = cat.s;
+    } else {
+      notes.push(`${name}: item 03/19 (CAT ${cat.key||"?"}, speed cat ${cat.speeds&&cat.speeds.length?cat.speeds.join("/"):"?"}) doesn't match any built-in aircraft case — check/tick step 3 manually.`);
+    }
+
+    const zUnit = (shared.i26u || (shared0&&shared0.i26u) || "M");
+    obsLines.forEach(l=>{
+      const p = parseObsObstacleLine(l, name);
+      if(!p) return;
+      const zM = zUnit==="F" ? Math.round(p.zRaw*0.3048) : p.zRaw;
+      const zF = zUnit==="F" ? p.zRaw : Math.round(p.zRaw/0.3048);
+      const key = p.id+"~"+obsPosKey(p.lat,p.lon,zM);
+      if(seenKeys.has(key)) return;
+      seenKeys.add(key);
+      obstacles.push({ id:p.id, desc:p.desc, lat:p.lat, lon:p.lon, zM, zF, src:name, inc:true, seq: obstacles.length });
+      obsAdded++;
+    });
+  });
+
+  const idLocs = {};
+  obstacles.forEach(o=>{ (idLocs[o.id] ||= new Set()).add(obsPosKey(o.lat,o.lon,o.zM)); });
+  const reused = Object.entries(idLocs).filter(([,s])=>s.size>1).sort((a,b)=>b[1].size-a[1].size);
+  if(reused.length){
+    const list = reused.slice(0,10).map(([id,s])=>`${id} (${s.size})`).join(", ");
+    notes.push(`${reused.length} obstacle ID(s) label more than one distinct location/elevation in the loaded data${reused.length>10?", showing the top 10":""}: ${list}. All were kept as separate obstacles, but IDENT is meant to identify a single obstacle (Doc 9274 item 30) and is truncated to 8 characters in the output — worth checking/correcting these upstream so truncated IDENTs stay distinguishable.`);
+  }
+
+
+  CATS.forEach((c,i)=>{ if(!matchedIdx.has(i)) document.getElementById(`cat_on_${i}`).checked = false; });
+
+  if(shared0){
+    if(shared0.fapM!==undefined && v("i12faf")==="") importedFapM = shared0.fapM;
+    syncOCA(); syncThrH(); syncFAP(); refreshCatNames();
+    if(shared0.thrHeight26!==undefined){
+      const calc = thrHeight26();
+      if(Math.abs(calc - shared0.thrHeight26) > 1){
+        notes.push(`Item 26 threshold height in the file (${shared0.thrHeight26}) doesn't match the value computed from item 11 (${calc}) — check items 11/26.`);
+      }
+    }
+  }
+
+  refreshTable();
+  const matchTxt = matchedIdx.size ? `; matched aircraft case(s): ${[...matchedIdx].sort().map(i=>CATS[i].label).join(", ")}` : "; no aircraft case matched automatically";
+  bn.classList.add("show");
+  bn.innerHTML = `<b>Import complete.</b> ${esc(`Imported ${obsAdded} new obstacle(s) from ${results.length} file(s)${matchTxt}.`)}` +
+    (notes.length ? "<br>" + notes.map(esc).join("<br>") : "");
+}
+
+/* ---------------- surveyor AD 2 files (.xlsx / .csv) ---------------- */
+let surveys = {};                                    // key "EGLL|09L" -> {icao,rwy,thr,llz,llzName,distM}
+const DESIG = /^(0?[1-9]|[12]\d|3[0-6])([LRC])?X?$/;
+function normDesig(s){
+  const m = DESIG.exec((s||"").trim().toUpperCase());
+  return m ? String(m[1]).padStart(2,"0") + (m[2]||"") : null;
+}
+function parseSvyAngle(s){                           // "512841.2431N" / "0002844.5130W"
+  const m = /^(\d{6,7})(\.\d+)?([NSEW])$/.exec((s||"").trim().toUpperCase());
+  if(!m) return null;
+  const ip = m[1];
+  return {h:m[3], d:+ip.slice(0,-4), m:+ip.slice(-4,-2), s:parseFloat(ip.slice(-2)+(m[2]||""))};
+}
+function degOf(p){ const v=p.d+p.m/60+p.s/3600; return (p.h==="S"||p.h==="W")?-v:v; }
+function distBrg(a,b){                               // WGS84 ellipsoidal, local radii at mean latitude
+  const toR=Math.PI/180, A=6378137.0, f=1/298.257223563, e2=f*(2-f);
+  const la1=degOf(a.lat)*toR, lo1=degOf(a.lon)*toR, la2=degOf(b.lat)*toR, lo2=degOf(b.lon)*toR;
+  const phi=(la1+la2)/2, s2=Math.sin(phi)**2;
+  const M=A*(1-e2)/Math.pow(1-e2*s2,1.5);            // meridional radius of curvature
+  const N=A/Math.sqrt(1-e2*s2);                      // prime vertical radius of curvature
+  const x=(lo2-lo1)*N*Math.cos(phi), y=(la2-la1)*M;
+  return {dist:Math.hypot(x,y), brg:((Math.atan2(x,y)/toR)+360)%360};
+}
+const svyDrop=document.getElementById("svyDrop"), svyInput=document.getElementById("svyInput");
+svyDrop.addEventListener("click", ()=>svyInput.click());
+svyDrop.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" ") svyInput.click(); });
+["dragover","dragenter"].forEach(ev=>svyDrop.addEventListener(ev,e=>{e.preventDefault();svyDrop.classList.add("on");}));
+["dragleave","drop"].forEach(ev=>svyDrop.addEventListener(ev,e=>{e.preventDefault();svyDrop.classList.remove("on");}));
+svyDrop.addEventListener("drop", e=>loadSurveys(e.dataTransfer.files));
+svyInput.addEventListener("change", e=>{ loadSurveys(e.target.files); svyInput.value=""; });
+
+function loadSurveys(list){
+  const files = Array.from(list).filter(f=>/\.(xlsx|csv)$/i.test(f.name));
+  const bn = document.getElementById("svyBanner"); bn.classList.remove("show");
+  let done=0, notes=[];
+  files.forEach(f=>{
+    const fin = ()=>{ if(++done===files.length) finishSurveyLoad(notes); };
+    if(/\.csv$/i.test(f.name)){
+      const r=new FileReader();
+      r.onload=()=>{ try{
+          const rows=r.result.split(/\r?\n/).map(l=>l.split(","));
+          parseSurveyRows(rows, f.name, notes);
+        }catch(err){ notes.push(f.name+": "+err.message); } fin(); };
+      r.readAsText(f);
+    } else {
+      if(typeof XLSX==="undefined"){ notes.push(f.name+": .xlsx parsing needs the SheetJS library, which could not be loaded (no internet connection?). Save the sheet as .csv and load that instead."); fin(); return; }
+      const r=new FileReader();
+      r.onload=()=>{ try{
+          const wb=XLSX.read(r.result,{type:"array"});
+          const ws=wb.Sheets[wb.SheetNames[0]];
+          const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:""}).map(rr=>rr.map(c=>String(c).trim()));
+          parseSurveyRows(rows, f.name, notes);
+        }catch(err){ notes.push(f.name+": "+err.message); } fin(); };
+      r.readAsArrayBuffer(f);
+    }
+  });
+}
+function parseSurveyRows(rows, srcName, notes){
+  const thr={}, llzList=[]; let icao=null;
+  rows.forEach(r=>{
+    if(r.length<18) return;
+    const lat=parseSvyAngle(r[4]), lon=parseSvyAngle(r[5]);
+    if(!lat||!lon) return;                            // skips metadata + header rows automatically
+    const t=(r[1]||"").trim().toUpperCase();
+    icao = icao || (r[0]||"").trim().toUpperCase();
+    const rec={type:t, ident:(r[2]||"").trim(), assoc:(r[3]||"").trim(), lat, lon,
+               orthoM:parseFloat(r[16]), orthoF:parseFloat(r[17])};
+    if(t==="THR"){
+      const d = normDesig(rec.assoc) || normDesig(rec.ident);
+      if(d) thr[d]=rec;
+    } else if((t.startsWith("LLZ")||t.startsWith("LOC")) && !/MON|NFM|FFM|GL/.test(t)){
+      llzList.push(rec);
+    }
+  });
+  if(!icao || !Object.keys(thr).length){ notes.push(srcName+": no THR records recognised — is this a CAP 1732/1668 survey file?"); return; }
+  let ilsCount=0;
+  llzList.forEach(L=>{
+    let d = normDesig(L.assoc) || normDesig(L.ident);
+    if(!d || !thr[d]){                                // geometric fallback along extended centreline
+      let best=null;
+      for(const [dsg,T] of Object.entries(thr)){
+        const hdg=parseInt(dsg.slice(0,2))*10;
+        const {dist,brg}=distBrg(T,L);
+        const diff=Math.min(Math.abs(brg-hdg),360-Math.abs(brg-hdg));
+        if(diff<20 && dist>500 && (!best||diff<best.diff)) best={diff,dsg};
+      }
+      d = best ? best.dsg : null;
+    }
+    if(!d || !thr[d]) return;
+    const {dist}=distBrg(thr[d],L);
+    const name = L.ident && !normDesig(L.ident) ? L.ident : (L.type.replace(/^LLZ_?/,"")||"LLZ");
+    surveys[icao+"|"+d]={icao,rwy:d,thr:thr[d],llz:L,llzName:name,distM:Math.round(dist)};
+    ilsCount++;
+  });
+  if(!ilsCount) notes.push(srcName+" ("+icao+"): THR data read, but no ILS localizer records found — no runways added.");
+}
+function finishSurveyLoad(notes){
+  const sel=document.getElementById("rwySel");
+  const keys=Object.keys(surveys).sort();
+  sel.innerHTML = keys.length ? '<option value="">— select runway —</option>' : '<option value="">— load a survey file —</option>';
+  keys.forEach(k=>{
+    const s=surveys[k];
+    const o=document.createElement("option");
+    o.value=k; o.textContent=`${s.icao} RWY${s.rwy}  (LLZ ${s.llzName}, ${s.distM} m)`;
+    sel.appendChild(o);
+  });
+  sel.disabled=!keys.length;
+  const bn=document.getElementById("svyBanner");
+  if(notes.length){ bn.innerHTML=notes.map(esc).join("<br>"); bn.classList.add("show"); }
+}
+function dmsStr(p){ return `${p.h} ${p.d} ${p.m} ${p.s.toFixed(2)}`; }
+document.getElementById("rwySel").addEventListener("change", e=>{
+  const s=surveys[e.target.value]; if(!s) return;
+  document.getElementById("thrLat").value=dmsStr(s.thr.lat);
+  document.getElementById("thrLon").value=dmsStr(s.thr.lon);
+  document.getElementById("llzLat").value=dmsStr(s.llz.lat);
+  document.getElementById("llzLon").value=dmsStr(s.llz.lon);
+  const elevM = s.thr.orthoM, elevF = s.thr.orthoF;
+  if(!isNaN(elevM)){ document.getElementById("i11").value=Math.round(elevM); document.getElementById("u11").value="M"; exactThrFt = elevM/0.3048; }
+  else if(!isNaN(elevF)){ document.getElementById("i11").value=Math.round(elevF); document.getElementById("u11").value="F"; exactThrFt = elevF; }
+  else exactThrFt = null;
+  document.getElementById("i09").value=s.distM; document.getElementById("u09").value="M";
+  syncFAP();
+  const catTxt = (v("i16")==="2"||v("i16")==="4") ? "CAT II" : "CAT I";
+  document.getElementById("i02").value=`${s.icao} RWY${s.rwy} ${catTxt}`.slice(0,40);
+  syncThrH(); refreshCatNames();
+  document.getElementById("rwyInfo").textContent =
+    `THR elev ${!isNaN(elevM)?elevM.toFixed(1)+" m":"n/a"} · LLZ ${s.llzName} · computed LLZ–THR ${s.distM} m (check against published value)`;
+});
+
+const catsEl = document.getElementById("cats");
+CATS.forEach((c,i)=>{
+  const div = document.createElement("div");
+  div.className = "cat";
+  div.innerHTML = `
+    <div class="top"><input type="checkbox" id="cat_on_${i}" ${c.on?"checked":""}>
+      <b>${c.label}</b><span class="file" id="cat_file_${i}"></span></div>
+    <div class="dims">
+      <label class="f"><b>Wheel–GP ant. (m)</b><input type="number" step="0.1" id="cat_h_${i}" value="${c.h}"></label>
+      <label class="f"><b>Wing semispan (m)</b><input type="number" step="0.1" id="cat_s_${i}" value="${c.s}"></label>
+      <label class="f"><b>OCA/H (item 19) — from item 16</b><input type="number" step="1" id="cat_o_${i}" value="${c.oca}" readonly style="background:var(--ifp-n900);color:var(--ink-soft)" title="Linked to the ILS approach category in item 16: CAT I = 200, CAT II = 100"></label>
+    </div>
+    <p class="small" style="margin:8px 0 0">item 03: “CAT ${c.key}” · item 19: specified OCA/H for speed cat ${c.speeds.join(" &amp; ")}</p>`;
+  catsEl.appendChild(div);
+});
+function catFileName(c){
+  const t = document.getElementById("i02").value.replace(/\s+/g,"").replace(/[^A-Za-z0-9]/g,"").slice(0,10) || "RWY";
+  return `${t}${c.file}.obs`;
+}
+function refreshCatNames(){ CATS.forEach((c,i)=>document.getElementById(`cat_file_${i}`).textContent = catFileName(c)); }
+document.getElementById("i02").addEventListener("input", refreshCatNames);
+refreshCatNames();
+
+document.getElementById("i15").addEventListener("change", e=>{
+  document.getElementById("i15gWrap").style.display = e.target.value==="N" ? "flex" : "none";
+});
+
+/* ---- linked fields ---- */
+function ocaForCategory(){                       // item 16 -> item 19 OCA/H
+  const c = document.getElementById("i16").value;
+  return (c==="2"||c==="4") ? 100 : 200;        // CAT II = 100, CAT I = 200
+}
+function syncOCA(){
+  const oca = ocaForCategory();
+  CATS.forEach((c,i)=>document.getElementById(`cat_o_${i}`).value = oca);
+}
+function thrHeight26(){                          // item 11 -> item 26 d, converted to item 26 unit
+  const val = parseFloat(v("i11")) || 0, from = v("u11"), to = v("i26u");
+  let m = from==="F" ? val*0.3048 : val;
+  return Math.round(to==="F" ? m/0.3048 : m);
+}
+function syncThrH(){ document.getElementById("thrH").value = thrHeight26() + " " + v("i26u"); }
+
+/* item 12: FAP–THR distance with earth curvature (per FAP distance workbook)
+   H = h + 6076·D·tanθ + 0.8833·D²  (heights ft, D in NM), + RDH adjustment    */
+let exactThrFt = null;                            // unrounded survey elevation; cleared if item 11 edited by hand
+let importedFapM = null;                          // item 12 distance read from an imported .obs file, shown until a FAF altitude is entered
+function fapDistM(){
+  const gp   = parseFloat(v("i07"));
+  const rdh  = parseFloat(v("i08")) * (v("u08")==="M" ? 1/0.3048 : 1);   // -> ft
+  const thr  = exactThrFt !== null ? exactThrFt
+             : parseFloat(v("i11")) * (v("u11")==="M" ? 1/0.3048 : 1);   // -> ft
+  const faf  = parseFloat(v("i12faf"));
+  if(!(gp>0) || isNaN(rdh) || isNaN(thr) || isNaN(faf)) return null;
+  const t = Math.tan(gp*Math.PI/180);
+  const x = 0.8833, y = 6076*t, z = 50 - (faf - thr);
+  const disc = y*y - 4*x*z;
+  if(disc < 0 || faf <= thr) return null;                                // FAF below THR etc.
+  const Dft = ((-y + Math.sqrt(disc)) / (2*x)) * 6076;
+  const adj = 0.0001514 * (50 - rdh) * (1/t) * 6076;                     // RDH adjustment
+  return (Dft + adj) * 0.3048;
+}
+function syncFAP(){
+  const d = fapDistM();
+  const el = document.getElementById("i12");
+  if(v("i12faf")===""){
+    el.value = importedFapM!==null ? `${importedFapM} M  (from imported file — enter FAF altitude to recalculate)` : "— enter FAF altitude —";
+  } else {
+    el.value = d===null ? "— check inputs —" : Math.round(d) + " M";
+  }
+}
+
+/* Recalculation wiring: every field that feeds a calculated/readonly value gets
+   both "input" and "change" listeners, so typing, unit-dropdown selection, spinner
+   clicks and programmatic value changes all reliably re-run the dependent calc(s). */
+function recalcFAPandThrH(sourceId){
+  if(sourceId==="i11" || sourceId==="u11") exactThrFt = null;   // manual edit invalidates the exact survey value
+  if(sourceId==="i12faf") importedFapM = null;                  // user is entering a real FAF altitude now
+  syncFAP(); syncThrH();
+}
+["i07","i08","u08","i11","u11","i12faf","i26u"].forEach(id=>{
+  const el = document.getElementById(id);
+  ["input","change"].forEach(evt=>el.addEventListener(evt, ()=>recalcFAPandThrH(id)));
+});
+document.getElementById("i16").addEventListener("input", syncOCA);
+document.getElementById("i16").addEventListener("change", syncOCA);
+syncOCA(); syncThrH(); syncFAP();
+
+/* ---------------- build file ---------------- */
+function v(id){ return document.getElementById(id).value; }
+function buildHeader(cat, count){
+  const L = [];
+  L.push("00 " + v("i00"));
+  L.push("01 " + v("i01"));
+  L.push("02 " + v("i02"));
+  L.push("03 CAT " + cat.key);
+  L.push("04 " + v("i04"));
+  L.push("05 " + v("i05"));
+  L.push("06 " + v("i06"));
+  L.push("07 " + impDec(v("i07"),2,3));                                   // 3.00 -> 300
+  L.push("08 " + impDec(v("i08"),1,3) + v("u08"));                        // 51.0F -> 510F
+  L.push("09 " + rj(Math.round(v("i09")),5) + v("u09"));
+  L.push("10 " + rj(Math.round(v("i10")),3) + v("u10"));
+  L.push("11 " + rj(Math.round(v("i11")),5) + v("u11"));
+  const fap = fapDistM();
+  if(fap===null) throw new Error("Item 12: FAP distance cannot be calculated — check FAF altitude, THR elevation, GP angle and RDH.");
+  L.push("12 " + rj(Math.round(fap),5) + "M");
+  L.push("13 " + v("i13"));
+  L.push("14 N " + impDec(cat.hVal,1,3) + "M " + impDec(cat.sVal,1,4) + "M");
+  L.push(v("i15")==="Y" ? "15 Y" : put(put("15 N",4,"N"),6, impDec(v("i15g"),1,2)));
+  L.push("16 " + v("i16"));
+  L.push("17 " + v("i17"));
+  L.push("18 " + v("i18"));
+  L.push(buildItem19(cat));
+  L.push("20 " + v("i20"));
+  L.push("21 " + rj(count,4));
+  L.push("22 " + v("i22"));
+  L.push("23 N");
+  L.push("24 N");
+  L.push("25 N");
+  L.push(buildItem26());
+  return L;
+}
+function buildItem19(cat){
+  let l = "19";
+  const bases = {A:4, B:14, C:24, D:34};                       // 1-based cols per form
+  for(const sc of ["A","B","C","D"]){
+    const b = bases[sc];
+    const active = cat.speeds.includes(sc);
+    l = put(l, b, active ? "Y" : "N");
+    if(active) l = put(l, b+2, rj(Math.round(cat.ocaVal),5));
+    l = put(l, b+8, active ? "Y" : "N");                       // min-acceptable flag mirrors active
+  }
+  return l;
+}
+function buildItem26(){
+  const tla = parseDMS(v("thrLat"),false), tlo = parseDMS(v("thrLon"),true);
+  const lla = parseDMS(v("llzLat"),false), llo = parseDMS(v("llzLon"),true);
+  if(!tla||!tlo||!lla||!llo) throw new Error("Item 26: could not read THR/LLZ coordinates — use e.g. “N 51 28 39.00”.");
+  let l = "26";
+  l = put(l,4,"Y"); l = put(l,6,v("i26u"));
+  l = put(l,8,tla.h); l = put(l,10,rj(tla.d,2)); l = put(l,13,rj(tla.m,2)); l = put(l,16,rj(Math.round(tla.s*100),4));
+  l = put(l,21,tlo.h); l = put(l,23,rj(tlo.d,3)); l = put(l,27,rj(tlo.m,2)); l = put(l,30,rj(Math.round(tlo.s*100),4));
+  l = put(l,35,rj(thrHeight26(),5));
+  l = put(l,41,lla.h); l = put(l,43,rj(lla.d,2)); l = put(l,46,rj(lla.m,2)); l = put(l,49,rj(Math.round(lla.s*100),4));
+  l = put(l,54,llo.h); l = put(l,56,rj(llo.d,3)); l = put(l,60,rj(llo.m,2)); l = put(l,63,rj(Math.round(llo.s*100),4));
+  return l;
+}
+function obstacleLines(){
+  let list = obstacles.filter(o=>o.inc);
+  const ord = document.getElementById("orderSel").value;
+  if(ord==="rev") list = list.slice().reverse();
+  else if(ord==="id") list = list.slice().sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true}));
+  const useFeet = v("i26u")==="F";
+  return list.map(o=>{
+    let l = "30 " + lj(o.id.slice(0,8),8) + " " + lj(o.desc.slice(0,13),13) + " " +
+            o.lat.h + " " + dmsDigits(o.lat,2) + " " + o.lon.h + " " + dmsDigits(o.lon,3);
+    l = lj(l,56) + rj(useFeet ? o.zF : o.zM, 5);
+    return l;
+  });
+}
+function buildFile(cat){
+  const obsL = obstacleLines();
+  const head = buildHeader(cat, obsL.length);
+  return head.concat(obsL).map(pad80).join("\r\n") + "\r\n";
+}
+
+/* ---------------- generate & download ---------------- */
+document.getElementById("genBtn").addEventListener("click", ()=>{
+  const gb = document.getElementById("genBanner");
+  gb.classList.remove("show");
+  const inc = obstacles.filter(o=>o.inc).length;
+  const problems = [];
+  if(inc===0) problems.push("No obstacles are loaded/included — load at least one XML file in step 1.");
+  if(inc>500) problems.push(`${inc} obstacles selected — the CRM accepts a maximum of 500. Exclude ${inc-500} before generating.`);
+  const active = CATS.map((c,i)=>({...c,
+      on: document.getElementById(`cat_on_${i}`).checked,
+      hVal:+document.getElementById(`cat_h_${i}`).value,
+      sVal:+document.getElementById(`cat_s_${i}`).value,
+      ocaVal: ocaForCategory() }))
+    .filter(c=>c.on);
+  if(!active.length) problems.push("Tick at least one aircraft size case in step 3.");
+  if(problems.length){ gb.innerHTML = "<b>Cannot generate:</b> " + problems.join(" "); gb.classList.add("show"); return; }
+
+  try{
+    generated = active.map(c=>({name:catFileName(c), text:buildFile(c)}));
+  }catch(err){ gb.innerHTML = "<b>Cannot generate:</b> " + esc(err.message); gb.classList.add("show"); return; }
+
+  const out = document.getElementById("out");
+  out.innerHTML = "";
+  const ruler = "0        1         2         3         4         5         6         7         8\n" +
+                "12345678901234567890123456789012345678901234567890123456789012345678901234567890";
+  generated.forEach((g,gi)=>{
+    const lines = g.text.split("\r\n").filter(Boolean);
+    const div = document.createElement("div");
+    div.className = "outfile";
+    div.innerHTML = `<div class="fh"><span class="nm">${esc(g.name)}</span>
+        <span class="meta">${lines.length} lines · ${g.text.length} bytes · item 21 = ${lines.length-27}</span>
+        <button data-g="${gi}">Download</button></div>
+      <pre><span class="ruler">${ruler}</span>\n${esc(lines.slice(0,40).join("\n"))}${lines.length>40?"\n… ("+(lines.length-40)+" more lines)":""}</pre>`;
+    out.appendChild(div);
+  });
+  out.querySelectorAll("button").forEach(b=>b.onclick = ()=>dl(generated[b.dataset.g]));
+  document.getElementById("dlAll").disabled = false;
+});
+function dl(g){
+  const blob = new Blob([g.text], {type:"text/plain"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = g.name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+}
+document.getElementById("dlAll").addEventListener("click", ()=>generated.forEach((g,i)=>setTimeout(()=>dl(g), i*250)));
+
+/* ---------------- STEP 5: RSK results summary (ported from extract_crm.py) ---------------- */
+const OCH_SUMMARY_RE = /^\s+([A-Z])\s+(SPECIFIED|MINIMUM)\s+OCH\s/;
+const SPEED_CAT_SPECIFIED_RE = /^ SPEED CATEGORY\s+([A-Z])\s+SPECIFIED OCH ABOVE THRESHOLD/;
+const SPEED_CAT_MIN_RE = /^ SPEED CATEGORY\s+([A-Z])\s+MINIMUM ACCEPTABLE OCH ABOVE THRESHOLD/;
+const USER_REF_RE = /^\s*USER REFERENCE\s+(.+?)\s{2,}/;
+const ILS_CAT_RE = /ILS CATEGORY\s+(\S+)/;
+const RSK_BLOCK_LINES = 13;
+
+let rskFiles = [];        // {name, lines}
+let rskGenerated = null;  // {name, text}
+
+const rskDrop = document.getElementById("rskDrop"), rskInput = document.getElementById("rskInput");
+rskDrop.addEventListener("click", ()=>rskInput.click());
+rskDrop.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" ") rskInput.click(); });
+["dragover","dragenter"].forEach(ev=>rskDrop.addEventListener(ev, e=>{e.preventDefault();rskDrop.classList.add("on");}));
+["dragleave","drop"].forEach(ev=>rskDrop.addEventListener(ev, e=>{e.preventDefault();rskDrop.classList.remove("on");}));
+rskDrop.addEventListener("drop", e=>loadRskFiles(e.dataTransfer.files));
+rskInput.addEventListener("change", e=>{ loadRskFiles(e.target.files); rskInput.value=""; });
+
+function loadRskFiles(list){
+  const files = Array.from(list).filter(f=>/\.rsk$/i.test(f.name));
+  if(!files.length) return;
+  let done = 0;
+  files.forEach(f=>{
+    const r = new FileReader();
+    r.onload = ()=>{
+      rskFiles.push({name:f.name, lines: r.result.split(/\r\n|\r|\n/)});
+      if(++done===files.length) refreshRskFiles();
+    };
+    r.readAsText(f);
+  });
+}
+function refreshRskFiles(){
+  const row = document.getElementById("rskFileRow");
+  row.style.display = rskFiles.length ? "flex" : "none";
+  row.style.flexWrap = "wrap";
+  row.innerHTML = rskFiles.map((f,i)=>
+    `<span class="chip">${esc(f.name)} <a href="#" data-i="${i}" title="remove">✕</a></span>`).join("");
+  row.querySelectorAll("a").forEach(a=>a.onclick = e=>{ e.preventDefault(); rskFiles.splice(+a.dataset.i,1); refreshRskFiles(); });
+}
+document.getElementById("rskClear").onclick = ()=>{
+  rskFiles = []; rskGenerated = null;
+  document.getElementById("rskOut").innerHTML = "";
+  document.getElementById("rskBanner").classList.remove("show");
+  refreshRskFiles();
+};
+
+function parseRskFile(lines){
+  const ownedLetters = new Set();
+  for(const line of lines){
+    const m = SPEED_CAT_SPECIFIED_RE.exec(line);
+    if(m) ownedLetters.add(m[1]);
+  }
+  let userReference = null, ilsCategory = null;
+  const ochRows = {};   // "letter|kind" -> raw line
+  const blocks = {};    // letter -> array of lines
+
+  for(let i=0;i<lines.length;i++){
+    const line = lines[i];
+    if(userReference===null){
+      const m = USER_REF_RE.exec(line);
+      if(m) userReference = m[1].trim();
+    }
+    if(ilsCategory===null){
+      const m = ILS_CAT_RE.exec(line);
+      if(m) ilsCategory = m[1].trim();
+    }
+    let m = OCH_SUMMARY_RE.exec(line);
+    if(m){
+      const letter = m[1], kind = m[2];
+      if(ownedLetters.has(letter)){
+        const key = letter+"|"+kind;
+        if(!(key in ochRows)) ochRows[key] = line;
+      }
+      continue;
+    }
+    m = SPEED_CAT_MIN_RE.exec(line);
+    if(m){
+      const letter = m[1];
+      if(ownedLetters.has(letter) && !(letter in blocks)){
+        const following = lines.slice(i+1, i+1+RSK_BLOCK_LINES);
+        const filtered = following.filter(ln=>ln.trim()!=="");
+        blocks[letter] = [line].concat(filtered);
+      }
+    }
+  }
+  return {userReference, ilsCategory, ochRows, blocks};
+}
+
+function mergeRsk(files){
+  const allUserRefs = [];
+  const allOchRows = {};
+  const allBlocks = {};
+  const ilsCategories = {};   // cat -> [filenames]
+  const blockSources = {};    // letter -> filename
+
+  for(const f of files){
+    const {userReference, ilsCategory, ochRows, blocks} = parseRskFile(f.lines);
+    if(userReference) allUserRefs.push(userReference);
+    if(ilsCategory){
+      if(!ilsCategories[ilsCategory]) ilsCategories[ilsCategory] = [];
+      ilsCategories[ilsCategory].push(f.name);
+    }
+    for(const letter of Object.keys(blocks)){
+      if(letter in blockSources){
+        throw new Error(`Category ${letter} appears in both ${blockSources[letter]} and ${f.name} — refusing to merge (ambiguous source)`);
+      }
+      blockSources[letter] = f.name;
+    }
+    Object.assign(allOchRows, ochRows);
+    Object.assign(allBlocks, blocks);
+  }
+
+  const catKeys = Object.keys(ilsCategories);
+  if(catKeys.length > 1){
+    const detail = catKeys.map(cat=>`CAT ${cat}: ${ilsCategories[cat].join(", ")}`).join("; ");
+    throw new Error(`Input files mix different ILS categories — refusing to merge (${detail})`);
+  }
+  const ilsCategory = catKeys[0] || null;
+
+  const letterSet = new Set([
+    ...Object.keys(allOchRows).map(k=>k.split("|")[0]),
+    ...Object.keys(allBlocks)
+  ]);
+  const letters = Array.from(letterSet).sort();
+
+  const summaryLines = [];
+  for(const letter of letters){
+    for(const kind of ["SPECIFIED","MINIMUM"]){
+      const row = allOchRows[letter+"|"+kind];
+      if(row !== undefined) summaryLines.push(row);
+    }
+  }
+  const blockSections = [];
+  for(const letter of letters){
+    if(letter in allBlocks) blockSections.push(allBlocks[letter]);
+  }
+
+  const userReference = allUserRefs.length ? allUserRefs[0] : null;
+  const title = userReference ? `${userReference} CONSOLIDATED RESULTS` : "CONSOLIDATED RESULTS";
+
+  const outLines = [title, ""];
+  outLines.push(...summaryLines);
+  outLines.push("");
+  blockSections.forEach((block, idx)=>{
+    outLines.push(...block);
+    if(idx !== blockSections.length-1) outLines.push("");
+  });
+
+  const runway = userReference ? userReference.split(/\s+/)[0] : "OUTPUT";
+  const catSuffix = ilsCategory ? `_CAT${ilsCategory}` : "";
+  const outName = `${runway}${catSuffix}_CRM_RESULTS.txt`;
+
+  const text = outLines.join("\r\n") + "\r\n";
+  return {name: outName, text};
+}
+
+document.getElementById("rskGenBtn").addEventListener("click", ()=>{
+  const bn = document.getElementById("rskBanner");
+  bn.classList.remove("show");
+  const out = document.getElementById("rskOut");
+  out.innerHTML = "";
+
+  if(!rskFiles.length){
+    bn.innerHTML = "<b>Cannot generate:</b> load at least one .RSK file above.";
+    bn.classList.add("show");
+    return;
+  }
+
+  let result;
+  try{
+    result = mergeRsk(rskFiles);
+  }catch(err){
+    bn.innerHTML = "<b>Cannot generate:</b> " + esc(err.message);
+    bn.classList.add("show");
+    return;
+  }
+  rskGenerated = result;
+
+  const lines = result.text.split("\r\n").filter((l,i,arr)=> !(i===arr.length-1 && l===""));
+  const div = document.createElement("div");
+  div.className = "outfile";
+  div.innerHTML = `<div class="fh"><span class="nm">${esc(result.name)}</span>
+      <span class="meta">${lines.length} lines · ${result.text.length} bytes</span>
+      <button id="rskDlBtn">Download</button></div>
+    <pre>${esc(lines.slice(0,60).join("\n"))}${lines.length>60 ? "\n… ("+(lines.length-60)+" more lines)":""}</pre>`;
+  out.appendChild(div);
+  document.getElementById("rskDlBtn").onclick = ()=>{
+    const blob = new Blob([result.text], {type:"text/plain"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = result.name; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  };
+});
+</script>
+</body>
+</html>

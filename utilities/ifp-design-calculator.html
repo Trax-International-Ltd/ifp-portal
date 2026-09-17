@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1e2e">
+<title>IFP Design Calculator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ---- IFP Portal shared theme (matches ifp-portal/portal.css) ---- */
+:root{
+  --ifp-bg:#0d1e2e; --ifp-surface:#16324a; --ifp-surface-2:#1a3a55; --ifp-field:#112637;
+  --ifp-text:#e9e9ed; --ifp-n400:#a9b6c2; --ifp-n500:#8496a6; --ifp-n600:#63788a; --ifp-n800:#28425a; --ifp-n900:#1a3046;
+  --ifp-line:#38546e;
+  --ifp-accent:#64afd7; --ifp-accent-300:#b3d9ee; --ifp-accent-400:#8cc5e4; --ifp-accent-600:#4a8cb0; --ifp-accent-700:#386c89; --ifp-accent-800:#244a60; --ifp-accent-900:#142e44;
+  --ifp-orange:#e95318;
+  --ifp-ok:#5fc48e; --ifp-ok-bg:#153b30; --ifp-warn:#e6b45a; --ifp-warn-bg:#3d2f14; --ifp-err:#f0776b; --ifp-err-bg:#4a1f1c;
+  --ifp-divider:color-mix(in srgb,#e9e9ed 16%,transparent);
+  --ifp-font:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ifp-mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+}
+.ifp-bar{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 auto;padding:0 18px;
+  background:var(--ifp-bg);color:var(--ifp-text);font-family:var(--ifp-font);font-size:13px;line-height:1;
+  box-shadow:inset 0 -1px 0 var(--ifp-n800);position:relative;z-index:30}
+.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-text);text-decoration:none;font-weight:500;font-size:15px}
+.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:var(--ifp-accent)}
+.ifp-bar a.ifp-home:hover{color:var(--ifp-accent)}
+.ifp-bar .ifp-sep{color:var(--ifp-n600)}
+.ifp-bar .ifp-here{color:var(--ifp-n400)}
+.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-n500)}
+:focus-visible{outline:2px solid var(--ifp-accent);outline-offset:2px}
+::selection{background:color-mix(in srgb,var(--ifp-accent) 30%,transparent)}
+
+:root{
+  --navy:var(--ifp-accent-800); --navy-deep:var(--ifp-accent-900);
+  --paper:var(--ifp-bg); --panel:var(--ifp-surface); --panel-2:var(--ifp-surface-2); --ink:var(--ifp-text); --muted:var(--ifp-n400);
+  --head:var(--ifp-accent-300);
+  --input-y:#3a3116; --input-y-deep:#524418;
+  --auto-g:#1a3046; --auto-g-deep:#28425a;
+  --line:var(--ifp-line); --line-soft:var(--ifp-n800);
+  --red:var(--ifp-err); --red-bg:var(--ifp-err-bg);
+  --green:var(--ifp-ok); --green-bg:var(--ifp-ok-bg);
+  --amber:var(--ifp-warn); --amber-bg:var(--ifp-warn-bg);
+  --mono:var(--ifp-mono); --sans:var(--ifp-font);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+
+/* ---------- top bar ---------- */
+.bar{background:var(--ifp-bg);color:var(--ink);display:flex;align-items:center;gap:14px;
+     padding:0 18px;height:48px;position:sticky;top:0;z-index:20;box-shadow:inset 0 -1px 0 var(--line-soft)}
+.bar .home{display:inline-flex;align-items:center;gap:8px;color:var(--ink);text-decoration:none;font-weight:500;font-size:15px;white-space:nowrap}
+.bar .home svg{width:14px;height:14px;fill:var(--ifp-accent)}
+.bar .home:hover{color:var(--ifp-accent)}
+.bar .sep{color:var(--ifp-n600)}
+.bar .brand{font-size:13px;color:var(--muted);white-space:nowrap}
+.bar .nav{display:flex;gap:2px;align-items:center;min-width:0;overflow:hidden;margin-left:10px}
+.bar .nav a{color:var(--muted);text-decoration:none;font-size:12.5px;padding:5px 11px;border-radius:6px;white-space:nowrap}
+.bar .nav a:hover{background:color-mix(in srgb,var(--ink) 8%,transparent);color:var(--ink)}
+.bar .nav a.here{background:var(--ifp-accent-800);color:var(--head);font-weight:500}
+.bar .icao{font-family:var(--mono);font-weight:700;color:var(--ifp-accent);font-size:14px;padding-right:10px;border-right:1px solid var(--line-soft);margin-right:4px}
+.bar .spacer{flex:1}
+.bar button{background:none;border:1px solid var(--line);color:var(--ink);font:inherit;border-radius:8px;
+            font-size:12.5px;padding:6px 13px;cursor:pointer;white-space:nowrap}
+.bar button:hover{background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.bar button.primary{background:var(--ifp-accent);border-color:var(--ifp-accent);color:var(--ifp-bg);font-weight:500}
+.bar button.primary:hover{background:var(--ifp-accent-400);border-color:var(--ifp-accent-400)}
+.bar button:disabled{opacity:.4;cursor:default}
+
+main{padding:24px 28px 70px;max-width:1340px;margin:0 auto}
+
+/* ---------- hub layout ---------- */
+.hub{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.hub .full{grid-column:1/-1}
+.card{background:var(--panel);border-radius:8px;box-shadow:0 0 0 1px var(--line-soft);overflow:hidden}
+.card .hd{background:var(--panel-2);color:var(--head);padding:9px 16px;font-size:11.5px;
+          letter-spacing:.12em;text-transform:uppercase;font-weight:500;border-bottom:1px solid var(--line-soft);
+          display:flex;align-items:center;gap:10px}
+.card .hd .right{margin-left:auto;font-family:var(--mono);letter-spacing:0;text-transform:none;font-weight:400;font-size:12px;color:var(--ifp-n500)}
+.card .bd{padding:14px 16px}
+.card .bd.p0{padding:0}
+
+.note{font-size:12.5px;color:var(--muted);margin:8px 0 12px;max-width:900px}
+.note b{color:var(--ink);font-weight:500}
+.mono{font-family:var(--mono)}
+
+/* manifest inside survey card */
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0;border:1px solid var(--line-soft);border-radius:6px;overflow:hidden}
+.meta .cell{padding:8px 12px;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
+.meta .k{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.meta .v{font-family:var(--mono);font-size:13.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis}
+.meta .v.big{font-size:19px;font-weight:600;color:var(--head)}
+.badge{display:inline-block;font-size:10px;letter-spacing:.08em;padding:2px 8px;border-radius:4px;
+       background:var(--ifp-accent-800);color:var(--head);text-transform:uppercase}
+
+/* checks list */
+.checks{list-style:none;margin:0;padding:0}
+.checks li{display:flex;gap:12px;align-items:baseline;padding:9px 16px;border-bottom:1px solid var(--line-soft);font-size:13px}
+.checks li:last-child{border-bottom:none}
+.checks .sev{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.06em;
+             padding:1px 8px;border-radius:4px;flex:none;width:52px;text-align:center}
+.sev.ok{background:var(--green-bg);color:var(--green)}
+.sev.warn{background:var(--amber-bg);color:var(--amber)}
+.sev.fail{background:var(--red-bg);color:var(--red)}
+.checks .msg{min-width:0}
+.checks a{color:var(--head)}
+.allclear{padding:20px 16px;color:var(--green);font-weight:500;font-size:13.5px}
+
+/* verdict band */
+.verdict{padding:14px 20px;border-left:6px solid;border-radius:0 8px 8px 0;font-family:var(--mono);margin-bottom:14px}
+.verdict .word{font-size:22px;font-weight:800;letter-spacing:.06em}
+.verdict .detail{font-size:12.5px;margin-top:3px}
+.verdict.ok{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.verdict.bad{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+.verdict.warn{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
+
+/* runway cards */
+.rwy-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px;padding:14px 16px}
+.rwy-card{border:0;box-shadow:0 0 0 1px var(--line-soft);border-radius:8px;overflow:hidden;background:var(--panel-2);cursor:pointer;text-align:left;color:inherit;
+          font:inherit;padding:0;transition:box-shadow .12s}
+.rwy-card:hover{box-shadow:0 0 0 1px var(--ifp-accent-600),0 6px 18px rgba(0,0,0,.45)}
+.rwy-card .id{background:var(--ifp-accent-900);color:var(--head);font-family:var(--mono);font-weight:800;
+              font-size:21px;padding:8px 14px;display:flex;align-items:center;gap:10px}
+.rwy-card .id .ils{font-size:10px;letter-spacing:.08em;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:auto}
+.ils.yes{background:var(--ifp-accent);color:var(--ifp-bg)}
+.ils.no{background:var(--auto-g-deep);color:var(--muted)}
+.rwy-card .stats{padding:10px 14px;font-size:12.5px}
+.rwy-card .stats .r{display:flex;justify-content:space-between;padding:2px 0}
+.rwy-card .stats .r .l{color:var(--muted)}
+.rwy-card .stats .r .v{font-family:var(--mono)}
+.rwy-card .foot{border-top:1px solid var(--line-soft);padding:7px 14px;font-size:11.5px;font-family:var(--mono)}
+.foot.ok{color:var(--green)} .foot.bad{color:var(--red)} .foot.quiet{color:var(--muted)}
+
+h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-n500);
+   border-bottom:1px solid var(--line-soft);padding-bottom:8px;margin:26px 0 14px;font-weight:500}
+h2:first-child{margin-top:0}
+
+/* ---------- import zone ---------- */
+.drop{display:block;border:1px dashed var(--line);border-radius:8px;background:var(--panel);padding:60px 30px;
+      text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--ifp-accent);background:var(--ifp-accent-800)}
+.drop .big{font-size:17px;font-weight:500;color:var(--head)}
+.drop .small{font-size:12.5px;color:var(--muted);margin-top:6px}
+.drop input{display:none}
+.drop.mini{padding:14px}
+.drop.mini .big{font-size:13px}
+.err-log{font-family:var(--mono);font-size:12px;background:var(--red-bg);color:var(--red);
+         border:1px solid var(--red);border-radius:6px;padding:10px 14px;margin:12px 0;white-space:pre-wrap}
+
+/* ---------- tables ---------- */
+table{border-collapse:collapse;background:var(--panel);font-size:12.5px}
+th{background:var(--panel-2);color:var(--head);font-weight:500;text-align:left;padding:6px 10px;
+   font-size:11px;letter-spacing:.04em;white-space:nowrap;position:sticky;top:0;box-shadow:inset 0 -1px 0 var(--line-soft)}
+td{border:1px solid var(--line-soft);padding:5px 10px;font-family:var(--mono);white-space:nowrap}
+td.t{font-family:var(--sans)}
+td.num{text-align:center}
+td.in{background:var(--input-y)}
+td.auto{background:var(--auto-g)}
+td.chk-bad{color:var(--red);font-weight:700}
+td.chk-ok{color:var(--green)}
+td.gov{background:#5a3420 !important}
+tr:hover td{filter:brightness(1.15)}
+.tbl-wrap{overflow:auto;max-height:600px;border:1px solid var(--line-soft);border-radius:6px}
+.tbl-wrap.auto-h{max-height:none}
+
+/* key/value blocks */
+.kv{border:1px solid var(--line-soft);border-radius:8px;overflow:hidden;background:var(--panel);margin-bottom:18px}
+.kv .row{display:grid;grid-template-columns:330px 180px 1fr;border-bottom:1px solid var(--line-soft)}
+.kv .row:last-child{border-bottom:none}
+.kv .k{padding:8px 14px;font-size:12.5px}
+.kv .v{padding:8px 14px;font-family:var(--mono);font-size:13px;border-left:1px solid var(--line-soft);border-right:1px solid var(--line-soft)}
+.kv .v.in{background:var(--input-y)} .kv .v.auto{background:var(--auto-g)}
+.kv .c{padding:8px 14px;font-size:11.5px;color:var(--muted)}
+.kv .hd2{grid-column:1/-1;background:var(--panel-2);color:var(--head);font-weight:500;font-size:11px;
+        letter-spacing:.1em;text-transform:uppercase;padding:6px 14px}
+.kv.compact .row{grid-template-columns:175px 145px 1fr}
+.kv.compact .k{font-size:12px}
+.kv input[type=number],.kv input[type=text]{width:100%;border:none;background:transparent;font:inherit;font-family:var(--mono);color:var(--ink);outline:none}
+.kv .v.in:focus-within{background:var(--input-y-deep)}
+
+select,input.cell-in{font:inherit;font-family:var(--mono);font-size:12.5px;border:1px solid var(--line-soft);border-radius:4px;background:var(--input-y);color:var(--ink);padding:3px 5px;color-scheme:dark}
+input.cell-in{width:110px;text-align:center}
+.legend{display:flex;gap:18px;font-size:11.5px;color:var(--muted);margin:6px 0 12px;align-items:center;flex-wrap:wrap}
+.swatch{display:inline-block;width:13px;height:13px;border:1px solid var(--line);border-radius:2px;vertical-align:-2px;margin-right:5px}
+
+button.act{background:var(--ifp-accent);color:var(--ifp-bg);border:none;border-radius:8px;padding:8px 18px;font:inherit;font-size:13px;font-weight:500;cursor:pointer}
+button.act:hover{background:var(--ifp-accent-400)}
+button.ghost{background:none;border:1px solid var(--line);border-radius:8px;color:var(--head);padding:7px 16px;font:inherit;font-size:13px;font-weight:500;cursor:pointer}
+button.ghost:hover{background:color-mix(in srgb,var(--ink) 7%,transparent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.btnrow{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap}
+
+.pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:1px 7px;border-radius:4px}
+.pill.bad{background:var(--red-bg);color:var(--red)}
+.pill.ok{background:var(--green-bg);color:var(--green)}
+.pill.warn{background:var(--amber-bg);color:var(--amber)}
+
+.filter-row{margin:0 0 10px;display:flex;gap:14px;align-items:center;font-size:12.5px;flex-wrap:wrap}
+.filter-row input[type=text]{border:1px solid var(--line-soft);border-radius:4px;background:var(--ifp-field);color:var(--ink);padding:5px 8px;font:inherit;font-family:var(--mono);width:200px}
+input[type=checkbox],input[type=radio]{accent-color:var(--ifp-accent)}
+
+/* runway workspace */
+.ws-head{display:flex;align-items:baseline;gap:16px;margin-bottom:16px}
+.ws-head .rw{font-family:var(--mono);font-weight:800;font-size:34px;color:var(--head)}
+.proc-list{list-style:none;margin:0;padding:0}
+.proc-list li{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line-soft);font-size:13px}
+.proc-list li:last-child{border-bottom:none}
+.proc-list .nm{font-weight:500;min-width:260px}
+.proc-list .st{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+
+.chip-row{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 4px}
+label.chip{display:flex;gap:8px;align-items:center;border:1px solid var(--line-soft);border-radius:8px;
+           background:var(--panel);padding:7px 14px;cursor:pointer;font-size:13px;user-select:none}
+label.chip input{accent-color:var(--ifp-accent);margin:0}
+label.chip.on{background:var(--input-y);border-color:var(--input-y-deep);font-weight:500}
+label.chip:hover{border-color:var(--ifp-accent-600)}
+.cfg-k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:12px 0 2px}
+.cfg-k:first-child{margin-top:0}
+
+.seg-tabs{display:flex;gap:2px;border-bottom:1px solid var(--ifp-accent-700);margin:0 0 18px;flex-wrap:wrap}
+.seg-tabs button{background:var(--panel-2);border:none;border-radius:6px 6px 0 0;color:var(--head);font:inherit;font-size:12.5px;
+                 padding:8px 16px;cursor:pointer}
+.seg-tabs button:hover{background:var(--ifp-accent-800)}
+.seg-tabs button.on{background:var(--ifp-accent);color:var(--ifp-bg);font-weight:500}
+
+.hidden{display:none}
+.empty{padding:30px;text-align:center;color:var(--muted);font-size:13px}
+
+@media (max-width:900px){
+  .hub{grid-template-columns:1fr}
+  main{padding:14px}
+  .bar{flex-wrap:wrap;height:auto;padding:8px 14px;gap:8px}
+  .kv .row{grid-template-columns:1fr 1fr}
+  .kv .c{grid-column:1/-1;padding-top:0}
+}
+:focus-visible{outline:2px solid var(--ifp-accent);outline-offset:1px}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <a class="home" href="../index.html"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,120v96a8,8,0,0,1-8,8H160a8,8,0,0,1-8-8V164a4,4,0,0,0-4-4H108a4,4,0,0,0-4,4v52a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V120a16,16,0,0,1,4.69-11.31l80-80a16,16,0,0,1,22.62,0l80,80A16,16,0,0,1,224,120Z"/></svg>IFP Portal</a><span class="sep">/</span><span class="brand">IFP Design Calculator</span>
+  <nav class="nav" id="nav"></nav>
+  <span class="spacer"></span>
+  <button id="btn-save" title="Save your declarations and decisions to a small project file">Save project</button>
+  <button id="btn-load">Open project</button>
+  <button class="primary" id="btn-export" title="Generate the CAA presentation workbook (.xlsx) from the current values">Export CAA workbook</button>
+</header>
+
+<main id="main"></main>
+
+<input type="file" id="file-survey" accept=".csv,.xlsx,.xls" class="hidden">
+<input type="file" id="file-project" accept=".json" class="hidden">
+
+<script>
+"use strict";
+/* =====================================================================
+   IFP DESIGN TOOL
+   Survey import parses by CAP1732 App.5 FIELD POSITION (1-based):
+     1 SITE · 2 TYPE · 3 IDENT · 4 ASSOC · 14 EASTING · 15 NORTHING
+     16 VERT REF · 17 ORTHO (M) · 18 ORTHO (FT) · 24 REC ID · 25 SURVEY DATE
+   Elevations are ORTHOMETRIC (AMSL), used AS SURVEYED — fields 17 and 18
+   are the official point of truth; nothing is converted or re-derived.
+   CAP1732 App.5 forbids commas within fields, so split(",") is safe for CSV.
+   ===================================================================== */
+const F = {SITE:1, TYPE:2, IDENT:3, ASSOC:4, EASTING:14, NORTHING:15,
+           VERTREF:16, ORTHO_M:17, ORTHO_FT:18, RECID:24, SDATE:25};
+
+/* ---- Survey codes (from the 9 reference surveys) ---- */
+const BASE_CODES = [
+ ["ARP","ARP","N",null,"EXCLUDED — surveyor's EGKK report: 'It is not the elevation at the ARP'. Not a runway-surface value. Set Y to reinstate."],
+ ["AEP","AEP","N",null,"Aerodrome Elevation Point — the surveyor's declared value. Used as the COMPARATOR; excluded from the max to keep the check independent."],
+ ["ASDA END","ASDA_END","Y",null,"Variant spelling. ASDA = TORA + stopway."],
+ ["ASDA_END","ASDA_END","Y",null,"CAP1732 Table 1 — ASDA = TORA + stopway."],
+ ["END_LDA","LDA_END","Y",null,"Variant spelling of LDA_END."],
+ ["LDA END","LDA_END","Y",null,"Variant spelling of LDA_END."],
+ ["LDA_END","LDA_END","Y",null,"CAP1732 Table 1."],
+ ["CENTRE_PT_RWY","RWY_PROFILE","Y",null,"Runway surface profile points — these drive the max at most aerodromes."],
+ ["OTHER:RUNWAY_LEVEL","RWY_PROFILE","Y",null,"Variant spelling of RWY_PROFILE."],
+ ["PROFILE_PT","RWY_PROFILE","Y",null,"Variant spelling of RWY_PROFILE."],
+ ["RWY_PROFILE","RWY_PROFILE","Y",null,"Runway surface profile points."],
+ ["TDZE","TDZE","Y",null,"Touchdown zone elevation — a runway-surface point. Drives RWY 07 at EGGW."],
+ ["THR","THR","Y",null,"CAP1732 Table 1 — threshold."],
+ ["TORA END","TORA_END","Y",null,"Variant spelling."],
+ ["TORA_END","TORA_END","Y",null,"CAP1732 Table 1."],
+ ["TORA START","TORA_START","Y",null,"Variant spelling."],
+ ["TORA_START","TORA_START","Y",null,"CAP1732 Table 1."],
+ ["TODA END","TODA_END","Y",null,"INCLUDED at your request. TODA = TORA + CLEARWAY — beyond the pavement where a clearway exists (drives the EGKK max via 26L)."],
+ ["TODA_END","TODA_END","Y",null,"INCLUDED at your request. TODA = TORA + CLEARWAY — beyond the pavement where a clearway exists."],
+ ["EOC","EOC","N",null,"UNKNOWN code (EGPA). Would ADD 2.5 m at EGPA — needs your decision."],
+ ["LLZ","LLZ","N","ANTENNA","LOCALIZER ANTENNA — used for THR→LLZ and to decide whether the runway has an ILS."],
+ ["LLZ_I-EGN","LLZ_I-EGN","N","ANTENNA","Localizer antenna."],
+ ["LLZ_I-EGT","LLZ_I-EGT","N","ANTENNA","Localizer antenna."],
+ ["LOC","LOC","N","ANTENNA","Localizer antenna."],
+ ["LLZ-GL","LLZ-GL","N","MONITOR","LLZ monitor/field kit — NOT the antenna."],
+ ["LLZ_FFM1","LLZ_FFM1","N","MONITOR","LLZ monitor/field kit."],
+ ["LLZ_FFM2","LLZ_FFM2","N","MONITOR","LLZ monitor/field kit."],
+ ["LLZ_MON","LLZ_MON","N","MONITOR","LLZ monitor/field kit."],
+ ["LLZ_NFM","LLZ_NFM","N","MONITOR","LLZ monitor/field kit."],
+ ...[
+ "ANEMOMETER","ARE","ATC_AERIAL","ATC_LIGHT","ATIS","BEACON","CBR","CEILOMETER",
+ "CLOUDBASE_SEARCHLIGHT","DME","DME-GL","DRDF","DVOR","DVOR_MONITOR","FFM","FOD_RADAR",
+ "GP","GP_ANEMOMETER","GP_CABIN","GP_MON","GP_MONITOR","HELIPAD","HELI_AIMING_POINT",
+ "HOLD","HOLD K2","IRVR","LIGHTNING_DETECTOR","MET_MAST","MET_STATION","MLS_AZM",
+ "MLS_AZM_MON","MLS_ELEV","MLS_ELEV_MON","MLZ_AZM","NAVAID","NDB","NFM",
+ "OTHER:ATC_RADAR","OTHER:CBR","OTHER:CEILOMETER","OTHER:FFM","OTHER:FFM_07",
+ "OTHER:FFM_25","OTHER:NFM_07","OTHER:NFM_25","OTHER:RX_MAST","OTHER:TX_MAST",
+ "PAPI","PAPI_09","PAPI_27","RADAR","RADAR_AERIAL","RADAR_BASE","RADAR_TOP","ROP",
+ "RX/TX_MAST","RX/TX_MAST_LC","SMR","STAND","STAND 235","STAND 236","STAND 318",
+ "STAND 327","STAND 512","STAND 544L","STAND 545L","STAND 547L","TRANSPONDER",
+ "VDF","VDF-GL","VDF_TEST_OSCILLATOR","VEHICLE_HOLD","VHF","VOR_CENTRE","WDI",
+ "WEATHER_STATION","WINDSLEEVE","WINDSOCK","WIND_SENSOR_LC"
+ ].map(c=>[c,c,"N",null,""])
+];
+const CODES = new Map(BASE_CODES.map(r=>[r[0], {canon:r[1], include:r[2], llz:r[3], note:r[4]}]));
+
+/* aircraft categories and procedure types a runway can be configured with.
+   More types will be added piecemeal. Circling is deliberately absent —
+   no calculations; drawn directly in PDToolkit. */
+const CATS = ["A","B","C","D"];
+const PROC_TYPES = [
+  // [id, label, group]
+  ["ILS","ILS","Approach — conventional"],
+  ["LOC","LOC only","Approach — conventional"],
+  ["VORDME","VOR/DME","Approach — conventional"],
+  ["VOR","VOR","Approach — conventional"],
+  ["NDBDME","NDB/DME","Approach — conventional"],
+  ["NDB","NDB","Approach — conventional"],
+  ["SRA","SRA","Approach — conventional"],
+  ["LNAV","LNAV","Approach — PBN"],
+  ["LNAVVNAV","LNAV/VNAV","Approach — PBN"],
+  ["LPV","LPV","Approach — PBN"],
+  ["RNPAR","RNP AR","Approach — PBN"],
+  ["SIDC","SID — Conventional","Departure"],
+  ["SIDPBN","SID — PBN","Departure"],
+];
+const PROC_GROUPS = [...new Set(PROC_TYPES.map(p=>p[2]))];
+const APPROACH_IDS = PROC_TYPES.filter(p=>p[2].startsWith("Approach")).map(p=>p[0]);
+const SEGMENTS = [           // sub-pages of an approach procedure, in flight order
+  ["initial","Initial approach"],["inter","Intermediate approach"],
+  ["final","Final approach"],["missed","Missed approach"],
+  ["adv","Advisory altitudes"],["sdf","Stepdown fixes"],
+];
+/* ILS has no stepdown fixes */
+function segsFor(procId){
+  if(!APPROACH_IDS.includes(procId)) return [["config","Configuration"]];
+  return procId==="ILS" ? SEGMENTS.filter(([s])=>s!=="sdf") : SEGMENTS;
+}
+const RDH_STD = 50;             // ft — standard reference datum height
+const VPA_MIN=2.5, VPA_OPT=3.0, VPA_MAX=3.5;   // degrees
+/* PANS-OPS Pt II S1 Ch1 App C constants (non-SI form of the formula) */
+const OAS_CURV_K=0.8833;        // H = h + 6076·D·tanθ + 0.8833·D²
+const OAS_FTNM=6076;            // formula literal — NOT the Annex 5 conversion
+const RDH_ADJ_K=1.514e-4;       // ΔD constant
+const FT_M=0.3048, NM_M=1852;   // ICAO Annex 5 — exact
+const ILS_DEFAULTS={rdhCharted:"",rdhCal:"",calRef:"",rdhSource:"Charted",vpa:"",faf:""};
+
+/* ILS final approach: FAF track length and FAP distance (earth curvature).
+   Ported from the ILS_Final sheet, verified against its 08R/26L values.
+   ΔD uses cot(θ) at the ACTUAL glide path angle per PANS-OPS App C. */
+function ilsFinalCalc(thrFt,rdhOp,vpaDeg,fafAlt){
+  if(thrFt==null||rdhOp==null||vpaDeg==null||fafAlt==null||!(vpaDeg>0)) return null;
+  const th=vpaDeg*Math.PI/180, t=Math.tan(th), cot=1/t;
+  // D · FAF — nominal descent from the RDH datum
+  const hgt=fafAlt-thrFt-rdhOp;              // height of FAF above RDH datum (ft)
+  const fafFt=hgt*cot, fafM=fafFt*FT_M, fafNM=fafM/NM_M;
+  const fafChart=Math.ceil(fafNM*10-1e-9)/10;   // rounded UP to 0.1 NM (App C para 3 says nearest)
+  // E · FAP — H = h + 6076·D·tanθ + 0.8833·D², solved for D with h = 50 ft
+  const x=OAS_CURV_K, y=OAS_FTNM*t, z=RDH_STD-(fafAlt-thrFt);
+  const disc=y*y-4*x*z;
+  if(disc<0) return null;
+  const Dnm=(-y+Math.sqrt(disc))/(2*x), Dft=Dnm*OAS_FTNM;
+  const dD=RDH_ADJ_K*OAS_FTNM*(RDH_STD-rdhOp)*cot;  // RDH adjustment (ft)
+  const fapFt=Dft+dD, fapM=fapFt*FT_M, fapNM=fapM/NM_M;   // final NM via Annex 5, not the App C literal
+  return {tanTh:t,hgt,fafFt,fafM,fafNM,fafChart,x,y,z,Dnm,Dft,dD,fapFt,fapM,fapNM};
+}
+
+/* ============ ILS missed approach — Turn at Altitude (TNA) ============ */
+/* Ported from the ILS_MA worksheet, formula for formula:
+   SOC alt (ft)      = OCA − HL(m) × 3.2808            (HL always in metres)
+   SOC from THR (m)  = −900 + (((OCA − THR elev)×0.3048) − HL) / tan(VPA)
+   dist SOC→turn (m) = (turn alt − SOC alt) × 0.3048 / MACG
+   dist THR→turn (m) = dist + |SOC| when SOC is before THR, else dist − SOC
+   TAS (kt)          = IAS·171233·((288+temp)−0.00198·alt)^0.5/(288−0.00198·alt)^2.628 + tail wind
+   c                 = 3 s reaction + 3 s transition, each (TAS/3600)×3×1852 m
+   The OCA is entered PER GRADIENT — a steeper MACG changes the OAS, so each
+   designed gradient has its own OCA set.                                        */
+const K_TAS=171233, T0_K=288, LAPSE=1.98e-3, TAS_EXP=2.628;
+const MA_M_FT=3.2808;                       // the worksheet's ft-per-metre literal
+const MACG_BASE=2.5, MACG_OPTS=["3.0","3.5","4.0","4.5","5.0"];
+/* PANS-OPS Table I-4-1-1 final missed-approach IAS (kt) — the defaults.
+   Override per category in the tab (e.g. CAT D limited to 250). */
+const MA_FINAL_IAS={A:110,B:160,C:240,D:265};
+const HL_DEFAULT={C1:{A:40,B:43,C:46,D:49},            // metres — pressure altimeter
+                  C2:{A:13,B:18,C:22,D:26}};           // metres — radio altimeter (CAT II)
+const DEFAULT_MA={type:"TNA",
+  designs:{C1:{on:true,oca:{},hl:{}},C2:{on:false,oca:{},hl:{}}},
+  macgs:{},turns:[{alt:""}],temp:"15",tailwind:"30",speeds:{}};
+
+function maGrads(ma){ return [MACG_BASE,...MACG_OPTS.filter(g=>ma.macgs[g]).map(Number)].sort((a,b)=>a-b); }
+function gradKey(g){ return g.toFixed(1).replace(".","_"); }
+/* older saves held one OCA set (implicitly 2.5%) — lift it under the 2.5% key */
+function migrateOca(dz){
+  if(dz&&dz.oca&&["A","B","C","D"].some(c=>typeof dz.oca[c]==="string"||typeof dz.oca[c]==="number")){
+    dz.oca={[gradKey(MACG_BASE)]:dz.oca};
+  }
+}
+function maTas(iasKt,altFt,temp,tailwind){
+  return iasKt*K_TAS*Math.sqrt((T0_K+temp)-LAPSE*altFt)/Math.pow(T0_K-LAPSE*altFt,TAS_EXP)+tailwind;
+}
+/* One design (CAT I or CAT II): per-gradient, per-category SOC and climb distances */
+function tnaCalc(thrFt,vpa,ma,designKey,cats){
+  const dz=ma.designs[designKey];
+  if(!dz||!dz.on) return null;
+  if(vpa==null||!(vpa>0)) return {noVpa:true};
+  if(thrFt==null) return {missing:true};
+  migrateOca(dz);
+  const grads=maGrads(ma);
+  const t1=safeNum(ma.turns[0]&&ma.turns[0].alt);
+  const temp=safeNum(ma.temp)??15, tw=safeNum(ma.tailwind)??30;
+  const tanV=Math.tan(vpa*Math.PI/180);
+  const byGrad=grads.map(g=>{
+    const gk=gradKey(g);
+    const perCat=cats.map(cat=>{
+      const oca=safeNum(dz.oca?.[gk]?.[cat]);
+      const hl=HL_DEFAULT[designKey][cat];       // fixed Doc 8168 values — never edited
+      if(oca==null||hl==null) return {cat,missing:true};
+      const socAlt=oca-hl*MA_M_FT;
+      const socThr=-900+(((oca-thrFt)*FT_M)-hl)/tanV;
+      let dSoc=null,dThr=null;
+      if(t1!=null&&t1>socAlt){
+        dSoc=(t1-socAlt)*FT_M/(g/100);
+        dThr=socThr<0?dSoc+Math.abs(socThr):dSoc-socThr;
+      }
+      return {cat,oca,hl,socAlt,socThr,dSoc,dThr};
+    });
+    return {g,gk,perCat};
+  });
+  const catParams=cats.map(cat=>{
+    const ias=safeNum(ma.speeds[cat])??MA_FINAL_IAS[cat];
+    const tas=t1!=null?maTas(ias,t1,temp,tw):null;
+    const c3=tas!=null?(tas/3600)*3*NM_M:null;
+    return {cat,ias,tas,c3,cTot:c3!=null?2*c3:null};
+  });
+  const hlByCat=cats.map(cat=>HL_DEFAULT[designKey][cat]);
+  return {grads,byGrad,catParams,hlByCat,t1,temp,tw};
+}
+/* Turns after the first: category-independent climb distances, plus TAS & c at each */
+function tnaContinuation(ma,cats){
+  const grads=maGrads(ma);
+  const temp=safeNum(ma.temp)??15, tw=safeNum(ma.tailwind)??30;
+  const alts=ma.turns.map(t=>safeNum(t.alt));
+  const segs=[];
+  for(let i=1;i<alts.length;i++){
+    const ok=alts[i]!=null&&alts[i-1]!=null&&alts[i]>alts[i-1];
+    segs.push({n:i+1,from:alts[i-1],to:alts[i],ok,
+      perGrad:grads.map(g=>({g,d:ok?(alts[i]-alts[i-1])*FT_M/(g/100):null})),
+      params:cats.map(cat=>{
+        const ias=safeNum(ma.speeds[cat])??MA_FINAL_IAS[cat];
+        const tas=alts[i]!=null?maTas(ias,alts[i],temp,tw):null;
+        const c3=tas!=null?(tas/3600)*3*NM_M:null;
+        return {cat,ias,tas,c3,cTot:c3!=null?2*c3:null};
+      })});
+  }
+  return {grads,segs};
+}
+
+/* per-runway configuration with defaults; llzFound seeds ILS on first sight.
+   cfg = {cats:{A..D}, procs:{ILS:true,...}, proc:{ILS:{rdh...}, LOC:{...}}} */
+function getCfg(key,llzFound){
+  const c=S.rwyCfg[key];
+  if(c) return c;
+  return {cats:{}, procs: llzFound?{ILS:true}:{}, proc:{}};
+}
+function ensureCfg(key){
+  if(!S.rwyCfg[key]){
+    const d=compute();
+    const r=d&&d.runways.find(x=>x.key===key);
+    S.rwyCfg[key]=JSON.parse(JSON.stringify(getCfg(key, r?r.llzFromSurvey:false)));
+  }
+  return S.rwyCfg[key];
+}
+function ensureProcCfg(key,procId){
+  const c=ensureCfg(key);
+  c.proc=c.proc||{};
+  if(!c.proc[procId])
+    c.proc[procId] = procId==="ILS" ? {...ILS_DEFAULTS, ...(c.ils||{})} : {};
+  return c.proc[procId];
+}
+
+/* =============================== state =============================== */
+const S = {
+  loaded:false, fileName:"", icao:"", company:"", procDate:"", vertRef:"",
+  points:[],
+  tolMatch:0.005,               // aerodrome-elevation match tolerance (ft)
+  manualAEP:"",                 // manual fallback where the survey has no AEP row
+  codeOverrides:{},             // code -> "Y"/"N"
+  rwyCfg:{},                    // runway -> {cats:{A..D}, procs:{ILS,LOC,...}, ils:{rdh...}} — preserved across reloads
+  manualLlz:{},                 // runway -> {ident,e,n}
+  view:{name:"hub", rwy:null},
+};
+
+/* ============================ parsing ================================ */
+function parseCsvText(text){
+  const rows = text.split(/\r\n|\n|\r/).map(ln=>ln.split(",").map(s=>s.trim()));
+  while(rows.length && rows[rows.length-1].every(c=>c==="")) rows.pop();
+  return rows;
+}
+function parseXlsxBuffer(buf){
+  const wb = XLSX.read(buf, {type:"array"});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:""});
+  return aoa.map(r=>r.map(c=>String(c==null?"":c).trim()));
+}
+function cell(rows,r,c){ const row=rows[r-1]; return row&&row[c-1]!==undefined?String(row[c-1]).trim():""; }
+function metaValue(rows,key){
+  const n = Math.min(rows.length,30);
+  for(let i=1;i<=n;i++){
+    const c1 = cell(rows,i,1);
+    const p = c1.toUpperCase().indexOf(key.toUpperCase());
+    if(p>=0){
+      let rest = c1.slice(p+key.length);
+      if(rest.startsWith(":")) rest = rest.slice(1);
+      rest = rest.trim();
+      if(rest) return rest;
+      const c2 = cell(rows,i,2);           // CSV variant: value in the next field
+      if(c2) return c2;
+    }
+  }
+  return "";
+}
+function findIcao(rows,fileName){
+  const m = metaValue(rows,"AerodromeIdent").replace(/[:\t]/g," ").trim();
+  if(m.length>=4) return m.slice(0,4).toUpperCase();
+  const base = fileName.split(/[\\/]/).pop();
+  if(base.length>=4) return base.slice(0,4).toUpperCase();
+  return "";
+}
+function safeNum(s){
+  const t=String(s??"").trim(); if(!t) return null;
+  const v=Number(t.replace(/,/g,"")); return Number.isFinite(v)?v:null;
+}
+function normRwy(s){
+  const t=String(s??"").toUpperCase().trim();
+  let num="",suf="";
+  for(const ch of t){ if(ch>="0"&&ch<="9") num+=ch; else if(ch>="A"&&ch<="Z") suf+=ch; }
+  return num?String(parseInt(num,10)).padStart(2,"0")+suf:t;
+}
+function assocMatches(assoc,key){
+  const a=String(assoc??"").trim(); if(!a) return false;
+  if(a.includes("/")) return a.split("/").some(p=>normRwy(p)===key);
+  return normRwy(a)===key;
+}
+
+function loadSurvey(rows, fileName){
+  const icao = findIcao(rows,fileName);
+  if(!icao) throw new Error("Could not determine the ICAO code (no AerodromeIdent metadata, and the filename does not start with 4 characters).");
+  let maxCols=0; for(const r of rows) if(r.length>maxCols) maxCols=r.length;
+  if(maxCols < F.SDATE)
+    throw new Error(`This survey has only ${maxCols} columns; CAP1732 field ${F.SDATE} (SURVEY DATE) is expected. Nothing was imported.`);
+
+  const company  = metaValue(rows,"DataOriginatorCompany");
+  const procDate = metaValue(rows,"SurveyProcessDate");
+  const points=[]; let vertRef="";
+  for(let i=1;i<=rows.length;i++){
+    if(cell(rows,i,F.SITE).toUpperCase()!==icao) continue;
+    const type=cell(rows,i,F.TYPE); if(!type) continue;
+    points.push({
+      id:cell(rows,i,F.RECID)||("R"+(points.length+1)),
+      code:type.toUpperCase(),
+      assoc:cell(rows,i,F.ASSOC),
+      e:safeNum(cell(rows,i,F.EASTING)),
+      n:safeNum(cell(rows,i,F.NORTHING)),
+      elevM:safeNum(cell(rows,i,F.ORTHO_M)),    // field 17 — as surveyed
+      elevFt:safeNum(cell(rows,i,F.ORTHO_FT)),  // field 18 — as surveyed, governs
+      ident:cell(rows,i,F.IDENT),
+      sdate:cell(rows,i,F.SDATE).slice(0,10),
+    });
+    if(!vertRef) vertRef=cell(rows,i,F.VERTREF);
+  }
+  if(points.length===0)
+    throw new Error(`No data rows found for ${icao}. Expected column 1 of each data row to contain '${icao}'.`);
+
+  S.loaded=true; S.fileName=fileName; S.icao=icao; S.company=company;
+  S.procDate=procDate; S.vertRef=vertRef; S.points=points;
+  S.codeOverrides={};
+  // rwyCfg and manualLlz survive on purpose — configuration follows its runway
+  // across a reload; a different aerodrome has different keys, so nothing leaks.
+}
+
+/* ====================== derived calculations ========================= */
+function codeInfo(code){
+  const base=CODES.get(code);
+  const include=S.codeOverrides[code] ?? (base?base.include:"?");
+  return {known:!!base, include, llz:base?base.llz:null, canon:base?base.canon:code, note:base?base.note:""};
+}
+function compute(){
+  if(!S.loaded) return null;
+  const pts=S.points.map(p=>{
+    const ci=codeInfo(p.code);
+    return {...p, include:ci.include, llz:ci.llz, known:ci.known,
+            inclFt:(ci.include==="Y"&&p.elevFt!=null)?p.elevFt:null};
+  });
+  const aepRow=pts.find(p=>codeInfo(p.code).canon==="AEP"&&p.elevFt!=null);
+  const aepFile=aepRow?aepRow.elevFt:null;
+  const manual=safeNum(S.manualAEP);
+  const effective=manual!=null?manual:aepFile;
+
+  let maxP=null;
+  for(const p of pts) if(p.inclFt!=null&&(maxP===null||p.inclFt>maxP.inclFt)) maxP=p;
+  const included=pts.filter(p=>p.inclFt!=null).length;
+
+  const unk=new Map();
+  for(const p of pts) if(!p.known&&!(p.code in S.codeOverrides)) unk.set(p.code,(unk.get(p.code)||0)+1);
+
+  let diff=null,status="—",statusClass="warn";
+  if(effective!=null&&maxP){
+    diff=maxP.inclFt-effective;
+    if(Math.abs(diff)<=S.tolMatch){status="MATCH";statusClass="ok";}
+    else{
+      status=`DIFFERS: computed value ${diff>0?"HIGHER":"LOWER"} by ${Math.abs(diff).toFixed(3)} ft `+
+             `(${(Math.abs(diff)*0.3048).toFixed(3)} m) via ${maxP.code} ${maxP.assoc||"—"}`;
+      statusClass="diff";
+    }
+  }else if(!maxP){status="no included points — check the survey codes";}
+  else{status="AEP not in file — enter the surveyor's report value";}
+
+  // operative value: the MOST CONSERVATIVE (higher) of the surveyor's AEP and
+  // our computed value — this is what feeds every calculation
+  let operative=null, operativeSrc="—";
+  const compMax=maxP?maxP.inclFt:null;
+  if(effective!=null&&compMax!=null){
+    if(compMax>=effective){operative=compMax;operativeSrc=compMax===effective?"both equal":"computed from survey";}
+    else{operative=effective;operativeSrc="surveyor's AEP";}
+  }else if(compMax!=null){operative=compMax;operativeSrc="computed from survey (no AEP)";}
+  else if(effective!=null){operative=effective;operativeSrc="surveyor's AEP (no included points)";}
+
+  const runways=[];
+  for(const p of pts) if(p.code==="THR"){
+    const key=normRwy(p.assoc);
+    let llz=null;
+    if(key) llz=pts.find(q=>q.llz==="ANTENNA"&&assocMatches(q.assoc,key))||null;
+    const man=S.manualLlz[key]||null;
+    const llzId=llz?(llz.ident||llz.id):(man?man.ident:"");
+    const llzE=llz?llz.e:(man?safeNum(man.e):null);
+    const llzN=llz?llz.n:(man?safeNum(man.n):null);
+    const dist=(llzE!=null&&llzN!=null&&p.e!=null&&p.n!=null)?Math.hypot(llzE-p.e,llzN-p.n):null;
+    const cfg=getCfg(key,!!llz);
+    const procsOn=PROC_TYPES.filter(([id])=>cfg.procs[id]).map(([id])=>id);
+    const catsOn=CATS.filter(c=>cfg.cats[c]);
+    const ilsOn=!!cfg.procs.ILS, locOn=!!cfg.procs.LOC;
+    const needLlz=ilsOn||locOn;
+    const ils=ilsOn?"YES":"NO";
+    let llzCheck="";
+    if(needLlz&&dist==null) llzCheck=(ilsOn?"ILS":"LOC")+" declared but no LLZ — enter one";
+    else if(!needLlz&&dist!=null) llzCheck="LLZ present but no ILS/LOC declared — check";
+    else if(!needLlz) llzCheck="no ILS/LOC";
+    else llzCheck=dist>1000?"ok":"LLZ too close — check";
+    // ILS configuration derived values (per-procedure store; legacy cfg.ils honoured)
+    const ic={...ILS_DEFAULTS, ...(cfg.ils||{}), ...((cfg.proc&&cfg.proc.ILS)||{})};
+    const rdhCharted=safeNum(ic.rdhCharted), rdhCal=safeNum(ic.rdhCal);
+    const rdhSource=ic.rdhSource||"Charted";
+    const rdhOperative=rdhSource==="Calibration"?(rdhCal??rdhCharted):(rdhCharted??rdhCal);
+    const rdhDiff=(rdhCharted!=null&&rdhCal!=null)?rdhCal-rdhCharted:null;
+    const rdhCheck=rdhDiff==null?"":(Math.abs(rdhDiff)<1e-9?"MATCH":"DIFFERS");
+    const vpa=safeNum(ic.vpa);
+    let vpaCheck="";
+    if(vpa!=null){
+      if(vpa<VPA_MIN) vpaCheck=`below minimum ${VPA_MIN}°`;
+      else if(vpa>VPA_MAX) vpaCheck=`above maximum ${VPA_MAX}°`;
+      else if(Math.abs(vpa-VPA_OPT)<1e-9) vpaCheck="optimum";
+      else vpaCheck="ok";
+    }
+    const faf=safeNum(ic.faf);
+    const finalCalc=ilsOn?ilsFinalCalc(p.elevFt,rdhOperative,vpa,faf):null;
+    let rMax=null;
+    for(const q of pts) if(q.inclFt!=null&&assocMatches(q.assoc,key))
+      if(rMax===null||q.inclFt>rMax.inclFt) rMax=q;
+    runways.push({key,thr:p,llzFromSurvey:!!llz,llzId,llzE,llzN,dist,ils,llzCheck,
+                  cfg,ic,procsOn,catsOn,ilsOn,locOn,needLlz,
+                  rdhCharted,rdhCal,rdhSource,rdhOperative,rdhDiff,rdhCheck,vpa,vpaCheck,faf,finalCalc,
+                  rwyMax:rMax,ref:`${S.icao} rec ${p.id} | surveyed ${p.sdate}`});
+  }
+  return {pts,aepFile,manual,effective,maxP,included,total:pts.length,
+          unk,diff,status,statusClass,operative,operativeSrc,runways};
+}
+
+/* every outstanding item in one place — replaces the scattered Excel checks */
+function buildChecks(d){
+  const list=[];
+  if(!d) return list;
+  // aerodrome elevation
+  if(d.statusClass==="ok")
+    list.push({sev:"ok",msg:`Aerodrome elevation: MATCH — surveyor ${f3(d.effective)} ft vs computed ${f3(d.maxP.inclFt)} ft (tolerance ${S.tolMatch} ft)`,go:"elev"});
+  else if(d.statusClass==="diff")
+    list.push({sev:"warn",msg:`Aerodrome elevation: ${d.status} — the more conservative value ${f3(d.operative)} ft (${d.operativeSrc}) is carried forward`,go:"elev"});
+  else
+    list.push({sev:"warn",msg:`Aerodrome elevation: ${d.status}`,go:"elev"});
+  // unknown codes
+  if(d.unk.size)
+    list.push({sev:"fail",msg:`${d.unk.size} unrecognised survey code(s): ${[...d.unk.keys()].join(", ")} — decide Y/N or those points are silently excluded from the max`,go:"codes"});
+  else
+    list.push({sev:"ok",msg:"All survey codes recognised"});
+  // runways
+  if(!d.runways.length)
+    list.push({sev:"fail",msg:"No THR records found — no runways could be built"});
+  for(const r of d.runways){
+    if(r.llzCheck==="ok") list.push({sev:"ok",msg:`RWY ${r.key}: localizer ${r.llzId} at ${f2(r.dist)} m — ok`,go:"rwy:"+r.key});
+    else if(r.llzCheck==="no ILS/LOC") list.push({sev:"ok",msg:`RWY ${r.key}: no ILS/LOC declared`,go:"rwy:"+r.key});
+    else list.push({sev:"warn",msg:`RWY ${r.key}: ${r.llzCheck}`,go:"rwy:"+r.key});
+    if(r.ilsOn){
+      if(r.vpaCheck.startsWith("below")||r.vpaCheck.startsWith("above"))
+        list.push({sev:"warn",msg:`RWY ${r.key}: glide path ${r.vpa}° is ${r.vpaCheck}`,go:"rwy:"+r.key});
+      if(r.rdhCheck==="DIFFERS")
+        list.push({sev:"warn",msg:`RWY ${r.key}: RDH calibration differs from charted by ${r.rdhDiff.toFixed(2)} ft — source in use: ${r.rdhSource}`,go:"rwy:"+r.key});
+    }
+    if(r.procsOn.length&&!r.catsOn.length)
+      list.push({sev:"warn",msg:`RWY ${r.key}: procedures declared but no aircraft category selected`,go:"rwy:"+r.key});
+  }
+  return list;
+}
+
+/* ============================ formatting ============================= */
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const f3=v=>v==null?"":v.toFixed(3);
+const f2=v=>v==null?"":v.toFixed(2);
+
+/* ============================ views ================================== */
+function go(view,rwy,proc,seg){
+  S.view={name:view,rwy:rwy||null,proc:proc||null,seg:seg||null};
+  try{ history.pushState(S.view,""); }catch(e){}
+  render(); window.scrollTo(0,0);
+}
+function goCheck(target){
+  if(!target) return;
+  if(target.startsWith("rwy:")) go("rwy",target.slice(4)); else go(target);
+}
+
+function render(){
+  const d=compute();
+  renderNav(d);
+  document.getElementById("btn-export").disabled=!d;
+  document.getElementById("btn-save").disabled=!d;
+  const m=document.getElementById("main");
+  if(!d){ m.innerHTML=viewWelcome(); wireImport(); return; }
+  switch(S.view.name){
+    case "elev":   m.innerHTML=viewElev(d);   wireElev(); break;
+    case "points": m.innerHTML=viewPoints(d); wirePoints(); break;
+    case "codes":  m.innerHTML=viewCodes(d);  wireCodes(); break;
+    case "rwy":    m.innerHTML=viewRunway(d,S.view.rwy); wireRunway(); break;
+    case "proc":   m.innerHTML=viewProc(d,S.view.rwy,S.view.proc,S.view.seg); wireProc(); break;
+    default:       m.innerHTML=viewHub(d);    wireHub(); break;
+  }
+  autosave();
+}
+function renderNav(d){
+  const nav=document.getElementById("nav");
+  if(!d){ nav.innerHTML=""; return; }
+  const items=[["hub","Dashboard"]];
+  const procLabel=id=>PROC_TYPES.find(([p])=>p===id)?.[1]||id;
+  const pageNames={elev:"Aerodrome elevation",points:"Survey points",codes:"Survey codes"};
+  let tail="";
+  if(pageNames[S.view.name]) tail=`<a href="#" class="here">${pageNames[S.view.name]}</a>`;
+  if(S.view.name==="rwy") tail=`<a href="#" class="here">RWY ${esc(S.view.rwy)}</a>`;
+  if(S.view.name==="proc") tail=
+    `<a href="#" data-rwyback="${esc(S.view.rwy)}">RWY ${esc(S.view.rwy)}</a>`+
+    `<a href="#" class="here">${esc(procLabel(S.view.proc))}</a>`;
+  nav.innerHTML = `<span class="icao">${esc(S.icao)}</span>` +
+    items.map(([v,label])=>`<a href="#" data-nav="${v}" class="${S.view.name===v?"here":""}">${label}</a>`).join("") + tail;
+  nav.querySelectorAll("[data-nav]").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();go(a.dataset.nav);}));
+  nav.querySelectorAll("[data-rwyback]").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();go("rwy",a.dataset.rwyback);}));
+}
+
+/* ---------- welcome / first run ---------- */
+function viewWelcome(){
+  const a=readAutosave();
+  const banner=a?`
+    <div class="verdict warn" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px">
+        <div class="word" style="font-size:16px">AUTOSAVED SESSION FOUND</div>
+        <div class="detail">${esc(a.icao)} · ${a.points.length} points · saved ${esc((a.saved||"").replace("T"," ").slice(0,16))}</div>
+      </div>
+      <button class="act" id="btn-restore">Restore session</button>
+      <button class="ghost" id="btn-discard">Discard</button>
+    </div>`:"";
+  return `
+  <div style="max-width:760px;margin:40px auto">
+    ${banner}
+    <h2>Start — load the aerodrome survey</h2>
+    <p class="note">Select a <b>CAP1732</b> survey file (<b>.csv</b> or <b>.xlsx</b>). Parsing is by
+      <b>Appendix 5 field position</b>, not header names, so variant headers (EGLL) and files with no header row
+      (EGHH) both work. Elevations are used <b>as surveyed</b> — CAP1732 fields 17 (m) and 18 (ft) are the official
+      point of truth. Everything stays in your browser; nothing is uploaded anywhere.</p>
+    <label class="drop" id="drop">
+      <div class="big">Drop the survey file here, or click to browse</div>
+      <div class="small">CAP1732 .csv / .xlsx — e.g. EGGW_AD25.csv</div>
+    </label>
+    <div id="import-err"></div>
+    <p class="note" style="margin-top:18px">Returning to earlier work? <a href="#" id="lnk-open">Open a saved project</a> —
+      it restores your declarations, code decisions and manual entries.</p>
+  </div>`;
+}
+function wireImport(){
+  const drop=document.getElementById("drop");
+  if(drop){
+    ["dragover","dragenter"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+    ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+    drop.addEventListener("drop",e=>{ if(e.dataTransfer.files.length) handleSurveyFile(e.dataTransfer.files[0]); });
+    drop.addEventListener("click",()=>document.getElementById("file-survey").click());
+  }
+  const lnk=document.getElementById("lnk-open");
+  if(lnk) lnk.addEventListener("click",e=>{e.preventDefault();document.getElementById("file-project").click();});
+  const br=document.getElementById("btn-restore");
+  if(br) br.addEventListener("click",()=>{
+    try{ applyProject(readAutosave()); go("hub"); }
+    catch(err){ alert("Could not restore the autosaved session: "+err.message); }
+  });
+  const bd=document.getElementById("btn-discard");
+  if(bd) bd.addEventListener("click",()=>{ discardAutosave(); render(); });
+}
+
+/* ---------- dashboard hub ---------- */
+function viewHub(d){
+  const checks=buildChecks(d);
+  const fails=checks.filter(c=>c.sev==="fail").length, warns=checks.filter(c=>c.sev==="warn").length;
+  const overall = fails? {cls:"bad",word:`${fails} CHECK${fails>1?"S":""} FAILING`,detail:warns?`plus ${warns} note${warns>1?"s":""}`:""}
+        : warns? {cls:"warn",word:`${warns} NOTE${warns>1?"S":""}`,detail:"no failing checks"}
+        : {cls:"ok",word:"ALL CHECKS PASS",detail:"survey imported, elevation matched, runways configured"};
+  const rwyCards=d.runways.map(r=>{
+    const warn=r.llzCheck!=="ok"&&r.llzCheck!=="no ILS/LOC";
+    return `
+    <button class="rwy-card" data-rwy="${esc(r.key)}">
+      <div class="id">${esc(r.key)}</div>
+      <div class="stats">
+        <div class="r"><span class="l">THR elev</span><span class="v">${f3(r.thr.elevFt)} ft</span></div>
+        <div class="r"><span class="l"></span><span class="v">${f3(r.thr.elevM)} m</span></div>
+        <div class="r"><span class="l">Categories</span><span class="v">${r.catsOn.length?r.catsOn.join(" "):"—"}</span></div>
+        <div class="r"><span class="l">Procedures</span><span class="v">${r.procsOn.length?esc(r.procsOn.join(", ")):"—"}</span></div>
+        <div class="r"><span class="l">Runway max</span><span class="v">${r.rwyMax?f3(r.rwyMax.inclFt)+" ft":"—"}</span></div>
+      </div>
+      ${warn?`<div class="foot bad">${esc(r.llzCheck)}</div>`:""}
+    </button>`;}).join("");
+  return `
+  <div class="verdict ${overall.cls}"><div class="word">${overall.word}</div><div class="detail">${esc(overall.detail)}</div></div>
+  <div class="hub">
+    <div class="card">
+      <div class="hd">Survey<span class="right">${esc(S.fileName)}</span></div>
+      <div class="bd">
+        <div class="meta">
+          <div class="cell"><div class="k">Aerodrome</div><div class="v big">${esc(S.icao)}</div></div>
+          <div class="cell"><div class="k">Originator</div><div class="v">${esc(S.company||"—")}</div></div>
+          <div class="cell"><div class="k">Processed</div><div class="v">${esc(S.procDate||"—")}</div></div>
+          <div class="cell"><div class="k">Vertical ref</div><div class="v">${esc(S.vertRef||"—")}</div></div>
+          <div class="cell"><div class="k">Points</div><div class="v">${d.total} (${d.included} included)</div></div>
+        </div>
+        <div class="btnrow" style="margin-bottom:0">
+          <button class="ghost" data-go="points">Survey points</button>
+          <label class="drop mini" id="drop" style="flex:1;min-width:180px"><span class="big">Replace survey…</span></label>
+        </div>
+        <div id="import-err"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="hd">Checks<span class="right">${fails} failing · ${warns} note(s)</span></div>
+      <div class="bd p0">
+        ${checks.length?`<ul class="checks">${checks.map(c=>`
+          <li><span class="sev ${c.sev}">${c.sev==="ok"?"OK":c.sev==="warn"?"NOTE":"CHECK"}</span>
+              <span class="msg">${esc(c.msg)}${c.go?` — <a href="#" data-goc="${esc(c.go)}">open</a>`:""}</span></li>`).join("")}
+        </ul>`:`<div class="allclear">Nothing outstanding.</div>`}
+      </div>
+    </div>
+    <div class="card full">
+      <div class="hd">Aerodrome elevation<span class="right">${esc(d.status)}</span></div>
+      <div class="bd">
+        <div class="meta">
+          <div class="cell"><div class="k">Surveyor (effective)</div><div class="v">${d.effective!=null?f3(d.effective)+" ft":"—"}</div></div>
+          <div class="cell"><div class="k">Computed from survey</div><div class="v">${d.maxP?f3(d.maxP.inclFt)+" ft":"—"}</div></div>
+          <div class="cell"><div class="k">Operative (conservative)</div><div class="v big" style="font-size:16px">${d.operative!=null?f3(d.operative)+" ft":"—"}</div></div>
+          <div class="cell"><div class="k">Source</div><div class="v">${esc(d.operativeSrc)}</div></div>
+          <div class="cell"><div class="k">Difference</div><div class="v">${d.diff!=null?d.diff.toFixed(3)+" ft":"—"}</div></div>
+        </div>
+        <div class="btnrow" style="margin-bottom:0">
+          <button class="ghost" data-go="elev">Full comparison & per-runway breakdown</button>
+          <button class="ghost" data-go="codes">Survey codes — what counts as runway</button>
+        </div>
+      </div>
+    </div>
+    <div class="card full">
+      <div class="hd">Runways — pick one to work on<span class="right">${d.runways.length} runway end(s)</span></div>
+      ${d.runways.length?`<div class="rwy-grid">${rwyCards}</div>`:`<div class="empty">No THR records in the survey.</div>`}
+    </div>
+  </div>`;
+}
+function wireHub(){
+  document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>go(b.dataset.go)));
+  document.querySelectorAll("[data-goc]").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();goCheck(a.dataset.goc);}));
+  document.querySelectorAll(".rwy-card").forEach(b=>b.addEventListener("click",()=>go("rwy",b.dataset.rwy)));
+  const drop=document.getElementById("drop");
+  if(drop){
+    ["dragover","dragenter"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+    ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+    drop.addEventListener("drop",e=>{ if(e.dataTransfer.files.length) handleSurveyFile(e.dataTransfer.files[0]); });
+    drop.addEventListener("click",()=>document.getElementById("file-survey").click());
+  }
+}
+
+/* ---------- aerodrome elevation ---------- */
+function viewElev(d){
+  const drv=d.maxP;
+  const rw=d.runways.map(r=>`
+      <tr><td>${esc(r.key)}</td>
+          <td class="num auto">${r.rwyMax?f3(r.rwyMax.inclFt):"—"}</td>
+          <td class="auto">${r.rwyMax?esc(r.rwyMax.code):"—"}</td>
+          <td class="auto">${r.rwyMax?esc(r.rwyMax.id):"—"}</td></tr>`).join("");
+  return `
+  <h2>Aerodrome elevation — check of the surveyor's value</h2>
+  <p class="note">Doc 8168: <i>the elevation of the highest point of the landing area</i>. Our check computes the highest
+    point on any part of the runway from the included survey points and compares it with the surveyor's AEP —
+    the <b>more conservative (higher) value</b> is carried forward into every calculation. The AEP itself is excluded
+    from the computed max (Include = N) so the comparison stays independent. All values in surveyed feet — CAP1732
+    field 18, the official point of truth.</p>
+  <div class="kv">
+    <div class="row"><div class="hd2">A · Surveyor's declared value</div></div>
+    <div class="row"><div class="k">AEP from survey file (ft)</div>
+      <div class="v auto">${d.aepFile!=null?f3(d.aepFile):"not in file"}</div>
+      <div class="c">Auto-read from the AEP row. 3 of the 9 reference files (EGHI, EGPA, EGPU) have no AEP row — hence the manual fallback.</div></div>
+    <div class="row"><div class="k">From surveyor's report (ft) — manual</div>
+      <div class="v in"><input type="number" step="0.001" id="in-aep" value="${esc(S.manualAEP)}"></div>
+      <div class="c">If typed from a printed report the value is rounded — raise the tolerance to match its precision (1 dp → 0.05 ft).</div></div>
+    <div class="row"><div class="k">Surveyor's value — EFFECTIVE (ft)</div>
+      <div class="v auto"><b>${d.effective!=null?f3(d.effective):"—"}</b></div>
+      <div class="c">Manual entry if present, else the file AEP.</div></div>
+    <div class="row"><div class="hd2">B · Computed from survey — highest point on any part of the runway</div></div>
+    <div class="row"><div class="k">Max elevation, included points (ft)</div>
+      <div class="v auto"><b>${drv?f3(drv.inclFt):"—"}</b></div>
+      <div class="c">AEP and ARP excluded (Include = N) so the comparison stays independent.</div></div>
+    <div class="row"><div class="k">Driving point — ID / code / runway</div>
+      <div class="v auto">${drv?`${esc(drv.id)} · ${esc(drv.code)} · ${esc(drv.assoc||"—")}`:"—"}</div><div class="c"></div></div>
+    <div class="row"><div class="k">Points included / total</div>
+      <div class="v auto">${d.included} / ${d.total}</div><div class="c"></div></div>
+    <div class="row"><div class="k">Unrecognised codes</div>
+      <div class="v auto ${d.unk.size?"chk-bad":""}">${d.unk.size}</div>
+      <div class="c">${d.unk.size?`Decide Y/N on the survey codes page: ${esc([...d.unk.keys()].join(", "))}`:""}</div></div>
+    <div class="row"><div class="hd2">C · Comparison</div></div>
+    <div class="row"><div class="k">Difference computed − surveyor (ft)</div>
+      <div class="v auto">${d.diff!=null?d.diff.toFixed(3):"—"}</div><div class="c"></div></div>
+    <div class="row"><div class="k">Match tolerance (ft)</div>
+      <div class="v in"><input type="number" step="0.001" id="in-tolmatch" value="${S.tolMatch}"></div>
+      <div class="c">Auto-read AEP: keep at float-noise level (0.005) — a few mm of difference is real. Manual 1 dp entry → 0.05.</div></div>
+  </div>
+  <div class="verdict ${d.statusClass==="ok"?"ok":"warn"}">
+    <div class="word">${esc(d.status.split(":")[0])}</div>
+    <div class="detail">${esc(d.status.includes(":")?d.status.slice(d.status.indexOf(":")+1).trim():"")}${
+      d.statusClass==="diff"?` — the more conservative value is carried forward`:""}</div>
+  </div>
+  <div class="kv">
+    <div class="row"><div class="hd2">D · Operative aerodrome elevation — the most conservative value (feeds all calculators)</div></div>
+    <div class="row"><div class="k">OPERATIVE AERODROME ELEVATION (ft)</div>
+      <div class="v auto"><b>${d.operative!=null?f3(d.operative):"—"}</b></div>
+      <div class="c">The higher of the surveyor's AEP and our computed value.</div></div>
+    <div class="row"><div class="k">Source</div>
+      <div class="v auto">${esc(d.operativeSrc)}</div><div class="c"></div></div>
+    <div class="row"><div class="k">Driving point surveyed metres</div>
+      <div class="v auto">${drv?f3(drv.elevM):"—"}</div><div class="c">The computed max point's field-17 value, as surveyed — not a conversion.</div></div>
+  </div>
+  <h2>E · Per-runway breakdown (included points only)</h2>
+  <p class="note">ASSOC differs by code: direction codes use "07"; profile points use the pair "07/25"; ARP has none.
+    Matching handles all three — pair points count toward both runways.</p>
+  <div class="tbl-wrap auto-h" style="display:inline-block">
+  <table><thead><tr><th>Runway</th><th>Max elev (ft)</th><th>Driving code</th><th>Point ID</th></tr></thead>
+  <tbody>${rw}</tbody></table></div>`;
+}
+function wireElev(){
+  document.getElementById("in-aep").addEventListener("change",e=>{S.manualAEP=e.target.value;render();});
+  document.getElementById("in-tolmatch").addEventListener("change",e=>{S.tolMatch=safeNum(e.target.value)??0.005;render();});
+}
+
+/* ---------- runway workspace ---------- */
+function viewRunway(d,key){
+  const r=d.runways.find(x=>x.key===key);
+  if(!r) return `<div class="empty">Runway ${esc(key)} not found in this survey.</div>`;
+  const procLabel=id=>PROC_TYPES.find(([p])=>p===id)?.[1]||id;
+
+  // status summary per declared procedure (what the Open button leads to)
+  const procStatus=id=>{
+    if(id==="ILS"){
+      const bits=[];
+      if(r.vpa!=null) bits.push(`GP ${r.vpa}°`);
+      if(r.rdhOperative!=null) bits.push(`RDH ${f2(r.rdhOperative)} ft`);
+      if(r.finalCalc) bits.push(`FAF ${r.finalCalc.fafChart.toFixed(1)} NM · FAP ${r.finalCalc.fapNM.toFixed(3)} NM`);
+      else if(r.faf!=null) bits.push(`FAF alt ${r.faf} ft`);
+      return bits.length?bits.join(" · "):"not configured";
+    }
+    return "configuration to follow";
+  };
+  const procRows=r.procsOn.map(id=>`
+    <li><span class="nm">${esc(procLabel(id))}</span>
+        <span class="st">${esc(procStatus(id))}</span>
+        <button class="ghost proc-open" data-proc="${esc(id)}" style="margin-left:auto;padding:5px 16px">Open</button></li>`).join("");
+
+  return `
+  <div class="ws-head">
+    <span class="rw">RWY ${esc(r.key)}</span>
+    <span class="pill ${r.procsOn.length?"ok":"warn"}">${r.procsOn.length?r.procsOn.length+" procedure(s) declared":"no procedures declared"}</span>
+    <span class="mono" style="color:var(--muted);font-size:12px">${esc(r.ref)}</span>
+    <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+      <span style="font-size:11px;color:var(--muted)">switch:</span>
+      ${d.runways.filter(x=>x.key!==r.key).map(x=>
+        `<button class="ghost rwy-jump" data-rwy="${esc(x.key)}" style="padding:4px 10px;font-family:var(--mono)">${esc(x.key)}</button>`).join("")}
+    </span>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="hd">Threshold — as surveyed</div>
+    <div class="bd">
+      <div class="meta">
+        <div class="cell"><div class="k">THR elev (ft) · field 18</div><div class="v big">${f3(r.thr.elevFt)}</div></div>
+        <div class="cell"><div class="k">THR elev (m) · field 17</div><div class="v">${f3(r.thr.elevM)}</div></div>
+        <div class="cell"><div class="k">Easting</div><div class="v">${f3(r.thr.e)}</div></div>
+        <div class="cell"><div class="k">Northing</div><div class="v">${f3(r.thr.n)}</div></div>
+        <div class="cell"><div class="k">Surveyed</div><div class="v">${esc(r.thr.sdate)}</div></div>
+        <div class="cell"><div class="k">Runway max (incl. points)</div><div class="v">${r.rwyMax?f3(r.rwyMax.inclFt)+" ft":"—"}</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="card full">
+      <div class="hd">Runway configuration</div>
+      <div class="bd">
+        <div class="cfg-k">Aircraft categories using this runway</div>
+        <div class="chip-row">
+          ${CATS.map(c=>`<label class="chip ${r.cfg.cats[c]?"on":""}"><input type="checkbox" class="cat-chk" data-cat="${c}"${r.cfg.cats[c]?" checked":""}>CAT ${c}</label>`).join("")}
+        </div>
+        ${PROC_GROUPS.map(g=>`
+          <div class="cfg-k">${esc(g)}</div>
+          <div class="chip-row">
+            ${PROC_TYPES.filter(p=>p[2]===g).map(([id,label])=>
+              `<label class="chip ${r.cfg.procs[id]?"on":""}"><input type="checkbox" class="proc-chk" data-proc="${id}"${r.cfg.procs[id]?" checked":""}>${esc(label)}</label>`).join("")}
+          </div>`).join("")}
+        <p class="note" style="margin-bottom:0">Each declared procedure gets its own workspace below — the page doesn't grow
+          with the selection. Category selection will drive the speed envelope in each calculation. More procedure types
+          will be added piecemeal; circling is drawn directly in PDToolkit so it doesn't appear here.</p>
+      </div>
+    </div>
+    <div class="card full">
+      <div class="hd">Procedures — open to configure & calculate</div>
+      ${r.procsOn.length
+        ?`<div class="bd p0"><ul class="proc-list">${procRows}</ul></div>`
+        :`<div class="bd"><p class="note" style="margin:0">Select procedure types above to create their workspaces.</p></div>`}
+    </div>
+  </div>`;
+}
+function wireRunway(){
+  const key=S.view.rwy;
+  document.querySelectorAll(".cat-chk").forEach(c=>c.addEventListener("change",e=>{
+    ensureCfg(key).cats[e.target.dataset.cat]=e.target.checked; render();}));
+  document.querySelectorAll(".proc-chk").forEach(c=>c.addEventListener("change",e=>{
+    ensureCfg(key).procs[e.target.dataset.proc]=e.target.checked; render();}));
+  document.querySelectorAll(".proc-open").forEach(b=>b.addEventListener("click",()=>{
+    const pid=b.dataset.proc;
+    go("proc",key,pid, APPROACH_IDS.includes(pid)?"final":"config");}));
+  document.querySelectorAll(".rwy-jump").forEach(b=>b.addEventListener("click",()=>go("rwy",b.dataset.rwy)));
+}
+
+/* ---------- procedure workspace (per runway end, per procedure) ---------- */
+function viewProc(d,key,procId,seg){
+  const r=d.runways.find(x=>x.key===key);
+  if(!r) return `<div class="empty">Runway ${esc(key)} not found.</div>`;
+  const procLabel=PROC_TYPES.find(([p])=>p===procId)?.[1]||procId;
+  const segs=segsFor(procId);
+  seg=segs.some(([s])=>s===seg)?seg:segs[0][0];
+  const segLabel=segs.find(([s])=>s===seg)[1];
+
+  let body="";
+  if(procId==="ILS" && seg==="missed"){
+    body=viewIlsMA(r);
+  } else if(procId==="ILS" && seg==="adv"){
+    body=viewIlsAdv(r,d);
+  } else if(procId==="ILS" && seg==="final"){
+    const ic=r.ic;
+    const vpaCls=r.vpaCheck==="ok"||r.vpaCheck==="optimum"?"chk-ok":(r.vpaCheck?"chk-bad":"");
+    body=`
+    <div class="hub">
+      <div class="card">
+        <div class="hd">Reference datum height</div>
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">RDH — charted (ft)</div>
+            <div class="v in"><input type="number" step="0.01" class="proc-in" data-f="rdhCharted" value="${esc(ic.rdhCharted)}"></div>
+            <div class="c">From the published chart.</div></div>
+          <div class="row"><div class="k">RDH — latest calibration (ft)</div>
+            <div class="v in"><input type="number" step="0.01" class="proc-in" data-f="rdhCal" value="${esc(ic.rdhCal)}"></div>
+            <div class="c">From the flight-calibration report.</div></div>
+          <div class="row"><div class="k">Calibration report ref / date</div>
+            <div class="v in"><input type="text" class="proc-in" data-f="calRef" value="${esc(ic.calRef)}"></div>
+            <div class="c"></div></div>
+          <div class="row"><div class="k">RDH source in use</div>
+            <div class="v in"><select id="rdh-src">
+              <option${r.rdhSource==="Charted"?" selected":""}>Charted</option>
+              <option${r.rdhSource==="Calibration"?" selected":""}>Calibration</option></select></div>
+            <div class="c">Your declaration of which value governs.</div></div>
+          <div class="row"><div class="k">RDH — operative (ft)</div>
+            <div class="v auto"><b>${r.rdhOperative!=null?f2(r.rdhOperative):"—"}</b>${
+              r.rdhCheck?` <span class="pill ${r.rdhCheck==="MATCH"?"ok":"warn"}">${r.rdhCheck==="MATCH"?"cal = charted":"cal ≠ charted by "+r.rdhDiff.toFixed(2)+" ft"}</span>`:""}</div>
+            <div class="c">Falls back to whichever value exists if only one is entered.</div></div>
+          <div class="row"><div class="k">vs standard ${RDH_STD} ft</div>
+            <div class="v auto">${r.rdhOperative!=null?(r.rdhOperative-RDH_STD>=0?"+":"")+(r.rdhOperative-RDH_STD).toFixed(2):"—"}</div>
+            <div class="c"></div></div>
+        </div></div>
+      </div>
+      <div class="card">
+        <div class="hd">Glide path & FAF</div>
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">Glide path angle (°)</div>
+            <div class="v in"><input type="number" step="0.01" class="proc-in" data-f="vpa" value="${esc(ic.vpa)}"></div>
+            <div class="c">Minimum ${VPA_MIN}° · optimum ${VPA_OPT}° · maximum ${VPA_MAX}°.</div></div>
+          <div class="row"><div class="k">Angle check</div>
+            <div class="v auto ${vpaCls}">${esc(r.vpaCheck||"—")}</div><div class="c"></div></div>
+          <div class="row"><div class="k">FAF procedure altitude (ft)</div>
+            <div class="v in"><input type="number" step="1" class="proc-in" data-f="faf" value="${esc(ic.faf)}"></div>
+            <div class="c">Feeds the final-approach calculations (FAF track length, FAP) — calculation block to follow here.</div></div>
+          ${(()=>{
+            const manual=!r.llzFromSurvey;
+            if(!manual) return `
+          <div class="row"><div class="k">Localizer</div>
+            <div class="v auto">${r.llzId?`${esc(r.llzId)} · ${f2(r.dist)} m from THR`:"—"}</div>
+            <div class="c">Antenna matched from the survey (monitor kit excluded); ident from CAP1732 field 3.</div></div>`;
+            return `
+          <div class="row"><div class="k">Localizer ident</div>
+            <div class="v in"><input type="text" class="llz-in" data-f="ident" value="${esc(r.llzId)}"></div>
+            <div class="c">The survey carries no LLZ association for this runway — enter the localizer's ident and coordinates.</div></div>
+          <div class="row"><div class="k">Localizer Easting</div>
+            <div class="v in"><input type="number" step="0.001" class="llz-in" data-f="e" value="${r.llzE!=null?r.llzE:""}"></div><div class="c"></div></div>
+          <div class="row"><div class="k">Localizer Northing</div>
+            <div class="v in"><input type="number" step="0.001" class="llz-in" data-f="n" value="${r.llzN!=null?r.llzN:""}"></div><div class="c"></div></div>
+          <div class="row"><div class="k">THR → LLZ distance (m)</div>
+            <div class="v auto"><b>${f2(r.dist)}</b></div>
+            <div class="c">Plane distance from grid coordinates. Expected > 1000 m.</div></div>`;})()}
+        </div></div>
+      </div>
+      ${(()=>{
+        const c=r.finalCalc;
+        if(!c){
+          const missing=[];
+          if(r.thr.elevFt==null) missing.push("THR elevation");
+          if(r.rdhOperative==null) missing.push("RDH");
+          if(r.vpa==null||!(r.vpa>0)) missing.push("glide path angle");
+          if(r.faf==null) missing.push("FAF procedure altitude");
+          return `<div class="card full"><div class="hd">FAF & FAP — calculations</div>
+            <div class="bd"><p class="note" style="margin:0">Waiting for: <b>${esc(missing.join(", ")||"valid inputs")}</b>.
+            The FAF track length and FAP distance appear here as soon as they are entered.</p></div></div>`;
+        }
+        return `
+      <div class="card full">
+        <div class="hd">FAF — track length from THR<span class="right">nominal descent from the RDH datum</span></div>
+        <div class="bd"><div class="kv" style="margin-bottom:0">
+          <div class="row"><div class="k">Height of FAF above RDH datum (ft)</div>
+            <div class="v auto">${c.hgt.toFixed(3)}</div>
+            <div class="c">FAF altitude − THR elevation − operative RDH.</div></div>
+          <div class="row"><div class="k">FAF track length from THR (m)</div>
+            <div class="v auto">${c.fafM.toFixed(3)}</div>
+            <div class="c">Height above the RDH datum ÷ tan(glide path).</div></div>
+          <div class="row"><div class="k">FAF track length (NM, unrounded)</div>
+            <div class="v auto">${c.fafNM.toFixed(4)}</div><div class="c"></div></div>
+          <div class="row"><div class="k">FAF — rounded for chart (NM)</div>
+            <div class="v auto"><b>${c.fafChart.toFixed(1)}</b></div>
+            <div class="c">Rounded UP to 0.1 NM to match your worked example — NB PANS-OPS App C para 3 says distances are rounded TO the nearest 0.1 NM.</div></div>
+        </div></div>
+      </div>
+      <div class="card full">
+        <div class="hd">FAP — distance from THR<span class="right">H = h + ${OAS_FTNM}·D·tanθ + ${OAS_CURV_K}·D² (earth curvature)</span></div>
+        <div class="bd"><div class="kv" style="margin-bottom:0">
+          <div class="row"><div class="k">tan θ</div>
+            <div class="v auto">${c.tanTh.toFixed(9)}</div>
+            <div class="c">At the actual glide path angle ${r.vpa}°.</div></div>
+          <div class="row"><div class="k">x · earth curvature</div>
+            <div class="v auto">${c.x}</div><div class="c">PANS-OPS Pt II S1 Ch1 App C constant.</div></div>
+          <div class="row"><div class="k">y = ${OAS_FTNM} · tan θ</div>
+            <div class="v auto">${c.y.toFixed(4)}</div><div class="c"></div></div>
+          <div class="row"><div class="k">z = ${RDH_STD} − (FAF alt − THR elev)</div>
+            <div class="v auto">${c.z.toFixed(3)}</div>
+            <div class="c">h = ${RDH_STD} ft (standard RDH) in the App C formula.</div></div>
+          <div class="row"><div class="k">D (NM)</div>
+            <div class="v auto">${c.Dnm.toFixed(6)}</div>
+            <div class="c">Positive root of x·D² + y·D + z = 0.</div></div>
+          <div class="row"><div class="k">D (ft)</div>
+            <div class="v auto">${c.Dft.toFixed(2)}</div><div class="c">× ${OAS_FTNM} (App C formula constant).</div></div>
+          <div class="row"><div class="k">RDH adjustment ΔD (ft)</div>
+            <div class="v auto">${c.dD.toFixed(3)}</div>
+            <div class="c">${RDH_ADJ_K} × ${OAS_FTNM} × (${RDH_STD} − operative RDH) × cot θ — cot at the ACTUAL angle per App C.</div></div>
+          <div class="row"><div class="k">FAP distance (ft)</div>
+            <div class="v auto">${c.fapFt.toFixed(2)}</div><div class="c">D + ΔD.</div></div>
+          <div class="row"><div class="k">FAP distance (m)</div>
+            <div class="v auto">${c.fapM.toFixed(3)}</div><div class="c"></div></div>
+          <div class="row"><div class="k">FAP distance (NM)</div>
+            <div class="v auto"><b>${c.fapNM.toFixed(4)}</b></div><div class="c"></div></div>
+        </div></div>
+      </div>`;})()}
+    </div>`;
+  } else {
+    body=`<div class="card"><div class="bd">
+      <p class="note" style="margin:0">${esc(procLabel)} — <b>${esc(segLabel)}</b>: configuration and calculations to follow.
+      This workspace is where they will live, so nothing else has to move when they arrive.</p>
+    </div></div>`;
+  }
+
+  return `
+  <div class="ws-head">
+    <span class="rw" style="font-size:26px">RWY ${esc(r.key)} · ${esc(procLabel)}</span>
+    <span class="pill ok">${esc(r.catsOn.length?("CAT "+r.catsOn.join(" ")):"no categories")}</span>
+    <span style="margin-left:auto"><button class="ghost" id="back-rwy">← Runway ${esc(r.key)}</button></span>
+  </div>
+  <div class="seg-tabs">
+    ${segs.map(([s,label])=>`<button class="${s===seg?"on":""}" data-seg="${s}">${esc(label)}</button>`).join("")}
+  </div>
+  ${body}`;
+}
+/* ---------- ILS missed approach (TNA) view ---------- */
+function getMaView(r){
+  const saved=r.ic.ma||{};
+  const ma=JSON.parse(JSON.stringify(DEFAULT_MA));
+  ma.type=saved.type||ma.type;
+  ma.temp=saved.temp??ma.temp; ma.tailwind=saved.tailwind??ma.tailwind;
+  ma.macgs=saved.macgs||{}; ma.speeds=saved.speeds||{};
+  ma.designs={C1:{on:true,oca:{},hl:{},...JSON.parse(JSON.stringify(saved.designs?.C1||{}))},
+              C2:{on:false,oca:{},hl:{},...JSON.parse(JSON.stringify(saved.designs?.C2||{}))}};
+  for(const k of ["C1","C2"]){
+    ma.designs[k].oca=ma.designs[k].oca||{}; ma.designs[k].hl=ma.designs[k].hl||{};
+    migrateOca(ma.designs[k]);
+  }
+  ma.turns=(saved.turns&&saved.turns.length)?saved.turns:[{alt:""}];
+  return ma;
+}
+function viewIlsMA(r){
+  const ma=getMaView(r);
+  const cats=r.catsOn;
+  const designMeta=[["C1","CAT I"],["C2","CAT II"]];
+  if(!cats.length) return `<div class="card"><div class="bd"><p class="note" style="margin:0">
+    Select the aircraft categories on the runway page first — the missed approach is calculated per category.</p></div></div>`;
+
+  const calc={C1:tnaCalc(r.thr.elevFt,r.vpa,ma,"C1",cats),
+              C2:tnaCalc(r.thr.elevFt,r.vpa,ma,"C2",cats)};
+  // governing values per gradient — the SINGLE most conservative value across ALL
+  // categories and both designs (one construction protects every category):
+  // lowest SOC altitude · earliest SOC from THR · greatest THR→turn distance
+  const gov={soc:{},socThr:{},dist:{}};
+  for(const[k]of designMeta){const c=calc[k];if(!c||c.noVpa||c.missing||!c.byGrad)continue;
+    c.byGrad.forEach(bg=>bg.perCat.forEach(pc=>{
+      if(pc.missing)return;
+      const upd=(m,val,better)=>{
+        if(val==null)return;
+        const g0=gov[m][bg.gk];
+        if(!g0||better(val,g0.val)) gov[m][bg.gk]={val,design:k,cat:pc.cat};
+      };
+      upd("soc",pc.socAlt,(a,b)=>a<b);
+      upd("socThr",pc.socThr,(a,b)=>a>b);   // earliest = max (negative is beyond the THR)
+      upd("dist",pc.dThr,(a,b)=>a>b);
+    }));}
+  const isGov=(m,cat,gk,design,val)=>{
+    if(val==null)return false;
+    const g0=gov[m][gk];
+    return !!g0&&g0.design===design&&g0.cat===cat&&Math.abs(g0.val-val)<1e-9;};
+
+  const noteCell=t=>`<td class="t" style="font-family:var(--sans);color:var(--muted);font-size:11.5px;white-space:normal;min-width:190px">${t}</td>`;
+  const designCard=(k,label)=>{
+    const dz=ma.designs[k], c=calc[k];
+    const head=`<div class="hd">${label}
+      <span class="right"><label style="cursor:pointer"><input type="checkbox" class="ma-dz" data-dz="${k}"${dz.on?" checked":""}> designed</label></span></div>`;
+    if(!dz.on) return `<div class="card full">${head}</div>`;
+    if(c&&c.noVpa) return `<div class="card full">${head}<div class="bd"><p class="note" style="margin:0">
+      Enter the glide path angle on the <b>Final approach</b> tab first — the SOC position sits on the nominal glide path.</p></div></div>`;
+    const th=cats.map(cat=>`<th>CAT ${cat}</th>`).join("");
+    const hlRow=`<tr><td class="t">Height loss (m)</td>
+      ${cats.map(cat=>`<td class="num auto">${HL_DEFAULT[k][cat]}</td>`).join("")}
+      ${noteCell(k==="C1"?"Doc 8168 pressure-altimeter values — fixed.":"Doc 8168 radio-altimeter values (CAT II) — fixed.")}</tr>`;
+    const gradBlocks=c.byGrad.map((bg,bi)=>{
+      const missing=bg.perCat.some(pc=>pc.missing);
+      return `
+      <tr><td colspan="${cats.length+2}" style="background:var(--panel-2);color:var(--head);font-weight:700;font-size:11px;letter-spacing:.1em;font-family:var(--sans)">${bg.g.toFixed(1)}% MACG${missing?' — enter the OCA set for this gradient':''}</td></tr>
+      <tr><td class="t">OCA (ft)</td>
+        ${bg.perCat.map(pc=>`<td class="num in"><input type="number" step="1" class="cell-in ma-cell" data-path="designs.${k}.oca.${bg.gk}.${pc.cat}" value="${esc(dz.oca?.[bg.gk]?.[pc.cat]??"")}" style="width:80px"></td>`).join("")}
+        ${noteCell(bi===0?"Per category and per gradient — a steeper MACG changes the OAS, so each gradient has its own OCA set.":"")}</tr>
+      <tr><td class="t">SOC altitude (ft)</td>
+        ${bg.perCat.map(pc=>`<td class="num auto ${isGov("soc",pc.cat,bg.gk,k,pc.missing?null:pc.socAlt)?"gov":""}">${pc.missing?"—":f2(pc.socAlt)}</td>`).join("")}
+        ${noteCell(bi===0?`OCA − HL × ${MA_M_FT}.`:"")}</tr>
+      <tr><td class="t">SOC from THR (m)</td>
+        ${bg.perCat.map(pc=>`<td class="num auto ${isGov("socThr",pc.cat,bg.gk,k,pc.missing?null:pc.socThr)?"gov":""}">${pc.missing?"—":f2(pc.socThr)}</td>`).join("")}
+        ${noteCell(bi===0?"−900 + (((OCA − THR)×0.3048) − HL) ÷ tan(VPA). Negative = beyond the threshold.":"")}</tr>
+      <tr><td class="t">SOC → turn alt (m)</td>
+        ${bg.perCat.map(pc=>`<td class="num auto">${pc.dSoc!=null?pc.dSoc.toFixed(3):"—"}</td>`).join("")}
+        ${noteCell(bi===0?"(turn alt − SOC alt) × 0.3048 ÷ MACG.":"")}</tr>
+      <tr><td class="t">THR → turn alt (m)</td>
+        ${bg.perCat.map(pc=>
+          `<td class="num auto ${isGov("dist",pc.cat,bg.gk,k,pc.dThr)?"gov":""}">${pc.dThr!=null?`<b>${pc.dThr.toFixed(3)}</b>`:"—"}</td>`).join("")}
+        ${noteCell(bi===0?"Orange = the single most conservative value across all categories and designs — lowest SOC altitude, earliest SOC, greatest distance. One construction protects every category.":"")}</tr>`;
+    }).join("");
+    return `<div class="card full">${head}
+      <div class="bd"><div class="tbl-wrap auto-h"><table>
+        <thead><tr><th></th>${th}<th>Notes</th></tr></thead>
+        <tbody>${hlRow}${gradBlocks}</tbody></table></div>
+      </div></div>`;
+  };
+
+  // first-turn TAS & c (design- and gradient-independent — same altitude, same IAS)
+  const anyCalc=calc.C1&&calc.C1.catParams?calc.C1:(calc.C2&&calc.C2.catParams?calc.C2:null);
+  const t1=safeNum(ma.turns[0]&&ma.turns[0].alt);
+  const tasCard=(t1!=null&&anyCalc)?`
+    <div class="card full">
+      <div class="hd">Speeds & c at the first turn (${t1} ft)<span class="right">temp ${esc(ma.temp)}° · tail wind ${esc(ma.tailwind)} kt</span></div>
+      <div class="bd"><div class="tbl-wrap auto-h"><table>
+        <thead><tr><th></th>${cats.map(c2=>`<th>CAT ${c2}</th>`).join("")}<th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="t">IAS (kt) — override</td>${cats.map(cat=>`<td class="num in"><input type="number" step="1" class="cell-in ma-speedcell" data-cat="${cat}" value="${esc(ma.speeds[cat]??MA_FINAL_IAS[cat])}" style="width:70px"></td>`).join("")}
+              ${noteCell(`PANS-OPS Table I-4-1-1 defaults: A ${MA_FINAL_IAS.A} · B ${MA_FINAL_IAS.B} · C ${MA_FINAL_IAS.C} · D ${MA_FINAL_IAS.D}. Overtype to limit (e.g. CAT D restricted to 250).`)}</tr>
+          <tr><td class="t">TAS + tail wind (kt)</td>${anyCalc.catParams.map(pc=>`<td class="num auto">${pc.tas!=null?pc.tas.toFixed(3):"—"}</td>`).join("")}
+              ${noteCell("PANS-OPS TAS at the turn altitude, plus the tail wind.")}</tr>
+          <tr><td class="t">c — 3 s reaction (m)</td>${anyCalc.catParams.map(pc=>`<td class="num auto">${pc.c3!=null?pc.c3.toFixed(3):"—"}</td>`).join("")}<td></td></tr>
+          <tr><td class="t">c — 3 s transition (m)</td>${anyCalc.catParams.map(pc=>`<td class="num auto">${pc.c3!=null?pc.c3.toFixed(3):"—"}</td>`).join("")}<td></td></tr>
+          <tr><td class="t">c — total (m)</td>${anyCalc.catParams.map(pc=>`<td class="num auto"><b>${pc.cTot!=null?pc.cTot.toFixed(3):"—"}</b></td>`).join("")}<td></td></tr>
+        </tbody></table></div></div>
+    </div>`:"";
+
+  // continuation to later turns
+  const cont=tnaContinuation(ma,cats);
+  const contCard=cont.segs.length?`
+    <div class="card full">
+      <div class="hd">Later turns — climb between turn altitudes</div>
+      <div class="bd">
+        <div class="tbl-wrap auto-h" style="margin-bottom:12px"><table>
+          <thead><tr><th>Segment</th>${cont.grads.map(g=>`<th>${g.toFixed(1)}% — distance (m)</th>`).join("")}</tr></thead>
+          <tbody>${cont.segs.map(s=>`
+            <tr><td class="in">Turn ${s.n-1} (${s.from??"—"} ft) → Turn ${s.n} (${s.to??"—"} ft)</td>
+                ${s.perGrad.map(pg=>`<td class="num auto ${s.ok?"":"chk-bad"}">${pg.d!=null?pg.d.toFixed(3):"check alt"}</td>`).join("")}</tr>`).join("")}
+          </tbody></table></div>
+        <div class="tbl-wrap auto-h"><table>
+          <thead><tr><th>At turn</th><th></th>${cats.map(c2=>`<th>CAT ${c2}</th>`).join("")}</tr></thead>
+          <tbody>${cont.segs.flatMap(s=>[
+            `<tr><td class="in" rowspan="2">Turn ${s.n} @ ${s.to??"—"} ft</td><td class="t">TAS + tail wind (kt)</td>${s.params.map(p=>`<td class="num auto">${p.tas!=null?p.tas.toFixed(3):"—"}</td>`).join("")}</tr>`,
+            `<tr><td class="t">c — total (m)</td>${s.params.map(p=>`<td class="num auto">${p.cTot!=null?p.cTot.toFixed(3):"—"}</td>`).join("")}</tr>`]).join("")}
+          </tbody></table></div>
+      </div>
+    </div>`:"";
+
+  return `
+  <div class="hub">
+    <div class="card full">
+      <div class="hd">Missed approach type</div>
+      <div class="bd">
+        <div class="chip-row">
+          <label class="chip ${ma.type==="TNA"?"on":""}"><input type="radio" name="ma-type" class="ma-type" data-t="TNA"${ma.type==="TNA"?" checked":""}>Turn at Altitude (TNA)</label>
+          <label class="chip" style="opacity:.45"><input type="radio" name="ma-type" disabled>TNA within the Precision Segment — to follow</label>
+          <label class="chip" style="opacity:.45"><input type="radio" name="ma-type" disabled>Turn at Point — to follow</label>
+        </div>
+        <p class="note" style="margin-bottom:0">Per category: SOC altitude and position from the THR, then the climb distance to the
+          turn altitude at each design gradient. ${MACG_BASE}% is always designed; add gradients in 0.5% steps to 5% —
+          each gradient carries its own OCA set, since a steeper MACG changes the OAS.
+          A single construction of the missed approach uses the most conservative values (CAT I or CAT II) — highlighted orange.</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="hd">Gradients & turns</div>
+      <div class="bd">
+        <div class="cfg-k">Missed approach climb gradients</div>
+        <div class="chip-row">
+          <label class="chip on" style="cursor:default;opacity:.7"><input type="checkbox" checked disabled>${MACG_BASE}%</label>
+          ${MACG_OPTS.map(g=>`<label class="chip ${ma.macgs[g]?"on":""}"><input type="checkbox" class="ma-macg" data-g="${g}"${ma.macgs[g]?" checked":""}>${g}%</label>`).join("")}
+        </div>
+        <div class="cfg-k" style="margin-top:14px">Turn altitudes (ft AMSL, in sequence)</div>
+        <div class="kv compact" style="margin-bottom:8px">
+          ${ma.turns.map((t,i)=>`
+          <div class="row"><div class="k">Turn ${i+1}</div>
+            <div class="v in"><input type="number" step="1" class="ma-turn" data-i="${i}" value="${esc(t.alt)}"></div>
+            <div class="c">${ma.turns.length>1?`<a href="#" class="ma-delturn" data-i="${i}">remove</a>`:""}</div></div>`).join("")}
+        </div>
+        <button class="ghost" id="ma-addturn" style="padding:5px 14px">+ Add a turn</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="hd">Environment</div>
+      <div class="bd"><div class="kv compact" style="margin-bottom:0">
+        <div class="row"><div class="k">Temperature (Δ°C)</div>
+          <div class="v in"><input type="number" step="1" class="ma-env" data-path="temp" value="${esc(ma.temp)}"></div>
+          <div class="c">TAS formula VAR — worksheet uses 15.</div></div>
+        <div class="row"><div class="k">Tail wind (kt)</div>
+          <div class="v in"><input type="number" step="1" class="ma-env" data-path="tailwind" value="${esc(ma.tailwind)}"></div>
+          <div class="c">Added to TAS — worksheet uses 30 kt.</div></div>
+        <div class="row"><div class="k">VPA (°) — from Final approach</div>
+          <div class="v auto">${r.vpa!=null?r.vpa:"— enter on Final approach tab"}</div>
+          <div class="c">Used for the SOC position on the nominal glide path.</div></div>
+        <div class="row"><div class="k">THR elevation (ft) — surveyed</div>
+          <div class="v auto">${f3(r.thr.elevFt)}</div><div class="c"></div></div>
+      </div></div>
+    </div>
+    ${designCard("C1","CAT I")}
+    ${designCard("C2","CAT II")}
+    ${tasCard}
+    ${contCard}
+  </div>`;
+}
+function wireIlsMA(key){
+  const getMa=()=>{
+    const pc=ensureProcCfg(key,"ILS");
+    if(!pc.ma) pc.ma=JSON.parse(JSON.stringify(DEFAULT_MA));
+    pc.ma.designs=pc.ma.designs||{};
+    for(const k of ["C1","C2"]){
+      pc.ma.designs[k]=pc.ma.designs[k]||JSON.parse(JSON.stringify(DEFAULT_MA.designs[k]));
+      pc.ma.designs[k].oca=pc.ma.designs[k].oca||{};
+      pc.ma.designs[k].hl=pc.ma.designs[k].hl||{};
+      migrateOca(pc.ma.designs[k]);
+    }
+    if(!pc.ma.turns||!pc.ma.turns.length) pc.ma.turns=[{alt:""}];
+    pc.ma.macgs=pc.ma.macgs||{}; pc.ma.speeds=pc.ma.speeds||{};
+    return pc.ma;
+  };
+  const setPath=(o,path,val)=>{const ks=path.split(".");for(let i=0;i<ks.length-1;i++){o[ks[i]]=o[ks[i]]||{};o=o[ks[i]];}o[ks[ks.length-1]]=val;};
+  document.querySelectorAll(".ma-cell,.ma-env").forEach(inp=>inp.addEventListener("change",e=>{
+    setPath(getMa(),e.target.dataset.path,e.target.value); render();}));
+  document.querySelectorAll(".ma-dz").forEach(c=>c.addEventListener("change",e=>{
+    getMa().designs[e.target.dataset.dz].on=e.target.checked; render();}));
+  document.querySelectorAll(".ma-type").forEach(c=>c.addEventListener("change",e=>{
+    getMa().type=e.target.dataset.t; render();}));
+  document.querySelectorAll(".ma-macg").forEach(c=>c.addEventListener("change",e=>{
+    getMa().macgs[e.target.dataset.g]=e.target.checked; render();}));
+  document.querySelectorAll(".ma-turn").forEach(inp=>inp.addEventListener("change",e=>{
+    getMa().turns[+e.target.dataset.i].alt=e.target.value; render();}));
+  document.querySelectorAll(".ma-delturn").forEach(a=>a.addEventListener("click",e=>{
+    e.preventDefault(); getMa().turns.splice(+e.target.dataset.i,1); render();}));
+  const add=document.getElementById("ma-addturn");
+  if(add) add.addEventListener("click",()=>{getMa().turns.push({alt:""}); render();});
+  document.querySelectorAll(".ma-speedcell").forEach(inp=>inp.addEventListener("change",e=>{
+    getMa().speeds[e.target.dataset.cat]=e.target.value; render();}));
+}
+/* ---------- ILS advisory altitudes ---------- */
+/* From the Advisory_Altitudes worksheet, formula for formula:
+   exact alt (ft)       = ROUNDUP( ((D×1852)×tanθ + RDH_m) × 3.2808 + THR_ft, 0 )   with height above THR in brackets
+   for publication (ft) = same, ROUND to the nearest 10 ft
+   FPM                  = ROUND( (GS/60 × 6076) × tanθ, −1 )
+   Columns run from ceil(FAF distance NM) down toward the THR; the advisory
+   altitude is never published below the OCA.                                    */
+const ADV_FPM_SPEEDS=["160","140","120","100","80"];
+function advCalc(r,ma){
+  if(r.vpa==null||!(r.vpa>0)) return {need:"glide path angle (Final approach tab)"};
+  if(r.rdhOperative==null) return {need:"RDH (Final approach tab)"};
+  if(!r.finalCalc) return {need:"FAF procedure altitude (Final approach tab)"};
+  const tan=Math.tan(r.vpa*Math.PI/180);
+  const rdhM=r.rdhOperative*FT_M;
+  const thr=Math.round(r.thr.elevFt);          // worksheet uses the rounded value
+  const start=Math.ceil(r.finalCalc.fafNM-1e-9);
+  // OCA floor: highest 2.5% CAT I OCA across categories (one advisory column serves all)
+  let autoFloor=null;
+  const oca25=ma?.designs?.C1?.oca?.[gradKey(MACG_BASE)]||{};
+  for(const v of Object.values(oca25)){const n=safeNum(v); if(n!=null&&(autoFloor==null||n>autoFloor)) autoFloor=n;}
+  const cols=[];
+  for(let D=start;D>=1;D--){
+    const raw=((D*NM_M)*tan+rdhM)*MA_M_FT+thr;
+    const exact=Math.ceil(raw-1e-9), pub=Math.round(raw/10)*10;
+    cols.push({D,exact,exactH:exact-thr,pub,pubH:pub-thr});
+  }
+  return {tan,rdhM,thr,start,autoFloor,cols};
+}
+function viewIlsAdv(r,d){
+  const pcSaved=r.ic.adv||{};
+  const adv={published:pcSaved.published||{}, ocaFloor:pcSaved.ocaFloor??"",
+             speeds:(pcSaved.speeds&&pcSaved.speeds.length)?pcSaved.speeds:[...ADV_FPM_SPEEDS]};
+  const c=advCalc(r,r.ic.ma);
+  if(c.need) return `<div class="card"><div class="bd"><p class="note" style="margin:0">
+    Waiting for: <b>${esc(c.need)}</b>. The advisory altitude table starts at the first whole NM beyond the FAF.</p></div></div>`;
+  const floor=safeNum(adv.ocaFloor)??c.autoFloor;
+  const shown=c.cols;
+  const th=shown.map(col=>`<th style="text-align:center">${col.D}</th>`).join("");
+  const row=(label,cells,note)=>`<tr><td class="t">${label}</td>${cells}<td class="t" style="font-family:var(--sans);color:var(--muted);font-size:11.5px;white-space:normal;min-width:170px">${note||""}</td></tr>`;
+  const belowFloor=col=>floor!=null&&col.pub<floor;
+  const diffCell=col=>{
+    if(belowFloor(col)) return `<td class="num auto">—</td>`;
+    const p=safeNum(adv.published[col.D]);
+    if(p==null) return `<td class="num auto">N/A</td>`;
+    const diff=col.pub-p;
+    return `<td class="num auto ${diff!==0?"chk-bad":"chk-ok"}">${diff}</td>`;
+  };
+  const table=`
+  <div class="card full">
+    <div class="hd">Advisory altitudes<span class="right">from ${c.start} NM (FAF ${r.finalCalc.fafNM.toFixed(2)} NM) · floor OCA ${floor!=null?f2(floor)+" ft":"not set"}</span></div>
+    <div class="bd"><div class="tbl-wrap auto-h"><table>
+      <thead><tr><th>Distance from THR (NM)</th>${th}<th>Notes</th></tr></thead>
+      <tbody>
+        ${row("Gradient as published (°)",shown.map(()=>`<td class="num auto">${r.vpa}</td>`).join(""),"From the Final approach tab.")}
+        ${row("Gradient (%)",shown.map(()=>`<td class="num auto">${c.tan.toFixed(6)}</td>`).join(""),"tan(VPA).")}
+        ${row("RDH (ft)",shown.map(()=>`<td class="num auto">${f2(r.rdhOperative)}</td>`).join(""),"Operative RDH from the Final approach tab.")}
+        ${row("Threshold elevation (ft)",shown.map(()=>`<td class="num auto">${c.thr}</td>`).join(""),"Surveyed, rounded to 1 ft as the worksheet does.")}
+        ${row("Aerodrome elevation (ft)",shown.map(()=>`<td class="num auto">${d.operative!=null?Math.round(d.operative):"—"}</td>`).join(""),"Operative value — reference only.")}
+        ${row("Altitude above MSL (ft) — exact",shown.map(col=>`<td class="num auto">${col.exact}(${col.exactH})</td>`).join(""),"Rounded UP to 1 ft; height above THR in brackets.")}
+        ${row("Altitude (ft) — for publication",shown.map(col=>belowFloor(col)
+            ?`<td class="num auto chk-bad">below OCA</td>`
+            :`<td class="num auto"><b>${col.pub}(${col.pubH})</b></td>`).join(""),"Rounded to the nearest 10 ft. Never published below the OCA.")}
+        ${row("Published value (current chart)",shown.map(col=>belowFloor(col)
+            ?`<td class="num auto">—</td>`
+            :`<td class="num in"><input type="text" class="cell-in adv-pub" data-d="${col.D}" value="${esc(adv.published[col.D]??"")}" style="width:70px" placeholder="N/A"></td>`).join(""),"Type the currently charted value for comparison — leave blank for N/A.")}
+        ${row("Difference",shown.map(diffCell).join(""),"For publication − published.")}
+      </tbody></table></div>
+    </div>
+  </div>`;
+  const fpm=`
+  <div class="card">
+    <div class="hd">Feet-per-minute calculator<span class="right">gradient ${c.tan.toFixed(6)}</span></div>
+    <div class="bd"><div class="tbl-wrap auto-h"><table>
+      <thead><tr><th>Speed (kt GS)</th>${adv.speeds.map((s,i)=>`<th style="text-align:center"><input type="number" step="10" class="cell-in adv-spd" data-i="${i}" value="${esc(s)}" style="width:64px;background:var(--input-y)"></th>`).join("")}</tr></thead>
+      <tbody><tr><td class="t">Feet per minute</td>
+        ${adv.speeds.map(s=>{const gs=safeNum(s);
+          return `<td class="num auto">${gs!=null?Math.round((gs/60*OAS_FTNM)*c.tan/10)*10:"—"}</td>`;}).join("")}</tr></tbody>
+    </table></div>
+    <p class="note" style="margin:8px 0 0">FPM = (GS ÷ 60 × ${OAS_FTNM}) × gradient, rounded to 10.</p></div>
+  </div>`;
+  const floorCard=`
+  <div class="card">
+    <div class="hd">OCA floor</div>
+    <div class="bd"><div class="kv compact" style="margin-bottom:0">
+      <div class="row"><div class="k">Auto — highest 2.5% CAT I OCA</div>
+        <div class="v auto">${c.autoFloor!=null?f2(c.autoFloor):"— enter OCAs on the Missed approach tab"}</div>
+        <div class="c">One advisory column serves all categories, so the highest OCA governs.</div></div>
+      <div class="row"><div class="k">Override (ft)</div>
+        <div class="v in"><input type="number" step="1" id="adv-floor" value="${esc(adv.ocaFloor)}"></div>
+        <div class="c">Leave blank to use the auto value.</div></div>
+    </div></div>
+  </div>`;
+  return `<div class="hub">${table}${floorCard}${fpm}</div>`;
+}
+function wireIlsAdv(key){
+  const getAdv=()=>{
+    const pc=ensureProcCfg(key,"ILS");
+    if(!pc.adv) pc.adv={published:{},ocaFloor:"",speeds:[...ADV_FPM_SPEEDS]};
+    pc.adv.published=pc.adv.published||{};
+    if(!pc.adv.speeds||!pc.adv.speeds.length) pc.adv.speeds=[...ADV_FPM_SPEEDS];
+    return pc.adv;
+  };
+  document.querySelectorAll(".adv-pub").forEach(inp=>inp.addEventListener("change",e=>{
+    getAdv().published[e.target.dataset.d]=e.target.value; render();}));
+  const fl=document.getElementById("adv-floor");
+  if(fl) fl.addEventListener("change",e=>{getAdv().ocaFloor=e.target.value; render();});
+  document.querySelectorAll(".adv-spd").forEach(inp=>inp.addEventListener("change",e=>{
+    getAdv().speeds[+e.target.dataset.i]=e.target.value; render();}));
+}
+function wireProc(){
+  const {rwy:key,proc:procId}=S.view;
+  document.getElementById("back-rwy").addEventListener("click",()=>go("rwy",key));
+  document.querySelectorAll(".seg-tabs [data-seg]").forEach(b=>b.addEventListener("click",()=>
+    go("proc",key,procId,b.dataset.seg)));
+  if(procId==="ILS"&&S.view.seg==="missed") wireIlsMA(key);
+  if(procId==="ILS"&&S.view.seg==="adv") wireIlsAdv(key);
+  document.querySelectorAll(".proc-in").forEach(inp=>inp.addEventListener("change",e=>{
+    ensureProcCfg(key,procId)[e.target.dataset.f]=e.target.value; render();}));
+  const src=document.getElementById("rdh-src");
+  if(src) src.addEventListener("change",e=>{ensureProcCfg(key,procId).rdhSource=e.target.value;render();});
+  document.querySelectorAll(".llz-in").forEach(inp=>inp.addEventListener("change",e=>{
+    S.manualLlz[key]=S.manualLlz[key]||{ident:"",e:"",n:""};
+    S.manualLlz[key][e.target.dataset.f]=e.target.value;
+    render();
+  }));
+}
+
+/* ---------- survey points ---------- */
+function viewPoints(d){
+  const filter=(S._ptFilter||"").toUpperCase();
+  let shown=0;
+  const rows=d.pts.map(p=>{
+    if(filter && !(p.code.includes(filter)||String(p.id).toUpperCase().includes(filter)||String(p.assoc).toUpperCase().includes(filter))) return "";
+    shown++;
+    return `<tr>
+      <td class="in">${esc(p.id)}</td><td class="in">${esc(p.code)}</td><td class="in">${esc(p.assoc)}</td>
+      <td class="num in">${f3(p.e)}</td><td class="num in">${f3(p.n)}</td>
+      <td class="num in">${f3(p.elevM)}</td><td class="num in">${f3(p.elevFt)}</td>
+      <td class="t">${esc(p.ident)}</td>
+      <td class="in">${esc(p.sdate)}</td></tr>`;}).join("");
+  return `
+  <h2>Survey points — the imported survey, as supplied</h2>
+  <p class="note">Both elevations are <b>as surveyed</b> (CAP1732 fields 17 and 18) — the official point of truth.
+    Nothing here is converted, derived or decided; which points count toward the aerodrome elevation is set on the
+    <b>survey codes</b> page under Aerodrome elevation. The per-record survey date can differ between runways within one file.</p>
+  <div class="filter-row">
+    <label>Filter <input type="text" id="pt-filter" value="${esc(S._ptFilter||"")}" placeholder="code / ID / runway"></label>
+    <span style="color:var(--muted)">${shown} of ${d.total} rows shown</span>
+    <button class="ghost" id="btn-csv" style="margin-left:auto">Download points (CSV)</button>
+  </div>
+  <div class="tbl-wrap">
+  <table><thead><tr>
+    <th>Point_ID</th><th>Code</th><th>Runway_ID</th><th>Easting/X</th><th>Northing/Y</th>
+    <th>Elev_m</th><th>Elev_ft</th><th>Ident</th><th>Survey_Date</th>
+  </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function wirePoints(){
+  document.getElementById("pt-filter").addEventListener("input",e=>{S._ptFilter=e.target.value;render();});
+  document.getElementById("btn-csv").addEventListener("click",exportCsv);
+}
+
+/* ---------- survey codes ---------- */
+function viewCodes(d){
+  const counts=new Map();
+  for(const p of d.pts) counts.set(p.code,(counts.get(p.code)||0)+1);
+  const unknown=[...counts.keys()].filter(c=>!CODES.has(c));
+  const seenKnown=[...counts.keys()].filter(c=>CODES.has(c)).sort();
+  const makeRow=(code,known)=>{
+    const base=CODES.get(code);
+    const inc=S.codeOverrides[code] ?? (base?base.include:"?");
+    const n=counts.get(code)||0;
+    return `<tr>
+      <td class="${known?"":"chk-bad"}">${esc(code)}</td>
+      <td class="t">${esc(base?base.canon:"")}</td>
+      <td class="in"><select class="inc-sel" data-code="${esc(code)}">
+        ${!known&&!(code in S.codeOverrides)?'<option selected>?</option>':""}
+        <option${inc==="Y"?" selected":""}>Y</option>
+        <option${inc==="N"?" selected":""}>N</option></select></td>
+      <td class="num auto">${n||""}</td>
+      <td class="auto">${esc(base?.llz||"")}</td>
+      <td class="t" style="white-space:normal;max-width:520px">${esc(base?base.note:(known?"":"Not in the code table — decide whether this point counts as part of the runway."))}</td>
+    </tr>`;};
+  let html=`
+  <h2>Survey codes — what counts as runway</h2>
+  <p class="note">Include = <b>Y</b> means the point counts as <i>part of the runway</i> for the CAA aerodrome-elevation
+    method. Changes recalculate everything immediately. Notable decisions carried over from the workbook:
+    <b>ARP = N</b> (not a runway-surface value), <b>TODA_END = Y</b> (at your request — beyond the pavement where a clearway exists).</p>`;
+  if(unknown.length){
+    html+=`<div class="verdict bad"><div class="word">${unknown.length} UNRECOGNISED CODE(S)</div>
+      <div class="detail">These points are excluded from the aerodrome-elevation max until you decide Y/N.</div></div>
+      <div class="tbl-wrap auto-h"><table>
+      <thead><tr><th>Code (as in survey)</th><th>Canonical</th><th>Include?</th><th>Seen (n)</th><th>LLZ role</th><th>Notes</th></tr></thead>
+      <tbody>${unknown.map(c=>makeRow(c,false)).join("")}</tbody></table></div>`;
+  }
+  html+=`<h2 style="margin-top:22px">Codes in this survey</h2>
+    <div class="tbl-wrap"><table>
+    <thead><tr><th>Code (as in survey)</th><th>Canonical</th><th>Include?</th><th>Seen (n)</th><th>LLZ role</th><th>Notes</th></tr></thead>
+    <tbody>${seenKnown.map(c=>makeRow(c,true)).join("")}</tbody></table></div>`;
+  return html;
+}
+function wireCodes(){
+  document.querySelectorAll(".inc-sel").forEach(s=>s.addEventListener("change",e=>{
+    if(e.target.value==="?") return;
+    S.codeOverrides[e.target.dataset.code]=e.target.value;
+    render();
+  }));
+}
+
+/* ============================ files in/out =========================== */
+function handleSurveyFile(file){
+  const errEl=document.getElementById("import-err");
+  if(errEl) errEl.innerHTML="";
+  const isCsv=/\.csv$/i.test(file.name);
+  const reader=new FileReader();
+  reader.onerror=()=>{ if(errEl) errEl.innerHTML=`<div class="err-log">Could not read the file.</div>`; };
+  reader.onload=()=>{
+    try{
+      const rows=isCsv?parseCsvText(reader.result):parseXlsxBuffer(new Uint8Array(reader.result));
+      loadSurvey(rows,file.name);
+      go("hub");
+    }catch(err){
+      const el=document.getElementById("import-err");
+      if(el) el.innerHTML=`<div class="err-log">Import failed — ${esc(err.message)}\n\nNothing was changed. Re-select a known-good CAP1732 file.</div>`;
+    }
+  };
+  if(isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+}
+function download(name,data,mime){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([data],{type:mime}));
+  a.download=name; a.click(); URL.revokeObjectURL(a.href);
+}
+function exportCsv(){
+  const d=compute(); if(!d) return;
+  const head="Point_ID,Code,Runway_ID,Easting,Northing,Elev_m,Elev_ft,Ident,Survey_Date";
+  const lines=d.pts.map(p=>[p.id,p.code,p.assoc,p.e,p.n,p.elevM,p.elevFt,p.ident,p.sdate].map(v=>String(v??"")).join(","));
+  download(`${S.icao}_survey_points.csv`,[head,...lines].join("\n"),"text/csv");
+}
+/* --- project payload (shared by Save, Open and autosave) --- */
+function projectPayload(){
+  return {tool:"IFP Design Calculator project", version:1, saved:new Date().toISOString(),
+    icao:S.icao, fileName:S.fileName, company:S.company, procDate:S.procDate,
+    vertRef:S.vertRef, points:S.points,
+    decisions:{tolMatch:S.tolMatch, manualAEP:S.manualAEP,
+               codeOverrides:S.codeOverrides, rwyCfg:S.rwyCfg, manualLlz:S.manualLlz}};
+}
+function applyProject(p){
+  if(!p||!String(p.tool||"").startsWith("IFP Design")||!Array.isArray(p.points))
+    throw new Error("Not an IFP Design Calculator project file.");
+  S.loaded=true; S.icao=p.icao||""; S.fileName=p.fileName||"";
+  S.company=p.company||""; S.procDate=p.procDate||""; S.vertRef=p.vertRef||"";
+  S.points=p.points;
+  const dcs=p.decisions||{};
+  S.tolMatch=dcs.tolMatch??0.005; S.manualAEP=dcs.manualAEP??"";
+  S.codeOverrides=dcs.codeOverrides||{}; S.manualLlz=dcs.manualLlz||{};
+  S.rwyCfg=dcs.rwyCfg||{};
+  if(!dcs.rwyCfg && dcs.ilsDecl){        // migrate older project files
+    for(const [k,v] of Object.entries(dcs.ilsDecl)) if(v==="YES")
+      S.rwyCfg[k]={cats:{},procs:{ILS:true},proc:{}};
+  }
+}
+function saveProject(){
+  if(!S.loaded) return;
+  download(`${S.icao}_ifp_project.json`, JSON.stringify(projectPayload(),null,1), "application/json");
+}
+function openProject(file){
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{ applyProject(JSON.parse(reader.result)); go("hub"); }
+    catch(err){ alert("Could not open the project: "+err.message); }
+  };
+  reader.readAsText(file);
+}
+/* --- autosave: every change lands in this browser's local storage --- */
+const AUTOSAVE_KEY="ifp_design_tool_autosave_v1";
+function autosave(){
+  if(!S.loaded) return;
+  try{ localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(projectPayload())); }catch(e){/* storage unavailable — Save project still works */}
+}
+function readAutosave(){
+  try{ const t=localStorage.getItem(AUTOSAVE_KEY); return t?JSON.parse(t):null; }catch(e){ return null; }
+}
+function discardAutosave(){ try{ localStorage.removeItem(AUTOSAVE_KEY); }catch(e){} }
+
+/* ====================== CAA workbook export ========================== */
+/* Generates the presentation workbook fresh from the live values.
+   Colour convention matches the original tool:
+     navy #1F3864 header (white text) · yellow #FFF2CC surveyed/entered
+     grey #D9D9D9 calculated · red text = a check needing attention        */
+const XC={ NAVY:"FF1F3864", YELLOW:"FFFFF2CC", GREY:"FFD9D9D9", WHITE:"FFFFFFFF",
+           RED:"FFB42318", GREEN:"FF1E7B44", AMBER:"FF9A6700", BORDER:"FFBFBFBF" };
+function xFill(argb){ return {type:"pattern",pattern:"solid",fgColor:{argb}}; }
+function xBorder(){ const s={style:"thin",color:{argb:XC.BORDER}}; return {top:s,left:s,bottom:s,right:s}; }
+function styleHeaderRow(row){
+  row.eachCell(c=>{ c.fill=xFill(XC.NAVY); c.font={color:{argb:XC.WHITE},bold:true,size:9,name:"Arial"};
+                    c.border=xBorder(); c.alignment={vertical:"middle"}; });
+}
+function dataCell(c,kind,numFmt){
+  c.border=xBorder(); c.font={size:9,name:"Arial"};
+  if(kind==="in") c.fill=xFill(XC.YELLOW);
+  if(kind==="auto") c.fill=xFill(XC.GREY);
+  if(numFmt) c.numFmt=numFmt;
+}
+function titleCell(ws,ref,text){
+  const c=ws.getCell(ref); c.value=text;
+  c.font={bold:true,size:11,name:"Arial",color:{argb:XC.NAVY}};
+}
+function sectionCell(ws,ref,text){
+  const c=ws.getCell(ref); c.value=text;
+  c.fill=xFill(XC.NAVY); c.font={color:{argb:XC.WHITE},bold:true,size:9,name:"Arial"};
+}
+async function exportCaaWorkbook(){
+  const d=compute(); if(!d) return;
+  const wb=new ExcelJS.Workbook();
+  wb.creator="IFP Design Calculator"; wb.created=new Date();
+  const genStamp=new Date().toISOString().slice(0,10);
+
+  /* ---- Summary ---- */
+  {
+    const ws=wb.addWorksheet("Summary");
+    ws.columns=[{width:36},{width:26},{width:60}];
+    titleCell(ws,"A1",`${S.icao} — IFP DESIGN · SURVEY-DERIVED VALUES`);
+    ws.getCell("A2").value=`Generated ${genStamp} by the IFP Design Calculator. Elevations are ORTHOMETRIC (AMSL), used AS SURVEYED (CAP1732 fields 17 & 18).`;
+    ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
+    const rows=[
+      ["Aerodrome",S.icao],
+      ["Survey originator",S.company||"—"],
+      ["Survey processed",S.procDate||"—"],
+      ["Vertical reference",S.vertRef||"—"],
+      ["Source file",S.fileName],
+      ["Survey points (total / included)",`${d.total} / ${d.included}`],
+      ["Aerodrome elevation — surveyor effective (ft)",d.effective],
+      ["Aerodrome elevation — computed from survey (ft)",d.maxP?d.maxP.inclFt:null],
+      ["Driving point",d.maxP?`${d.maxP.id} · ${d.maxP.code} · ${d.maxP.assoc||"—"}`:"—"],
+      ["Difference computed − surveyor (ft)",d.diff],
+      ["Match tolerance (ft)",S.tolMatch],
+      ["STATUS",d.status],
+      ["OPERATIVE AERODROME ELEVATION (ft) — most conservative",d.operative],
+      ["Operative value source",d.operativeSrc],
+    ];
+    let r=4;
+    for(const [k,v] of rows){
+      const ck=ws.getCell(r,1), cv=ws.getCell(r,2);
+      ck.value=k; dataCell(ck,null);
+      cv.value=v; dataCell(cv, typeof v==="number"?"auto":"auto",
+                  typeof v==="number"?"0.000":null);
+      if(k==="STATUS"){ cv.font={size:9,name:"Arial",bold:true,
+        color:{argb:d.statusClass==="ok"?XC.GREEN:XC.AMBER}}; }
+      if(k.startsWith("OPERATIVE")){ cv.font={size:9,name:"Arial",bold:true}; }
+      r++;
+    }
+  }
+
+  /* ---- Aerodrome_Elevation ---- */
+  {
+    const ws=wb.addWorksheet("Aerodrome_Elevation");
+    ws.columns=[{width:44},{width:18},{width:16},{width:14}];
+    titleCell(ws,"A1","AERODROME ELEVATION — CHECK OF THE SURVEYOR'S VALUE");
+    ws.getCell("A2").value="Doc 8168: 'the elevation of the highest point of the landing area'. Check: the highest point on any part of the runway, computed from the included survey points, compared with the surveyor's AEP. The more conservative (higher) value is carried forward. AEP excluded from the computed max so the comparison stays independent.";
+    ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
+    sectionCell(ws,"A4","A · SURVEYOR'S DECLARED VALUE");
+    const put=(r,k,v,kind,fmt)=>{const ck=ws.getCell(r,1),cv=ws.getCell(r,2);
+      ck.value=k;dataCell(ck,null);cv.value=v;dataCell(cv,kind,fmt);return cv;};
+    put(5,"AEP from survey file (ft)",d.aepFile,"auto","0.000");
+    put(6,"From surveyor's report (ft) — manual entry",d.manual,"in","0.000");
+    put(7,"Surveyor's value — EFFECTIVE (ft)",d.effective,"auto","0.000").font={bold:true,size:9,name:"Arial"};
+    sectionCell(ws,"A9","B · COMPUTED FROM SURVEY (highest point on any part of the runway)");
+    put(10,"Max elevation, included points (ft)",d.maxP?d.maxP.inclFt:null,"auto","0.000").font={bold:true,size:9,name:"Arial"};
+    put(11,"Driving point — ID",d.maxP?d.maxP.id:"—","auto");
+    put(12,"Driving point — code",d.maxP?d.maxP.code:"—","auto");
+    put(13,"Driving point — runway",d.maxP?(d.maxP.assoc||"—"):"—","auto");
+    put(14,"Points included / total",`${d.included} / ${d.total}`,"auto");
+    put(15,"Unrecognised codes",d.unk.size,"auto");
+    sectionCell(ws,"A17","C · COMPARISON");
+    put(18,"Difference computed − surveyor (ft)",d.diff,"auto","0.000");
+    put(19,"Match tolerance (ft)",S.tolMatch,"in","0.000");
+    const st=put(20,"STATUS",d.status,"auto");
+    st.font={bold:true,size:9,name:"Arial",color:{argb:d.statusClass==="ok"?XC.GREEN:XC.AMBER}};
+    sectionCell(ws,"A22","D · OPERATIVE AERODROME ELEVATION — MOST CONSERVATIVE VALUE");
+    put(23,"OPERATIVE AERODROME ELEVATION (ft)",d.operative,"auto","0.000").font={bold:true,size:9,name:"Arial"};
+    put(24,"Source",d.operativeSrc,"auto");
+    put(25,"Driving point surveyed metres (field 17)",d.maxP?d.maxP.elevM:null,"auto","0.000");
+    sectionCell(ws,"A27","E · PER-RUNWAY BREAKDOWN (included points only)");
+    const hd=ws.getRow(28); hd.values=["Runway","Max elev (ft)","Driving code","Point ID"];
+    styleHeaderRow(hd);
+    let r=29;
+    for(const rw of d.runways){
+      const vals=[rw.key, rw.rwyMax?rw.rwyMax.inclFt:null, rw.rwyMax?rw.rwyMax.code:"—", rw.rwyMax?rw.rwyMax.id:"—"];
+      vals.forEach((v,i)=>{const c=ws.getCell(r,i+1);c.value=v;dataCell(c,"auto",i===1?"0.000":null);});
+      r++;
+    }
+  }
+
+  /* ---- Runways ---- */
+  {
+    const ws=wb.addWorksheet("Runways");
+    titleCell(ws,"A1","RUNWAYS — PER-RUNWAY MASTER (SURVEY-DERIVED)");
+    ws.getCell("A2").value="Elevations as surveyed (CAP1732 fields 17 & 18). ILS? is the designer's declaration. Only the localizer ANTENNA is used for THR→LLZ; monitor kit excluded.";
+    ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
+    const cols=["Runway_ID","THR_Elev_m","THR_Elev_ft","THR_Easting","THR_Northing",
+                "Categories","Procedures","LLZ_ident","LLZ_Easting","LLZ_Northing","THR_LLZ_m","LLZ_check","Survey_Ref"];
+    ws.columns=cols.map((c,i)=>({width:i===12?38:(i===6?16:13)}));
+    const hd=ws.getRow(4); hd.values=cols; styleHeaderRow(hd);
+    let r=5;
+    for(const rw of d.runways){
+      const vals=[rw.key,rw.thr.elevM,rw.thr.elevFt,rw.thr.e,rw.thr.n,
+                  rw.catsOn.join(" ")||"—",rw.procsOn.join(", ")||"—",
+                  rw.llzId||"",rw.llzE,rw.llzN,rw.dist,rw.llzCheck,rw.ref];
+      const kinds=["in","in","in","in","in","in","in","in","in","in","auto","auto","auto"];
+      const fmts=[null,"0.000","0.000","0.000","0.000",null,null,null,"0.000","0.000","0.00",null,null];
+      vals.forEach((v,i)=>{const c=ws.getCell(r,i+1);c.value=v;dataCell(c,kinds[i],fmts[i]);});
+      if(rw.llzCheck!=="ok"&&rw.llzCheck!=="no ILS/LOC")
+        ws.getCell(r,12).font={size:9,name:"Arial",bold:true,color:{argb:XC.AMBER}};
+      r++;
+    }
+  }
+
+  /* ---- ILS_Config (only when at least one runway has ILS declared) ---- */
+  if(d.runways.some(rw=>rw.ilsOn)){
+    const ws=wb.addWorksheet("ILS_Config");
+    titleCell(ws,"A1","ILS CONFIGURATION — RDH & GLIDE PATH, PER RUNWAY");
+    ws.getCell("A2").value=`Standard RDH ${RDH_STD} ft. Glide path: minimum ${VPA_MIN}° · optimum ${VPA_OPT}° · maximum ${VPA_MAX}°. RDH source is the designer's declaration of which value governs.`;
+    ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
+    const cols=["Runway_ID","RDH_charted_ft","RDH_calibration_ft","Cal_report_ref","RDH_source",
+                "RDH_operative_ft","Diff_cal_minus_charted_ft","vs_standard_50ft","Glide_path_deg","Angle_check","FAF_alt_ft"];
+    ws.columns=cols.map((c,i)=>({width:i===3?22:14}));
+    const hd=ws.getRow(4); hd.values=cols; styleHeaderRow(hd);
+    let r=5;
+    for(const rw of d.runways.filter(x=>x.ilsOn)){
+      const vals=[rw.key,rw.rdhCharted,rw.rdhCal,rw.ic.calRef||"",rw.rdhSource,
+                  rw.rdhOperative,rw.rdhDiff,
+                  rw.rdhOperative!=null?rw.rdhOperative-RDH_STD:null,
+                  rw.vpa,rw.vpaCheck||"",rw.faf];
+      const kinds=["in","in","in","in","in","auto","auto","auto","in","auto","in"];
+      const fmts=[null,"0.00","0.00",null,null,"0.00","0.00","0.00","0.00",null,"0"];
+      vals.forEach((v,i)=>{const c=ws.getCell(r,i+1);c.value=v;dataCell(c,kinds[i],fmts[i]);});
+      if(rw.vpaCheck.startsWith("below")||rw.vpaCheck.startsWith("above"))
+        ws.getCell(r,10).font={size:9,name:"Arial",bold:true,color:{argb:XC.AMBER}};
+      if(rw.rdhCheck==="DIFFERS")
+        ws.getCell(r,7).font={size:9,name:"Arial",bold:true,color:{argb:XC.AMBER}};
+      r++;
+    }
+  }
+
+  /* ---- ILS_Final (FAF & FAP calculations, only where computed) ---- */
+  if(d.runways.some(rw=>rw.finalCalc)){
+    const ws=wb.addWorksheet("ILS_Final");
+    titleCell(ws,"A1","ILS — FINAL APPROACH · FAF TRACK LENGTH & FAP DISTANCE");
+    ws.getCell("A2").value=`FAF: height above the RDH datum ÷ tan(glide path), rounded UP to 0.1 NM (NB PANS-OPS App C para 3 says nearest). FAP: H = h + ${OAS_FTNM}·D·tanθ + ${OAS_CURV_K}·D² solved for D with h = ${RDH_STD} ft, then ΔD = ${RDH_ADJ_K} × ${OAS_FTNM} × (${RDH_STD} − RDH) × cotθ at the actual angle.`;
+    ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
+    const cols=["Runway_ID","THR_elev_ft","RDH_operative_ft","GP_deg","FAF_alt_ft",
+                "Hgt_above_RDH_datum_ft","FAF_track_m","FAF_NM_unrounded","FAF_chart_NM",
+                "D_NM","D_ft","RDH_adj_dD_ft","FAP_ft","FAP_m","FAP_NM"];
+    ws.columns=cols.map(()=>({width:14}));
+    const hd=ws.getRow(4); hd.values=cols; styleHeaderRow(hd);
+    let r2=5;
+    for(const rw of d.runways.filter(x=>x.finalCalc)){
+      const c=rw.finalCalc;
+      const vals=[rw.key,rw.thr.elevFt,rw.rdhOperative,rw.vpa,rw.faf,
+                  c.hgt,c.fafM,c.fafNM,c.fafChart,c.Dnm,c.Dft,c.dD,c.fapFt,c.fapM,c.fapNM];
+      const kinds=["in","in","in","in","in","auto","auto","auto","auto","auto","auto","auto","auto","auto","auto"];
+      const fmts=[null,"0.000","0.00","0.00","0","0.000","0.000","0.0000","0.0","0.000000","0.00","0.000","0.00","0.000","0.0000"];
+      vals.forEach((v,i)=>{const cell=ws.getCell(r2,i+1);cell.value=v;dataCell(cell,kinds[i],fmts[i]);});
+      ws.getCell(r2,9).font={size:9,name:"Arial",bold:true};
+      ws.getCell(r2,15).font={size:9,name:"Arial",bold:true};
+      r2++;
+    }
+  }
+
+  /* ---- Survey_Points ---- */
+  {
+    const ws=wb.addWorksheet("Survey_Points");
+    titleCell(ws,"A1",`SURVEY POINTS — ${S.icao} · AS IMPORTED`);
+    ws.getCell("A2").value=`Imported: ${S.icao} | ${S.company||"—"} | processed ${S.procDate||"—"} | vertical ref: ${S.vertRef||"—"} | ${d.total} points | ORTHOMETRIC (AMSL) elevations, as surveyed`;
+    ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
+    const cols=["Point_ID","Code","Runway_ID","Easting/X","Northing/Y","Elev_m","Elev_ft",
+                "Include?","Elev_ft_incl","Ident","Survey_Date","LLZ_role"];
+    ws.columns=cols.map((c,i)=>({width:i===9?30:12}));
+    const hd=ws.getRow(4); hd.values=cols; styleHeaderRow(hd);
+    let r=5;
+    for(const p of d.pts){
+      const vals=[p.id,p.code,p.assoc,p.e,p.n,p.elevM,p.elevFt,p.include,p.inclFt,p.ident,p.sdate,p.llz||""];
+      const kinds=["in","in","in","in","in","in","in","auto","auto",null,"in","auto"];
+      const fmts=[null,null,null,"0.000","0.000","0.000","0.000",null,"0.000",null,null,null];
+      vals.forEach((v,i)=>{const c=ws.getCell(r,i+1);c.value=v;dataCell(c,kinds[i],fmts[i]);
+        if(i===0||i===1||i===2||i===10) c.numFmt="@";});   // IDs/designators as text — "07" stays "07"
+      if(p.include==="?") ws.getCell(r,8).font={size:9,name:"Arial",bold:true,color:{argb:XC.RED}};
+      r++;
+    }
+  }
+
+  const buf=await wb.xlsx.writeBuffer();
+  download(`${S.icao}_IFP_CAA_${genStamp}.xlsx`, buf,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+
+/* ============================ wiring ================================= */
+document.getElementById("file-survey").addEventListener("change",e=>{
+  if(e.target.files.length) handleSurveyFile(e.target.files[0]); e.target.value="";});
+document.getElementById("file-project").addEventListener("change",e=>{
+  if(e.target.files.length) openProject(e.target.files[0]); e.target.value="";});
+document.getElementById("btn-save").addEventListener("click",saveProject);
+document.getElementById("btn-load").addEventListener("click",()=>document.getElementById("file-project").click());
+document.getElementById("btn-export").addEventListener("click",()=>{exportCaaWorkbook().catch(err=>alert("Export failed: "+err.message));});
+/* Back/forward walk the tool's own views instead of leaving the page */
+window.addEventListener("popstate",e=>{ if(e.state){ S.view=e.state; render(); window.scrollTo(0,0); } });
+try{ history.replaceState(S.view,""); }catch(e){}
+/* Leaving the document (close tab, back past the first page) asks first */
+window.addEventListener("beforeunload",e=>{ if(S.loaded){ e.preventDefault(); e.returnValue=""; } });
+render();
+</script>
+</body>
+</html>

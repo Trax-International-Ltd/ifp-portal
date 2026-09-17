@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1e2e">
+<title>XVOD record search</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ---- IFP Portal shared theme (matches ifp-portal/portal.css) ---- */
+:root{
+  --ifp-bg:#0d1e2e; --ifp-surface:#16324a; --ifp-surface-2:#1a3a55; --ifp-field:#112637;
+  --ifp-text:#e9e9ed; --ifp-n400:#a9b6c2; --ifp-n500:#8496a6; --ifp-n600:#63788a; --ifp-n800:#28425a; --ifp-n900:#1a3046;
+  --ifp-line:#38546e;
+  --ifp-accent:#64afd7; --ifp-accent-300:#b3d9ee; --ifp-accent-400:#8cc5e4; --ifp-accent-600:#4a8cb0; --ifp-accent-700:#386c89; --ifp-accent-800:#244a60; --ifp-accent-900:#142e44;
+  --ifp-orange:#e95318;
+  --ifp-ok:#5fc48e; --ifp-ok-bg:#153b30; --ifp-warn:#e6b45a; --ifp-warn-bg:#3d2f14; --ifp-err:#f0776b; --ifp-err-bg:#4a1f1c;
+  --ifp-divider:color-mix(in srgb,#e9e9ed 16%,transparent);
+  --ifp-font:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ifp-mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+}
+.ifp-bar{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 auto;padding:0 18px;
+  background:var(--ifp-bg);color:var(--ifp-text);font-family:var(--ifp-font);font-size:13px;line-height:1;
+  box-shadow:inset 0 -1px 0 var(--ifp-n800);position:relative;z-index:30}
+.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-text);text-decoration:none;font-weight:500;font-size:15px}
+.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:var(--ifp-accent)}
+.ifp-bar a.ifp-home:hover{color:var(--ifp-accent)}
+.ifp-bar .ifp-sep{color:var(--ifp-n600)}
+.ifp-bar .ifp-here{color:var(--ifp-n400)}
+.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-n500)}
+:focus-visible{outline:2px solid var(--ifp-accent);outline-offset:2px}
+::selection{background:color-mix(in srgb,var(--ifp-accent) 30%,transparent)}
+
+:root {
+  --bg:var(--ifp-bg); --panel:var(--ifp-surface); --panel-2:var(--ifp-surface-2); --field:var(--ifp-field);
+  --ink:var(--ifp-text); --ink-2:var(--ifp-n400); --ink-3:var(--ifp-n500);
+  --line:var(--ifp-line); --line-2:var(--ifp-n800);
+  --accent:var(--ifp-accent); --accent-ink:var(--ifp-bg); --accent-soft:var(--ifp-accent-800);
+  --point:#f5a05a; --point-soft:#4a2a14;
+  --linec:var(--ifp-accent-400); --line-soft:var(--ifp-accent-900);
+  --warn:var(--ifp-err);
+  --radius:8px;
+  --font:var(--ifp-font);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: var(--font); font-size: 14px; line-height: 1.45; color: var(--ink);
+  background: var(--bg); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  display: flex; flex-direction: column;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Layout: three columns on wide screens */
+.app {
+  display: grid; grid-template-columns: 370px 280px minmax(420px, 1fr);
+  grid-template-rows: calc(100vh - 44px); gap: 1px; background: var(--line-2);
+  height: calc(100vh - 44px); flex: 1;
+}
+.col { background: var(--panel); overflow: auto; min-width: 0; }
+@media (max-width: 1180px) {
+  .app { grid-template-columns: 340px 1fr; grid-template-rows: auto; height: auto; min-height: calc(100vh - 44px); }
+  .col.detail { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .col.detail { grid-column: auto; }
+}
+
+/* Sidebar */
+.side { padding: 20px 18px 28px; display: flex; flex-direction: column; gap: 22px; background: var(--bg); }
+h1 { font-size: 17px; font-weight: 500; margin: 0 0 2px; letter-spacing: -0.01em; }
+.sub { color: var(--ink-2); margin: 0; font-size: 13px; }
+
+.drop {
+  display: block; border: 1px dashed var(--line); border-radius: var(--radius);
+  padding: 16px 14px; text-align: center; color: var(--ink-2); cursor: pointer;
+  background: var(--panel); transition: border-color .15s, background .15s;
+}
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop strong { color: var(--ink); font-weight: 500; }
+.drop input { display: none; }
+
+.progress { display: none; }
+.progress.on { display: block; }
+.bar { height: 6px; background: var(--line-2); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .12s linear; }
+.progress small { color: var(--ink-2); display: block; margin-top: 4px; }
+
+.filestat { display: none; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.filestat.on { display: block; }
+.filestat b { color: var(--ink); font-weight: 500; }
+.filestat .row { display: flex; justify-content: space-between; gap: 8px; }
+
+fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+fieldset[disabled] { opacity: .45; }
+legend { font-weight: 500; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 8px; padding: 0; color: var(--ink-3); }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink-2); }
+label.f span.hint { color: var(--ink-3); font-size: 12px; }
+input[type=text], input[type=number], select {
+  width: 100%; border: 1px solid var(--line-2); border-radius: var(--radius);
+  padding: 7px 9px; background: var(--field); color-scheme: dark;
+}
+input[type=text]:hover, input[type=number]:hover, select:hover { border-color: var(--line); }
+input[type=text]:focus, input[type=number]:focus, select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.seg { display: flex; border: 1px solid var(--line-2); border-radius: var(--radius); overflow: hidden; }
+.seg button { flex: 1; border: 0; background: var(--field); padding: 6px 4px; cursor: pointer; color: var(--ink-2); }
+.seg button:hover { background: var(--panel-2); }
+.seg button + button { border-left: 1px solid var(--line-2); }
+.seg button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); font-weight: 500; }
+.btn { border: 1px solid var(--line); background: transparent; color: var(--ifp-accent-300); border-radius: var(--radius); padding: 7px 12px; cursor: pointer; font-weight: 500; }
+.btn:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { background: var(--ifp-accent-400); border-color: var(--ifp-accent-400); }
+.btn.small { padding: 4px 9px; font-size: 12.5px; }
+.actions { display: flex; gap: 8px; margin-top: 4px; }
+.actions .btn { flex: 1; }
+.note { font-size: 12px; color: var(--ink-3); margin: 0; }
+
+/* Results */
+.results { display: flex; flex-direction: column; }
+.results-head {
+  position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line-2);
+  padding: 14px 18px 10px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+}
+.results-head h2 { margin: 0; font-size: 11px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.results-head .count { color: var(--ink-2); font-size: 13px; }
+table.res { width: 100%; border-collapse: collapse; }
+table.res th, table.res td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+table.res th { font-weight: 500; font-size: 12px; color: var(--ink-2); position: sticky; top: 45px; background: var(--panel); z-index: 1; }
+table.res th:first-child, table.res td:first-child { padding-left: 18px; }
+table.res tbody tr { cursor: pointer; }
+table.res tbody tr:hover { background: var(--panel-2); }
+table.res tbody tr.sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+td.num { text-align: right; }
+th.num { text-align: right; }
+.tag { display: inline-block; font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 3px; line-height: 1.5; }
+.tag.p { background: var(--point-soft); color: var(--point); }
+.tag.l { background: var(--line-soft); color: var(--linec); }
+.empty { padding: 40px 24px; color: var(--ink-2); max-width: 44ch; }
+.empty p { margin: 0 0 10px; }
+.more { padding: 12px 18px; }
+
+/* Detail */
+.detail { padding: 0; background: var(--bg); }
+.detail-head {
+  position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line-2);
+  padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.detail-head h2 { margin: 0; font-size: 11px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.detail-body { padding: 18px 20px 40px; }
+.ident { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.ident .id { font-size: 26px; font-weight: 500; letter-spacing: -0.01em; }
+.uuid { color: var(--ink-3); font-size: 12.5px; margin-bottom: 18px; word-break: break-all; }
+
+.coord {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line-2);
+  border: 1px solid var(--line-2); border-radius: var(--radius); overflow: hidden; margin-bottom: 18px;
+}
+.coord > div { background: var(--panel); padding: 10px 14px; }
+.coord .k { font-size: 12px; color: var(--ink-2); }
+.coord .v { font-size: 20px; font-weight: 500; }
+.coord .dms { font-size: 12.5px; color: var(--ink-2); }
+
+.heights { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+.heights > div { background: var(--panel); border-radius: var(--radius); padding: 10px 12px; box-shadow: 0 0 0 1px var(--line-2); }
+.heights .k { font-size: 12px; color: var(--ink-2); }
+.heights .v { font-size: 20px; font-weight: 500; }
+.heights .v small { font-size: 12px; font-weight: 400; color: var(--ink-3); margin-left: 3px; }
+.heights .acc { font-size: 12px; color: var(--ink-3); }
+.heights .v .m { font-size: 15px; font-weight: 500; color: var(--ink-2); margin-left: 6px; }
+
+h3 { font-size: 13px; font-weight: 500; margin: 18px 0 8px; }
+table.kv { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.kv td { padding: 5px 0; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+table.kv td:first-child { color: var(--ink-2); width: 42%; padding-right: 12px; }
+table.kv td .desc { color: var(--ink-3); }
+table.vtx { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.vtx th, table.vtx td { padding: 4px 6px; border-bottom: 1px solid var(--line-2); text-align: right; }
+table.vtx th { font-weight: 500; font-size: 12px; color: var(--ink-2); }
+table.vtx th:first-child, table.vtx td:first-child { text-align: left; color: var(--ink-3); }
+pre.raw {
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius);
+  padding: 10px 12px; font-size: 12px; line-height: 1.45; overflow: auto; max-height: 360px; font-family: var(--ifp-mono);
+}
+details summary { cursor: pointer; font-weight: 500; font-size: 13px; margin: 18px 0 8px; }
+.toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: var(--ifp-text); color: var(--ifp-bg); padding: 8px 14px; border-radius: var(--radius);
+  font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .15s; box-shadow: var(--ifp-shadow, 0 6px 18px rgba(0,0,0,.55));
+}
+.toast.on { opacity: 1; }
+.err { color: var(--warn); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="ifp-bar">
+  <a class="ifp-home" href="../index.html"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,120v96a8,8,0,0,1-8,8H160a8,8,0,0,1-8-8V164a4,4,0,0,0-4-4H108a4,4,0,0,0-4,4v52a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V120a16,16,0,0,1,4.69-11.31l80-80a16,16,0,0,1,22.62,0l80,80A16,16,0,0,1,224,120Z"/></svg>IFP Portal</a>
+  <span class="ifp-sep">/</span>
+  <span class="ifp-here">XVOD Record Search</span>
+  <span class="ifp-kind">Utility</span>
+</div>
+
+<div class="app">
+
+  <!-- ─────────── Sidebar: load + search ─────────── -->
+  <aside class="col side">
+    <div>
+      <h1>XVOD record search</h1>
+      <p class="sub">Load UK.xml, then find point and line obstructions to check against the AutoCAD import.</p>
+    </div>
+
+    <div>
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept=".xml,text/xml">
+        <div><strong>Choose UK.xml</strong> or drop it here</div>
+        <div style="font-size:12px;margin-top:3px">Read locally in your browser. Nothing is uploaded.</div>
+      </label>
+      <div class="progress" id="progress">
+        <div class="bar"><i id="barfill"></i></div>
+        <small id="progtext">Reading…</small>
+      </div>
+      <div class="filestat" id="filestat"></div>
+      <p class="err" id="fileerr"></p>
+    </div>
+
+    <form id="search" onsubmit="return false">
+      <fieldset id="fs" disabled>
+        <legend>Search</legend>
+
+        <label class="f">Identifier or UUID
+          <input type="text" id="q" placeholder="UK0172A293F, L000144225F, or part of a UUID" autocomplete="off" spellcheck="false">
+          <span class="hint">Partial matches allowed. Case-insensitive.</span>
+        </label>
+
+        <label class="f">Record type</label>
+        <div class="seg" role="group" aria-label="Record type">
+          <button type="button" data-type="all" aria-pressed="true">Both</button>
+          <button type="button" data-type="P" aria-pressed="false">Points</button>
+          <button type="button" data-type="L" aria-pressed="false">Lines</button>
+        </div>
+
+        <label class="f">Feature type / FACC code
+          <input type="text" id="code" placeholder="e.g. 540 or AT030" autocomplete="off" spellcheck="false">
+        </label>
+
+        <label class="f">Near a coordinate (WGS84 decimal degrees)</label>
+        <div class="pair">
+          <input type="text" id="lat" placeholder="Latitude" inputmode="decimal" autocomplete="off">
+          <input type="text" id="lon" placeholder="Longitude" inputmode="decimal" autocomplete="off">
+        </div>
+        <label class="f">Within
+          <div class="pair">
+            <input type="number" id="radius" value="500" min="1" step="1">
+            <select id="radunit"><option value="m">metres</option><option value="km">kilometres</option><option value="ft">feet</option></select>
+          </div>
+          <span class="hint">Lines match if any segment passes within this distance.</span>
+        </label>
+
+        <label class="f">Height AGL between</label>
+        <div class="pair">
+          <input type="number" id="aglmin" placeholder="min">
+          <input type="number" id="aglmax" placeholder="max">
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn primary" id="go">Search</button>
+          <button type="button" class="btn" id="clear">Clear</button>
+        </div>
+        <p class="note">Press Enter in any field to search. Height filters are in feet, as supplied in the file.</p>
+      </fieldset>
+    </form>
+  </aside>
+
+  <!-- ─────────── Results ─────────── -->
+  <section class="col results" aria-live="polite">
+    <div class="results-head">
+      <h2>Results</h2>
+      <span class="count" id="count"></span>
+    </div>
+    <div id="resbody">
+      <div class="empty">
+        <p>Load the XML file to begin. Once it's indexed you can search by identifier, feature code, height, or by coordinate and radius.</p>
+        <p>The file is read in chunks so a 500&nbsp;MB+ file only takes the memory needed for the index; the full record is read back from disk when you open it.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── Detail ─────────── -->
+  <section class="col detail">
+    <div class="detail-head">
+      <h2>Record</h2>
+      <div style="display:flex;gap:6px">
+        <button class="btn small" id="copytext" hidden>Copy as text</button>
+        <button class="btn small" id="copyxml" hidden>Copy XML</button>
+      </div>
+    </div>
+    <div class="detail-body" id="detail">
+      <div class="empty"><p>Select a result to see every field, with codes decoded and coordinates in both decimal and DMS.</p></div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   Code lists from xvod.xsd v2.0
+   ═══════════════════════════════════════════════════════════════ */
+const CODES = {
+  SurfaceMatCd: { "01":"Metal", "02":"Part metal", "03":"Stone / brick / concrete", "04":"Composition", "05":"Earthen works", "U":"Unknown" },
+  SingleMultipleFl: { "M":"Multiple obstruction", "S":"Single obstruction", "U":"Unknown" },
+  LightingCd: { "U":"Undetermined", "Y":"Lit (unclassified source)", "N":"Unlit (unclassified source)", "L":"Lit (classified source)", "X":"Unlit (classified source)" },
+  ValidationCd: { "1":"Survey source", "2":"Stereo imagery exploitation", "3":"Mono imagery exploitation", "4":"Cartographic source", "5":"Reported information", "6":"Temporary obstruction" },
+  TransactionCd: { "N":"New feature added", "R":"Major change", "S":"VOIdentifier changed", "V":"Minor change", "X":"Deleted" },
+  Status: { "1":"Active", "2":"Dismantled", "3":"Under construction", "4":"Suspended / hazardous cable" },
+  HorizDatumCd: { "WGE":"WGS 84" },
+};
+const LABELS = {
+  UUID:"UUID", VOIdentifier:"VO identifier", FeatureID:"Feature ID", FeatureTypeCd:"Feature type code", FACC:"FACC code",
+  HeightAGL:"Height AGL", HeightAMSL:"Height AMSL", LocationElevation:"Ground elevation", HorizDatumCd:"Horizontal datum",
+  HeightAGLAcc:"Height AGL accuracy", HeightAMSLAcc:"Height AMSL accuracy", LocationElevationAcc:"Elevation accuracy", HorizAcc:"Horizontal accuracy",
+  Expansion:"Expansion", SurfaceMatCd:"Surface material", SingleMultipleFl:"Single / multiple", MultipleNo:"Number in group",
+  LightingCd:"Lighting", ValidationCd:"Validation", TransactionCd:"Transaction", RevisionDt:"Revision date", SourceDt:"Source date",
+  SecurityClassificationCd:"Security classification", Latitude:"Latitude", Longitude:"Longitude", CountryCd:"Country", Status:"Status",
+  DirectivityCd:"Directivity", ExtNELon:"Extent NE longitude", ExtNELat:"Extent NE latitude", ExtSWLon:"Extent SW longitude", ExtSWLat:"Extent SW latitude",
+  MinAGLHeight:"Min height AGL", MaxAGLHeight:"Max height AGL",
+};
+const NULLVAL = "-99999";
+
+/* ═══════════════════════════════════════════════════════════════
+   Index store. Per record we keep only what we search/sort on,
+   plus byte offset + length so the full XML can be re-read on demand.
+   ═══════════════════════════════════════════════════════════════ */
+const S = {
+  file: null,
+  recs: [],            // {t:'P'|'L', id, uuid, code, agl, amsl, lat, lon, off, len, vs, vn, revised}
+  vx: new Float32Array(1 << 20),   // flat lon,lat pairs for line vertices (search precision only)
+  vxn: 0,
+  results: [],
+  shown: 0,
+  selected: -1,
+  type: "all",
+};
+
+function pushVertex(lon, lat) {
+  if (S.vxn + 2 > S.vx.length) {
+    const nv = new Float32Array(S.vx.length * 2);
+    nv.set(S.vx); S.vx = nv;
+  }
+  S.vx[S.vxn++] = lon; S.vx[S.vxn++] = lat;
+}
+
+/* Small tag reader on a record's text. */
+function tag(txt, name, from = 0) {
+  const o = "<" + name + ">";
+  const i = txt.indexOf(o, from);
+  if (i < 0) return null;
+  const j = txt.indexOf("</" + name + ">", i);
+  return j < 0 ? null : txt.slice(i + o.length, j);
+}
+
+function indexPoint(txt, off, len) {
+  S.recs.push({
+    t: "P",
+    id: tag(txt, "VOIdentifier") || "",
+    uuid: (tag(txt, "UUID") || "").toLowerCase(),
+    code: tag(txt, "FeatureTypeCd") || "",
+    agl: +(tag(txt, "HeightAGL") ?? NaN),
+    amsl: +(tag(txt, "HeightAMSL") ?? NaN),
+    lat: +tag(txt, "Latitude"),
+    lon: +tag(txt, "Longitude"),
+    revised: tag(txt, "RevisionDt") || "",
+    off, len, vs: -1, vn: 0,
+  });
+}
+
+function indexLine(txt, off, len) {
+  const vs = S.vxn;
+  let i = 0, n = 0;
+  // Polyline points: <Point><Lat>..</Lat><Lon>..</Lon>...</Point>
+  while (true) {
+    const p = txt.indexOf("<Point>", i); if (p < 0) break;
+    const la = txt.indexOf("<Lat>", p) + 5, lb = txt.indexOf("</Lat>", la);
+    const lo = txt.indexOf("<Lon>", lb) + 5, lb2 = txt.indexOf("</Lon>", lo);
+    pushVertex(+txt.slice(lo, lb2), +txt.slice(la, lb));
+    n++; i = lb2;
+  }
+  const ne_lat = +tag(txt, "ExtNELat"), sw_lat = +tag(txt, "ExtSWLat");
+  const ne_lon = +tag(txt, "ExtNELon"), sw_lon = +tag(txt, "ExtSWLon");
+  S.recs.push({
+    t: "L",
+    id: tag(txt, "FeatureID") || "",
+    uuid: (tag(txt, "UUID") || "").toLowerCase(),
+    code: tag(txt, "FACC") || "",
+    agl: +(tag(txt, "MaxAGLHeight") ?? NaN),
+    amsl: NaN,
+    lat: (ne_lat + sw_lat) / 2,
+    lon: (ne_lon + sw_lon) / 2,
+    revised: tag(txt, "RevisionDt") || "",
+    off, len, vs, vn: n,
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Chunked reader. The XML is ASCII, so decoding as latin1 keeps
+   character offsets == byte offsets, which lets us slice the file
+   later to fetch a full record.
+   ═══════════════════════════════════════════════════════════════ */
+async function loadFile(file) {
+  S.file = file; S.recs = []; S.vxn = 0; S.results = []; S.selected = -1;
+  const CH = 8 * 1024 * 1024;
+  const dec = new TextDecoder("iso-8859-1");
+  let carry = "", carryOff = 0, pos = 0, nP = 0, nL = 0, nBad = 0;
+  const t0 = performance.now();
+  const OPEN = ["<PointObstruction>", "<LineObstruction>"];
+  const CLOSE = ["</PointObstruction>", "</LineObstruction>"];
+
+  ui.progress(true, 0, "Reading…");
+  while (pos < file.size) {
+    const buf = await file.slice(pos, Math.min(pos + CH, file.size)).arrayBuffer();
+    carry += dec.decode(buf);
+    pos += buf.byteLength;
+
+    let scan = 0;
+    // Cache the next occurrence of each open tag, so a tag that's absent from this
+    // chunk (e.g. no lines yet) isn't re-searched for every record.
+    let i0 = carry.indexOf(OPEN[0], 0), i1 = carry.indexOf(OPEN[1], 0);
+    while (true) {
+      if (i0 >= 0 && i0 < scan) i0 = carry.indexOf(OPEN[0], scan);
+      if (i1 >= 0 && i1 < scan) i1 = carry.indexOf(OPEN[1], scan);
+      let k, i;
+      if (i0 < 0 && i1 < 0) { i = -1; }
+      else if (i1 < 0 || (i0 >= 0 && i0 < i1)) { k = 0; i = i0; } else { k = 1; i = i1; }
+      if (i < 0) { scan = Math.max(0, carry.length - 24); break; }
+      const j = carry.indexOf(CLOSE[k], i);
+      if (j < 0) {
+        // No close tag yet. If another record opens before one appears, this one is malformed — skip it.
+        const n0 = carry.indexOf(OPEN[0], i + 1), n1 = carry.indexOf(OPEN[1], i + 1);
+        if (n0 >= 0 || n1 >= 0) { nBad++; scan = i + 1; i0 = n0; i1 = n1; continue; }
+        scan = i; break;                     // otherwise wait for more data
+      }
+      const end = j + CLOSE[k].length;
+      const txt = carry.slice(i, end);
+      if (k === 0) { indexPoint(txt, carryOff + i, end - i); nP++; }
+      else         { indexLine(txt, carryOff + i, end - i);  nL++; }
+      scan = end;
+    }
+    carry = carry.slice(scan); carryOff += scan;
+
+    const pct = pos / file.size;
+    ui.progress(true, pct, `${(pos / 1048576).toFixed(0)} of ${(file.size / 1048576).toFixed(0)} MB — ${(nP + nL).toLocaleString()} records`);
+    await new Promise(r => setTimeout(r, 0));   // let the UI paint
+  }
+  const secs = ((performance.now() - t0) / 1000).toFixed(1);
+  ui.progress(false);
+  ui.filestat(file, nP, nL, secs, nBad);
+  ui.enable(true);
+  ui.results([], "");
+  ui.empty("Indexed. Enter a search on the left.");
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Geometry helpers
+   ═══════════════════════════════════════════════════════════════ */
+const R = 6371008.8;
+function haversine(lat1, lon1, lat2, lon2) {
+  const toR = Math.PI / 180;
+  const dLat = (lat2 - lat1) * toR, dLon = (lon2 - lon1) * toR;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toR) * Math.cos(lat2 * toR) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+/* Local equirectangular projection around the query point — plenty accurate for
+   the few-km ranges this is used for, and fast for hundreds of thousands of segments. */
+function localProj(lat0) {
+  const kx = Math.cos(lat0 * Math.PI / 180) * R * Math.PI / 180, ky = R * Math.PI / 180;
+  return (lat, lon, lat1, lon1) => [ (lon1 - lon) * kx, (lat1 - lat) * ky ];
+}
+function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  let t = l2 === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / l2;
+  t = Math.max(0, Math.min(1, t));
+  const qx = ax + t * dx - px, qy = ay + t * dy - py;
+  return Math.hypot(qx, qy);
+}
+function lineDistance(rec, lat, lon, proj) {
+  let best = Infinity;
+  const v = S.vx, s = rec.vs, n = rec.vn;
+  if (n === 1) { return Math.hypot(...proj(lat, lon, v[s + 1], v[s])); }
+  for (let k = 0; k < n - 1; k++) {
+    const a = proj(lat, lon, v[s + 2 * k + 1], v[s + 2 * k]);
+    const b = proj(lat, lon, v[s + 2 * k + 3], v[s + 2 * k + 2]);
+    const d = segDist(0, 0, a[0], a[1], b[0], b[1]);
+    if (d < best) best = d;
+  }
+  return best;
+}
+function toDMS(v, isLat) {
+  const h = isLat ? (v < 0 ? "S" : "N") : (v < 0 ? "W" : "E");
+  let a = Math.abs(v);
+  const d = Math.floor(a); a = (a - d) * 60;
+  const m = Math.floor(a); const s = ((a - m) * 60).toFixed(2);
+  return `${d}° ${String(m).padStart(2, "0")}′ ${String(s).padStart(5, "0")}″ ${h}`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Search
+   ═══════════════════════════════════════════════════════════════ */
+function runSearch() {
+  if (!S.file) return;
+  const q = $("q").value.trim().toLowerCase();
+  const code = $("code").value.trim().toUpperCase();
+  const latS = $("lat").value.trim(), lonS = $("lon").value.trim();
+  const useGeo = latS !== "" && lonS !== "";
+  const lat = parseFloat(latS), lon = parseFloat(lonS);
+  if (useGeo && (isNaN(lat) || isNaN(lon))) { ui.empty("Latitude and longitude must be decimal degrees, e.g. 54.458 and -8.087."); ui.results([], ""); return; }
+  const unit = $("radunit").value;
+  let radius = parseFloat($("radius").value) || 500;
+  radius *= unit === "km" ? 1000 : unit === "ft" ? 0.3048 : 1;
+  const aglMin = $("aglmin").value === "" ? -Infinity : +$("aglmin").value;
+  const aglMax = $("aglmax").value === "" ? Infinity : +$("aglmax").value;
+  const type = S.type;
+
+  if (!q && !code && !useGeo && !isFinite(aglMin) && !isFinite(aglMax) && type === "all") {
+    ui.results([], ""); ui.empty("Enter at least one search term or filter. Listing all records would be too many to be useful."); return;
+  }
+
+  const out = [];
+  const proj = useGeo ? localProj(lat) : null;
+  // Cheap bounding-box prefilter in degrees before doing real distance work
+  const dLat = useGeo ? radius / 111320 : 0;
+  const dLon = useGeo ? radius / (111320 * Math.cos(lat * Math.PI / 180)) : 0;
+
+  for (let i = 0; i < S.recs.length; i++) {
+    const r = S.recs[i];
+    if (type !== "all" && r.t !== type) continue;
+    if (q && !(r.id.toLowerCase().includes(q) || r.uuid.includes(q))) continue;
+    if (code && r.code.toUpperCase() !== code && r.code.replace(/^0+/, "") !== code.replace(/^0+/, "")) continue;
+    if (!isNaN(r.agl) && (r.agl < aglMin || r.agl > aglMax)) continue;
+    if (isNaN(r.agl) && (isFinite(aglMin) || isFinite(aglMax))) continue;
+    let dist = NaN;
+    if (useGeo) {
+      if (r.t === "P") {
+        if (Math.abs(r.lat - lat) > dLat || Math.abs(r.lon - lon) > dLon) continue;
+        dist = haversine(lat, lon, r.lat, r.lon);
+      } else {
+        // Line: quick reject on vertex bounding box, then exact segment distance
+        let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+        for (let k = 0; k < r.vn; k++) {
+          const lo = S.vx[r.vs + 2 * k], la = S.vx[r.vs + 2 * k + 1];
+          if (la < minLat) minLat = la; if (la > maxLat) maxLat = la;
+          if (lo < minLon) minLon = lo; if (lo > maxLon) maxLon = lo;
+        }
+        if (lat < minLat - dLat || lat > maxLat + dLat || lon < minLon - dLon || lon > maxLon + dLon) continue;
+        dist = lineDistance(r, lat, lon, proj);
+      }
+      if (dist > radius) continue;
+    }
+    out.push({ i, dist });
+    if (out.length > 50000) break;
+  }
+  if (useGeo) out.sort((a, b) => a.dist - b.dist);
+  else out.sort((a, b) => S.recs[a.i].id.localeCompare(S.recs[b.i].id));
+  S.results = out; S.shown = 0; S.selected = -1;
+  ui.results(out, useGeo ? "distance" : "id");
+  if (!out.length) ui.empty("No records match. Try a wider radius, a shorter identifier fragment, or the other record type.");
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Detail view — re-reads the record's bytes from the file
+   ═══════════════════════════════════════════════════════════════ */
+async function openRecord(idx) {
+  const r = S.recs[idx];
+  S.selected = idx;
+  ui.markSelected();
+  const buf = await S.file.slice(r.off, r.off + r.len).arrayBuffer();
+  const xml = new TextDecoder("utf-8").decode(buf);
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const root = doc.documentElement;
+  const fields = [];
+  const poly = [];
+  for (const el of root.children) {
+    if (el.tagName === "Polyline") {
+      const pts = [];
+      for (const p of el.children) {
+        const g = n => { const e = p.querySelector(n); return e ? e.textContent : ""; };
+        pts.push({ lat: g("Lat"), lon: g("Lon"), agl: g("HeightAGL"), amsl: g("HeightAMSL") });
+      }
+      poly.push(pts);
+    } else fields.push([el.tagName, el.textContent.trim()]);
+  }
+  ui.detail(r, fields, poly, xml);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UI
+   ═══════════════════════════════════════════════════════════════ */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const fmtDist = d => d < 1000 ? `${d.toFixed(1)} m` : `${(d / 1000).toFixed(2)} km`;
+const showVal = v => v === NULLVAL ? "—" : v;
+const ftm = ft => (ft === NULLVAL || ft === "" || ft == null || isNaN(+ft)) ? "" : (+ft * 0.3048).toFixed(1);
+const ftBoth = ft => (ft === NULLVAL || ft === "" || ft == null || isNaN(+ft)) ? "—" : `${ft} ft / ${ftm(ft)} m`;
+const HEIGHT_FIELDS = new Set(["HeightAGL","HeightAMSL","LocationElevation","HeightAGLAcc","HeightAMSLAcc","LocationElevationAcc","HorizAcc","MinAGLHeight","MaxAGLHeight"]);
+
+const ui = {
+  progress(on, pct = 0, text = "") {
+    $("progress").classList.toggle("on", on);
+    $("barfill").style.width = (pct * 100).toFixed(1) + "%";
+    $("progtext").textContent = text;
+  },
+  filestat(file, nP, nL, secs, nBad) {
+    const fs = $("filestat");
+    fs.classList.add("on");
+    fs.innerHTML = `
+      <div class="row"><span>File</span><b title="${esc(file.name)}">${esc(file.name)}</b></div>
+      <div class="row"><span>Size</span><b>${(file.size / 1048576).toFixed(1)} MB</b></div>
+      <div class="row"><span>Point obstructions</span><b>${nP.toLocaleString()}</b></div>
+      <div class="row"><span>Line obstructions</span><b>${nL.toLocaleString()}</b></div>
+      <div class="row"><span>Indexed in</span><b>${secs} s</b></div>
+      ${nBad ? `<div class="row" style="color:var(--warn)"><span>Skipped (malformed)</span><b>${nBad}</b></div>` : ""}`;
+  },
+  enable(on) { $("fs").disabled = !on; if (on) $("q").focus(); },
+  empty(msg) { $("resbody").innerHTML = `<div class="empty"><p>${esc(msg)}</p></div>`; },
+  results(out, sortMode) {
+    $("count").textContent = out.length ? `${out.length.toLocaleString()}${out.length > 50000 ? "+" : ""} match${out.length === 1 ? "" : "es"}` : "";
+    if (!out.length) return;
+    const body = $("resbody");
+    body.innerHTML = `<table class="res"><thead><tr>
+      <th>Identifier</th><th>Type</th>
+      ${sortMode === "distance" ? '<th class="num">Distance</th>' : '<th class="num">AGL ft</th>'}
+    </tr></thead><tbody id="rows"></tbody></table><div class="more" id="more"></div>`;
+    S.sortMode = sortMode;
+    ui.renderMore();
+  },
+  renderMore() {
+    const PAGE = 200;
+    const tb = $("rows"); if (!tb) return;
+    const end = Math.min(S.results.length, S.shown + PAGE);
+    const html = [];
+    for (let k = S.shown; k < end; k++) {
+      const { i, dist } = S.results[k]; const r = S.recs[i];
+      html.push(`<tr data-i="${i}" ${i === S.selected ? 'class="sel"' : ""}>
+        <td>${esc(r.id || r.uuid.slice(0, 8) + "…")}</td>
+        <td><span class="tag ${r.t === "P" ? "p" : "l"}">${r.t === "P" ? "Point" : "Line"}</span></td>
+        ${S.sortMode === "distance" ? `<td class="num">${fmtDist(dist)}</td>` : `<td class="num">${isNaN(r.agl) ? "" : r.agl}</td>`}
+      </tr>`);
+    }
+    tb.insertAdjacentHTML("beforeend", html.join(""));
+    S.shown = end;
+    const more = $("more");
+    more.innerHTML = S.shown < S.results.length
+      ? `<button class="btn small" id="morebtn">Show ${Math.min(PAGE, S.results.length - S.shown)} more (${(S.results.length - S.shown).toLocaleString()} remaining)</button>`
+      : "";
+    if ($("morebtn")) $("morebtn").onclick = ui.renderMore;
+  },
+  markSelected() {
+    document.querySelectorAll("tr.sel").forEach(e => e.classList.remove("sel"));
+    const row = document.querySelector(`tr[data-i="${S.selected}"]`);
+    if (row) row.classList.add("sel");
+  },
+  detail(r, fields, poly, xml) {
+    const f = Object.fromEntries(fields);
+    const isP = r.t === "P";
+    const acc = v => (v && v !== NULLVAL) ? `±${v} ft / ${ftm(v)} m` : "";
+    const hv = v => (v === NULLVAL || v == null || v === "") ? `—` : `${v}<small>ft</small> <span class="m">${ftm(v)}<small>m</small></span>`;
+    let h = `<div class="ident"><span class="id">${esc(r.id || "(no identifier)")}</span>
+      <span class="tag ${isP ? "p" : "l"}">${isP ? "Point obstruction" : "Line obstruction"}</span></div>
+      <div class="uuid">${esc(f.UUID || "")}</div>`;
+
+    if (isP) {
+      h += `<div class="coord">
+        <div><div class="k">Latitude</div><div class="v">${esc(f.Latitude)}</div><div class="dms">${toDMS(+f.Latitude, true)}</div></div>
+        <div><div class="k">Longitude</div><div class="v">${esc(f.Longitude)}</div><div class="dms">${toDMS(+f.Longitude, false)}</div></div>
+      </div>
+      <div class="heights">
+        <div><div class="k">Height AGL</div><div class="v">${hv(f.HeightAGL)}</div><div class="acc">${acc(f.HeightAGLAcc)}</div></div>
+        <div><div class="k">Height AMSL</div><div class="v">${hv(f.HeightAMSL)}</div><div class="acc">${acc(f.HeightAMSLAcc)}</div></div>
+        <div><div class="k">Ground elevation</div><div class="v">${hv(f.LocationElevation)}</div><div class="acc">${acc(f.LocationElevationAcc)}</div></div>
+      </div>`;
+    } else {
+      h += `<div class="coord">
+        <div><div class="k">Extent NE</div><div class="v" style="font-size:16px">${esc(f.ExtNELat)}, ${esc(f.ExtNELon)}</div><div class="dms">${toDMS(+f.ExtNELat, true)} &nbsp; ${toDMS(+f.ExtNELon, false)}</div></div>
+        <div><div class="k">Extent SW</div><div class="v" style="font-size:16px">${esc(f.ExtSWLat)}, ${esc(f.ExtSWLon)}</div><div class="dms">${toDMS(+f.ExtSWLat, true)} &nbsp; ${toDMS(+f.ExtSWLon, false)}</div></div>
+      </div>
+      <div class="heights">
+        <div><div class="k">Min height AGL</div><div class="v">${hv(f.MinAGLHeight)}</div><div class="acc">${acc(f.HeightAGLAcc)}</div></div>
+        <div><div class="k">Max height AGL</div><div class="v">${hv(f.MaxAGLHeight)}</div><div class="acc">${acc(f.HeightAGLAcc)}</div></div>
+        <div><div class="k">Vertices</div><div class="v">${poly.reduce((a, p) => a + p.length, 0)}</div><div class="acc">${poly.length > 1 ? poly.length + " polylines" : ""}</div></div>
+      </div>`;
+    }
+
+    // All remaining fields, codes decoded
+    const skip = new Set(isP
+      ? ["UUID", "VOIdentifier", "Latitude", "Longitude", "HeightAGL", "HeightAMSL", "LocationElevation", "HeightAGLAcc", "HeightAMSLAcc", "LocationElevationAcc"]
+      : ["UUID", "FeatureID", "ExtNELat", "ExtNELon", "ExtSWLat", "ExtSWLon", "MinAGLHeight", "MaxAGLHeight", "HeightAGLAcc"]);
+    h += `<h3>Attributes</h3><table class="kv">`;
+    for (const [k, v] of fields) {
+      if (skip.has(k)) continue;
+      const d = CODES[k] && CODES[k][v];
+      const shown = HEIGHT_FIELDS.has(k) ? ftBoth(v) : showVal(v);
+      h += `<tr><td>${esc(LABELS[k] || k)}</td><td>${esc(shown)}${d ? ` <span class="desc">${esc(d)}</span>` : ""}</td></tr>`;
+    }
+    h += `</table>`;
+
+    if (poly.length) {
+      poly.forEach((pts, pi) => {
+        h += `<h3>${poly.length > 1 ? `Polyline ${pi + 1}` : "Polyline vertices"}</h3>
+          <table class="vtx"><thead><tr><th>#</th><th>Latitude</th><th>Longitude</th><th>AGL ft</th><th>AGL m</th><th>AMSL ft</th><th>AMSL m</th></tr></thead><tbody>`;
+        pts.forEach((p, k) => {
+          h += `<tr><td>${k + 1}</td><td>${esc(p.lat)}</td><td>${esc(p.lon)}</td><td>${esc(p.agl)}</td><td>${ftm(p.agl)}</td><td>${esc(p.amsl)}</td><td>${ftm(p.amsl)}</td></tr>`;
+        });
+        h += `</tbody></table>`;
+      });
+    }
+    h += `<details><summary>Raw XML</summary><pre class="raw">${esc(xml)}</pre></details>`;
+    $("detail").innerHTML = h;
+
+    // Copy buttons
+    const lines = fields.map(([k, v]) => `${LABELS[k] || k}: ${HEIGHT_FIELDS.has(k) ? ftBoth(v) : v}${CODES[k] && CODES[k][v] ? ` (${CODES[k][v]})` : ""}`);
+    poly.forEach((pts, pi) => {
+      lines.push(poly.length > 1 ? `Polyline ${pi + 1}:` : "Polyline:");
+      pts.forEach((p, k) => lines.push(`  ${k + 1}\t${p.lat}\t${p.lon}${p.agl ? `\t${p.agl} ft / ${ftm(p.agl)} m` : ""}${p.amsl ? `\t${p.amsl} ft / ${ftm(p.amsl)} m` : ""}`));
+    });
+    $("copytext").hidden = false; $("copyxml").hidden = false;
+    $("copytext").onclick = () => copy(lines.join("\n"), "Copied record as text");
+    $("copyxml").onclick = () => copy(xml, "Copied XML");
+  },
+};
+
+function copy(text, msg) {
+  navigator.clipboard.writeText(text).then(() => toast(msg), () => toast("Couldn't copy — select the text manually"));
+}
+let toastT;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("on"), 1600);
+}
+
+/* ─────────── Wiring ─────────── */
+$("file").addEventListener("change", e => { if (e.target.files[0]) start(e.target.files[0]); });
+const drop = $("drop");
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) start(f); });
+
+async function start(file) {
+  $("fileerr").textContent = "";
+  $("filestat").classList.remove("on");
+  ui.enable(false);
+  $("detail").innerHTML = `<div class="empty"><p>Select a result to see every field.</p></div>`;
+  $("copytext").hidden = true; $("copyxml").hidden = true;
+  try { await loadFile(file); }
+  catch (err) { ui.progress(false); $("fileerr").textContent = "Couldn't read the file: " + err.message; }
+}
+
+$("search").addEventListener("submit", runSearch);
+$("clear").addEventListener("click", () => {
+  ["q", "code", "lat", "lon", "aglmin", "aglmax"].forEach(id => $(id).value = "");
+  $("radius").value = 500; $("radunit").value = "m";
+  setType("all"); $("q").focus();
+});
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => setType(b.dataset.type)));
+function setType(t) {
+  S.type = t;
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.type === t)));
+}
+$("resbody").addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-i]"); if (tr) openRecord(+tr.dataset.i);
+});
+// Keyboard: arrow through results
+document.addEventListener("keydown", e => {
+  if (!S.results.length || ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  const k = S.results.findIndex(x => x.i === S.selected);
+  const nk = Math.max(0, Math.min(S.shown - 1, k + (e.key === "ArrowDown" ? 1 : -1)));
+  if (nk !== k) { e.preventDefault(); openRecord(S.results[nk].i); document.querySelector(`tr[data-i="${S.results[nk].i}"]`)?.scrollIntoView({ block: "nearest" }); }
+});
+</script>
+</body>
+</html>

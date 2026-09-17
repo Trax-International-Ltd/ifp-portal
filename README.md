@@ -9,11 +9,16 @@ No build step, no backend. The look follows the IFP Portal Dashboard Design hand
 - `portal.css` — IFP brand token overrides and page layout
 - `portal.js` — layout flags and the announcements feed
 - `assets/logo.png` — company logo (used on the light hero band only)
+- `utilities/` — self-contained single-file utilities hosted alongside the portal, each themed to match it and carrying a breadcrumb back to the portal home
 
 ## Editing
 - **Tool links:** edit the `href` on each `.card` in `index.html` (marked with a comment).
 - **Add a tool or utility:** copy an existing `<a class="card">` block into the
   relevant grid. Icons are Phosphor (fill style) inline SVGs at 22px.
+- **Restyle a new utility to match:** copy the `<style>` block's first section (the
+  `--ifp-*` tokens and `.ifp-bar` rules) and the `<div class="ifp-bar">` breadcrumb
+  from any file in `utilities/`, then map the tool's own CSS variables onto the
+  `--ifp-*` tokens.
 - **Announcements:** edit the `ANNOUNCEMENTS` array in `portal.js` (newest first;
   set `isLatest: true` on one item to give it the orange rule).
 - **Hide sections:** set `showAnnouncements` or `showDev` to `false` in `PORTAL_CONFIG`
@@ -21,7 +26,7 @@ No build step, no backend. The look follows the IFP Portal Dashboard Design hand
 
 ## Publish with GitHub Pages (recommended)
 1. Create a repo under the organisation (e.g. `ifp-portal`), public or private*.
-2. Push these files (`index.html`, `styles.css`, `portal.css`, `portal.js`, `assets/logo.png`, this README).
+2. Push these files (`index.html`, `styles.css`, `portal.css`, `portal.js`, `assets/logo.png`, `utilities/`, this README).
 3. Repo → Settings → Pages → "Deploy from a branch" → branch `main`, folder `/ (root)` → Save.
 4. After a minute the page is live at `https://<org>.github.io/ifp-portal/`
    (shown on that same Settings → Pages screen). Bookmark that URL team-wide.

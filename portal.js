@@ -10,10 +10,15 @@ const PORTAL_CONFIG = {
 // to give it the orange rule; the rest use the neutral rule.
 const ANNOUNCEMENTS = [
   {
+    date: "17 Sep 2026",
+    title: "Five new utilities",
+    body: "IFP Design Calculator, CRM Obs File Generator, Chart Diff, XVOD Record Search and the Version History & MRI Update tool now live in the portal.",
+    isLatest: true,
+  },
+  {
     date: "7 Sep 2026",
     title: "IFP Portal is live",
     body: "The portal now hosts the Surface Filtering Tool, Surface List Generator and Aircraft Modelling utility.",
-    isLatest: true,
   },
   {
     date: "Earlier",
