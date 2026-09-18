@@ -10,10 +10,15 @@ const PORTAL_CONFIG = {
 // to give it the orange rule; the rest use the neutral rule.
 const ANNOUNCEMENTS = [
   {
+    date: "18 Sep 2026",
+    title: "UK AIP to Map 3D",
+    body: "Load the NATS AIP KML package, narrow it down by group, level band or radius, and export shapefiles, DXF, CSV or GeoJSON.",
+    isLatest: true,
+  },
+  {
     date: "17 Sep 2026",
     title: "Five new utilities",
     body: "IFP Design Calculator, CRM Obs File Generator, Chart Diff, XVOD Record Search and the Version History & MRI Update tool now live in the portal.",
-    isLatest: true,
   },
   {
     date: "7 Sep 2026",

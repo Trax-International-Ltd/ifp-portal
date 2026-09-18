@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#002039">
+<title>UK AIP dataset to AutoCAD Map 3D</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* ---- IFP house theme (mirrors the shared stylesheet of the Surface Filtering Tool / Surface List Generator) ---- */
+:root{
+  --ifp-bg:#f5f7f9; --ifp-surface:#ffffff; --ifp-surface-2:#f7f9fb; --ifp-field:#ffffff;
+  --ifp-text:#1b2733; --ifp-navy:#002039;
+  --ifp-n400:#5b6b7a; --ifp-n500:#6f7f8d; --ifp-n600:#8a98a5; --ifp-n800:#e2e8ee; --ifp-n900:#eef2f5;
+  --ifp-line:#cfd8e0;
+  --ifp-accent:#0982C1; --ifp-accent-300:#0982C1; --ifp-accent-400:#076ca1; --ifp-accent-600:#0982C1; --ifp-accent-700:#0982C1; --ifp-accent-800:#e6f2f9; --ifp-accent-900:#eaf1f6;
+  --ifp-orange:#0982C1;
+  --ifp-ok:#1d7a46; --ifp-ok-bg:#e7f3ec; --ifp-warn:#9a6700; --ifp-warn-bg:#fbf3dc; --ifp-err:#b3261e; --ifp-err-bg:#fbe9e7;
+  --ifp-divider:rgba(27,39,51,.12);
+  --ifp-card:0 0 0 1px #e2e8ee,0 1px 2px rgba(0,32,57,.06),0 4px 16px rgba(0,32,57,.05);
+  --ifp-card-hover:0 0 0 1px #0982C1,0 2px 4px rgba(0,32,57,.08),0 10px 28px rgba(0,32,57,.10);
+  --ifp-bar-bg:#002039; --ifp-bar-text:#ffffff; --ifp-bar-muted:#a8bccb; --ifp-bar-line:rgba(255,255,255,.14);
+  --ifp-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --ifp-mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+}
+.ifp-bar{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 auto;padding:0 18px;
+  background:var(--ifp-bar-bg);color:var(--ifp-bar-text);font-family:var(--ifp-font);font-size:13px;line-height:1;position:relative;z-index:30}
+.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-bar-text);text-decoration:none;font-weight:600;font-size:15px}
+.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:#5fb6e6}
+.ifp-bar a.ifp-home:hover{color:#8fd0f3}
+.ifp-bar .ifp-sep{color:var(--ifp-bar-muted)}
+.ifp-bar .ifp-here{color:var(--ifp-bar-muted)}
+.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-bar-muted)}
+:focus-visible{outline:2px solid var(--ifp-accent);outline-offset:2px}
+
+:root{
+  --paper:var(--ifp-bg); --panel:var(--ifp-surface); --ink:var(--ifp-text); --ink-soft:var(--ifp-n400); --rule:var(--ifp-n800);
+  --sea:#dbe6ec; --land:#f6f5ee; --coast:#9fb0bb; --grat:#c3d0d8;
+  --accent:var(--ifp-accent); --accent-ink:#ffffff; --focus:var(--ifp-accent);
+  --c-ctl:#1d5fa6; --c-tmz:#a3195b; --c-sua:#c2352b; --c-oth:#b3740a; --c-rte:#2f6f6a; --c-pt:#14233a; --c-ad:#6a2c91;
+  --sel:#ff9d00;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.45 var(--ifp-font);display:flex;flex-direction:column}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.mono{font-family:var(--ifp-mono)}
+
+.app{display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:calc(100vh - 44px);flex:1}
+header{grid-column:1/-1;display:flex;align-items:baseline;gap:20px;flex-wrap:wrap;padding:10px 18px;border-bottom:1px solid var(--rule);background:var(--panel)}
+header h1{font-size:16px;margin:0;font-weight:600;color:var(--ifp-navy);letter-spacing:-.01em}
+header .ds{color:var(--ink-soft);font-size:13px}
+header .warn{margin-left:auto;font-size:12px;color:var(--ifp-err)}
+
+aside{border-right:1px solid var(--rule);background:var(--panel);overflow:auto;display:flex;flex-direction:column}
+section{padding:14px 16px;border-bottom:1px solid var(--rule)}
+section h2{font-size:11px;margin:0 0 8px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-n500)}
+.hint{color:var(--ink-soft);font-size:12px;margin:6px 0 0}
+
+.drop{border:1px dashed var(--ifp-line);border-radius:8px;padding:14px;text-align:center;cursor:pointer;background:var(--paper);transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--ifp-accent-800)}
+.drop strong{display:block;font-weight:600}
+#status{font-size:12px;margin-top:8px;min-height:1.4em}
+#status.err{color:var(--ifp-err)}
+
+.tree{list-style:none;margin:0;padding:0}
+.tree ul{list-style:none;margin:0;padding-left:18px}
+.tree li{margin:1px 0}
+.tree label{display:flex;gap:6px;align-items:center;cursor:pointer;padding:1px 0}
+.tree .n{margin-left:auto;color:var(--ink-soft);font-size:12px}
+.tree .tw{width:14px;border:0;background:none;padding:0;cursor:pointer;color:var(--ink-soft)}
+.tree .sw{width:9px;height:9px;border-radius:50%;flex:none}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.row input[type=number]{width:86px}
+input[type=text],input[type=number],select{background:var(--ifp-field);border:1px solid var(--rule);border-radius:8px;padding:6px 8px}
+input[type=text]:hover,input[type=number]:hover,select:hover{border-color:var(--ifp-line)}
+input[type=text]:focus,input[type=number]:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(9,130,193,.2)}
+input[type=text]{width:100%}
+input[type=checkbox]{accent-color:var(--accent)}
+.check{display:flex;gap:6px;align-items:flex-start;margin-top:6px;cursor:pointer}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:3px;font-size:12px}
+.linkbtn:hover{color:var(--ifp-accent-400)}
+
+.export{margin-top:auto;border-bottom:0;border-top:1px solid var(--rule);position:sticky;bottom:0;background:var(--panel);box-shadow:0 -4px 12px rgba(0,32,57,.05)}
+.export summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ifp-navy)}
+.export details[open] summary{margin-bottom:6px}
+.cursor:empty{display:none}
+.blk{margin-top:10px}.export .blk summary{font-weight:400;color:var(--ink)}
+.blockgrid{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:4px 8px;align-items:center;font-size:13px}
+.blockgrid input{width:100%}
+.blockgrid input[type=color]{height:26px;padding:1px 2px}
+.anchor{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-top:6px;font-size:13px}
+.anchor b{overflow-wrap:anywhere}
+.ghost{border:1px solid var(--ifp-line);background:transparent;color:var(--accent);border-radius:8px;padding:5px 12px;cursor:pointer;margin:8px 0 10px;font-weight:500}
+.ghost:hover{background:rgba(27,39,51,.05)}
+.primary{width:100%;padding:10px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer}
+.primary:hover{background:var(--ifp-accent-400)}
+.primary:disabled{opacity:.45;cursor:not-allowed}
+
+main{display:grid;grid-template-rows:minmax(0,3fr) minmax(0,2fr);min-width:0;min-height:0}
+.mapwrap{position:relative;background:var(--sea);min-height:0}
+canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
+canvas.drag{cursor:grabbing}
+.mapbtns{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:4px}
+.mapbtns button{width:32px;height:32px;border:0;background:var(--panel);border-radius:8px;cursor:pointer;font-weight:600;box-shadow:var(--ifp-card)}
+.mapbtns button:hover{color:var(--accent)}
+.legend{position:absolute;left:10px;bottom:10px;background:var(--panel);border:0;box-shadow:var(--ifp-card);border-radius:8px;padding:6px 10px;font-size:12px;display:flex;gap:12px;flex-wrap:wrap;max-width:calc(100% - 20px)}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:14px;height:3px;display:inline-block}
+.cursor{position:absolute;right:10px;bottom:10px;background:var(--panel);border:0;box-shadow:var(--ifp-card);border-radius:8px;padding:3px 8px;font-size:12px}
+.empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;pointer-events:none}
+.empty div{max-width:440px;background:var(--panel);border:0;box-shadow:var(--ifp-card);padding:18px 22px;border-radius:8px}
+.empty h3{margin:0 0 6px;font-size:16px;font-weight:600;color:var(--ifp-navy)}
+
+.lower{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);border-top:1px solid var(--rule);min-height:0;background:var(--panel)}
+.tablewrap{overflow:auto;min-width:0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:5px 10px;border-bottom:1px solid var(--rule);white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+th{position:sticky;top:0;background:var(--ifp-navy);color:#fff;font-weight:600;font-size:12px;letter-spacing:.03em}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--paper)}
+tbody tr.sel{box-shadow:inset 3px 0 0 var(--accent);background:var(--ifp-accent-800)}
+.more{padding:8px 10px;color:var(--ink-soft);font-size:12px}
+.detail{border-left:1px solid var(--rule);overflow:auto;padding:12px 16px;min-width:0}
+.detail h3{margin:0 0 2px;font-size:15px;font-weight:600;color:var(--ifp-navy)}
+.detail .lay{color:var(--ink-soft);font-size:12px;margin-bottom:8px}
+.detail dl{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px 12px;font-size:13px}
+.detail dt{color:var(--ink-soft)}
+.detail dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+
+@media (max-width:860px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto auto auto;height:auto}
+  aside{border-right:0}
+  main{grid-template-rows:60vh auto}
+  .lower{grid-template-columns:1fr}
+  .tablewrap{max-height:50vh}
+  .detail{border-left:0;border-top:1px solid var(--rule)}
+  .export{position:static}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="ifp-bar">
+  <a class="ifp-home" href="../index.html"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,120v96a8,8,0,0,1-8,8H160a8,8,0,0,1-8-8V164a4,4,0,0,0-4-4H108a4,4,0,0,0-4,4v52a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V120a16,16,0,0,1,4.69-11.31l80-80a16,16,0,0,1,22.62,0l80,80A16,16,0,0,1,224,120Z"/></svg>IFP Portal</a>
+  <span class="ifp-sep">/</span>
+  <span class="ifp-here">UK AIP to Map 3D</span>
+  <span class="ifp-kind">Utility</span>
+</div>
+
+<div class="app">
+<header>
+  <h1>UK AIP dataset to AutoCAD Map 3D</h1>
+  <span class="ds" id="dsinfo">No dataset loaded</span>
+  <span class="warn">NATS publishes this dataset as not for operational use.</span>
+</header>
+
+<aside>
+  <section>
+    <h2>Dataset</h2>
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose the KML dataset file">
+      <strong>Choose the KML package</strong>
+      <span class="hint">EG_AIP_DS_FULL_…_KML.zip, the .kmz inside it, or a .kml. You can also drop it here.</span>
+    </div>
+    <input type="file" id="file" accept=".zip,.kmz,.kml" hidden>
+    <div id="status" role="status"></div>
+  </section>
+
+  <section>
+    <h2>Feature groups</h2>
+    <ul class="tree" id="tree"><li class="hint">Groups appear once a dataset is loaded.</li></ul>
+    <div class="row"><button class="linkbtn" id="all">Tick all</button><button class="linkbtn" id="none">Untick all</button></div>
+  </section>
+
+  <section>
+    <h2>Narrow down</h2>
+    <input type="text" id="q" placeholder="Name, designator or remark, e.g. EGD0 or BRISTOL" aria-label="Search text">
+    <div class="row">
+      <span>Levels from</span><input type="number" id="lmin" placeholder="0" step="500" aria-label="Lowest level in feet">
+      <span>to</span><input type="number" id="lmax" placeholder="unlimited" step="500" aria-label="Highest level in feet"><span>ft</span>
+    </div>
+    <p class="hint">Keeps airspace and routes whose vertical extent overlaps this band. FL195 counts as 19,500 ft. Points and aerodromes are not affected.</p>
+    <div class="row"><span>Within</span><input type="number" id="rad" value="25" min="0" step="5" aria-label="Radius in nautical miles"><span>NM of a chosen feature</span></div>
+    <div class="anchor"><span id="anchorname" class="hint">None chosen. Select a feature, then use the button in its details.</span><button class="linkbtn" id="clearanchor" hidden>Remove</button></div>
+    <label class="check"><input type="checkbox" id="inview"><span>Only features inside the current map view</span></label>
+  </section>
+
+  <section class="export">
+    <details><summary>Export options</summary>
+    <label class="check"><input type="checkbox" id="fshp" checked><span>Shapefiles with attribute tables</span></label>
+    <label class="check"><input type="checkbox" id="fdxf" checked><span>DXF with one layer per group</span></label>
+    <label class="check"><input type="checkbox" id="fcsv" checked><span>CSV with full, untruncated attributes</span></label>
+    <label class="check"><input type="checkbox" id="fgeo"><span>GeoJSON</span></label>
+    <div class="row">
+      <label for="split">Shapefiles</label>
+      <select id="split"><option value="cat">one per category</option><option value="layer">one per layer</option></select>
+    </div>
+    <div class="row">
+      <label for="asarea">Airspace as</label>
+      <select id="asarea"><option value="line">closed 2D polylines</option><option value="poly">polygons</option></select>
+    </div>
+    <div class="row">
+      <label for="dxfpts">DXF points as</label>
+      <select id="dxfpts"><option value="block">block inserts</option><option value="point">plain points</option></select>
+      <label for="bscale">scale</label><input type="number" id="bscale" value="0.01" step="0.005" min="0" style="width:80px">
+    </div>
+    <details class="blk"><summary>Line colours</summary>
+      <p class="hint">Defaults follow the UK AIP charts ENR 6-7 (airspace classes) and ENR 6-75 (restrictions and hazards). Written to the COLOR column that AIPCOLOURS reads. Chart black is applied as AutoCAD colour 7.</p>
+      <div id="colours" class="blockgrid"><span class="hint">Load a dataset to list the colour groups.</span></div>
+    </details>
+    <details class="blk"><summary>Block names for points</summary>
+      <p class="hint">Written to a BLOCK column in every point shapefile, and used for the DXF inserts. Use the file names of your symbol DWGs, without .dwg. Names are remembered in this browser.</p>
+      <div id="blocks" class="blockgrid"><span class="hint">Load a dataset to list the point types.</span></div>
+    </details>
+    <div class="row">
+      <label for="prefix">Layer prefix</label><input type="text" id="prefix" value="AIP" style="width:90px">
+    </div>
+    <label class="check"><input type="checkbox" id="dlayer" checked><span>Put the effective date in layer names</span></label>
+    <label class="check"><input type="checkbox" id="dfile" checked><span>Put the effective date in shapefile names</span></label>
+    </details>
+    <div class="row"><button class="primary" id="export" disabled>Load a dataset to export</button></div>
+    <div id="xstatus" class="hint" role="status"></div>
+  </section>
+</aside>
+
+<main>
+  <div class="mapwrap" id="mapwrap">
+    <canvas id="map" aria-label="Preview map of the filtered features"></canvas>
+    <div class="mapbtns"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zfit" aria-label="Fit to filtered features" title="Fit to filtered features">◻</button></div>
+    <div class="legend" id="legend"></div>
+    <div class="cursor mono" id="cursor"></div>
+    <div class="empty" id="empty"><div><h3>Load the NATS KML package to begin</h3>
+      <p>The tool reads the folder structure, turns each feature's description table into real attribute columns, and flattens the 3D airspace volumes and route curtains into plain 2D outlines and lines. Everything runs in this browser tab; nothing is uploaded.</p></div></div>
+  </div>
+  <div class="lower">
+    <div class="tablewrap"><table><thead><tr><th>Name</th><th>Designator</th><th>Type</th><th>Lower</th><th>Upper</th><th>Layer</th></tr></thead><tbody id="tbody"></tbody></table><div class="more" id="more"></div></div>
+    <div class="detail" id="detail"><p class="hint">Select a row, or click a feature on the map, to see every attribute that will be exported.</p></div>
+  </div>
+</main>
+</div>
+
+<script>
+"use strict";
+const COAST="1257,5579 0,-11 -3,-2 -3,-2 -10,-2 -9,-3 -8,-5 -2,-7 5,-6 12,-2 2,-10 -9,-5 -23,-5 -2,-12 0,-9 0,-7 -2,-10 -19,-4 -12,15 0,5 -4,7 0,6 -4,9 -18,2 -7,0 -10,-1 -2,0 -12,13 2,14 -6,7 -1,3 0,3 -5,3 -6,1 -3,8 7,2 17,-1 6,1 4,1 14,13 0,3 2,3 15,2 6,-5 -1,-8 1,-10 9,-3 4,0 4,7 3,4 3,2 2,7 -3,4 -4,3 17,8 18,7 10,0 11,-1 10,-3 5,-2 3,-3 -7,-7 -1,-4 4,-13;1064,5561 5,-5 5,-11 8,-13 -4,-5 3,-7 -3,-7 -15,-8 -19,0 -19,4 -26,7 -2,5 -4,2 -7,13 0,16 14,2 29,7 6,-1 7,-4 9,0 11,5 2,0;948,4281 -2,-15 1,-4 4,-4 2,-3 3,-39 -1,-3 -12,-16 -3,-4 -1,-20 -2,-5 -4,-5 -8,-17 -6,-7 -19,9 -11,4 -5,4 -3,3 2,4 5,4 1,3 -12,4 -5,2 0,4 4,7 -2,6 -7,-1 -5,1 0,3 3,4 5,4 0,6 -6,2 -5,4 -2,6 4,4 6,2 -4,6 -4,1 -2,1 2,3 5,4 7,12 10,6 18,4 6,1 4,4 5,3 6,0 5,-2 4,-2 3,2 2,6 -2,4 1,13 3,8 6,0 4,-4 0,-3 2,-9 0,-5;-311,5852 1,-9 -1,-2 -3,-3 -7,-6 -20,-8 -36,-19 -22,-9 -3,-5 -1,-6 12,-1 5,-2 -3,-3 -19,-11 -5,-10 14,0 12,2 24,6 23,5 10,0 22,-4 4,0 9,2 9,0 62,-1 16,2 12,-2 9,-7 9,-12 0,-2 -5,-5 -11,-7 -8,-9 -3,-5 -1,-6 -3,-5 -17,-24 -17,-13 -7,-9 -9,-8 -9,-5 -9,-3 -28,-3 -7,-2 -9,-5 -10,-2 11,1 11,2 20,1 24,-8 -2,-7 -10,-5 -21,-1 -20,-11 -9,-3 -9,-2 -12,0 -22,3 -9,3 9,-5 9,-2 56,-7 3,1 18,7 24,0 45,-13 13,-9 19,-14 10,-5 8,-5 4,-7 9,-24 10,-23 13,-26 6,-7 8,-4 39,-12 9,-4 15,-11 15,-11 14,-9 15,-7 -8,-4 -5,-6 4,-8 6,-7 12,-13 11,-13 -4,2 -4,1 -6,0 -5,0 -10,4 -10,6 -19,-2 -11,0 -9,0 18,-2 19,-1 42,-22 14,-13 8,-18 -5,-8 -9,-5 -9,-6 -7,-6 23,-10 5,0 5,2 5,3 9,8 4,3 14,1 13,-1 12,-2 11,1 21,-4 11,-3 28,-14 6,-7 2,-10 1,-11 -5,-10 -5,-9 -4,-12 -2,-4 -3,-3 -15,-10 -9,-3 -4,1 -5,0 0,-2 4,-5 1,-6 -9,-4 -9,-1 -14,2 -21,-8 15,-4 3,-4 -4,-8 -9,-3 -10,-2 -11,0 -8,-2 -9,-3 11,2 7,-2 5,-6 4,-2 20,-3 12,0 25,2 11,-1 5,-1 0,-5 -2,-13 -3,-2 -32,-11 -7,-8 -2,-4 -19,0 -8,-4 -16,-4 -11,-3 -12,-4 -10,-2 -40,6 -25,-1 -34,-5 -8,1 -13,5 -13,2 -15,2 -14,4 9,-8 -19,-7 -8,-2 -9,1 -18,-3 -16,1 2,-5 5,-4 -4,-2 -4,-1 -31,4 -5,-1 -3,-3 -12,2 -11,5 -12,4 -12,1 -10,0 -40,-9 -9,-8 -4,-12 -5,-11 -10,-8 -11,-1 -11,6 -20,6 -7,4 -3,0 -2,-1 -8,-2 -8,0 -13,-2 -22,-5 -9,-3 -19,-10 -4,-3 -7,-9 -11,-2 -9,6 -11,3 -12,-3 -7,-3 -3,3 -1,5 9,7 23,5 20,12 10,8 3,5 5,2 7,1 3,5 28,20 2,4 1,8 3,8 22,5 11,16 3,1 32,3 23,0 23,-3 12,-1 12,2 10,4 16,16 9,6 10,7 10,7 16,13 -11,-4 -13,-8 -7,-4 -24,-4 -10,-4 -18,-10 -3,-1 -27,2 -20,13 -13,5 -5,1 -6,-2 -12,-1 -12,0 7,6 8,3 -19,2 -5,2 -6,4 -14,1 -7,-1 -12,-6 -18,-5 -22,8 -5,3 0,7 -3,5 -6,2 8,7 9,5 21,4 32,11 18,5 16,8 7,5 5,6 5,8 7,7 -7,2 -3,5 1,5 3,4 -3,6 -5,6 1,5 1,5 -13,-1 -13,-1 -11,-4 -11,-4 -10,-1 0,3 4,5 11,7 13,5 4,5 3,4 6,4 16,8 30,8 5,1 11,-1 12,1 10,3 11,1 22,-9 -7,13 10,4 15,-13 6,-1 11,2 -5,2 -5,0 -6,2 -6,4 -10,12 1,8 6,7 7,7 -5,2 -5,2 -1,7 1,7 13,5 4,8 1,10 -2,4 -12,-1 -6,-2 -6,-2 -6,0 -15,10 -9,8 -16,16 -2,9 12,21 20,14 23,4 -4,1 -35,0 -12,-1 -11,-6 -6,-1 -6,-1 -6,-3 -6,-4 -6,-2 -12,1 -5,-1 -4,2 -4,4 -4,1 -5,-1 -11,-5 -11,-3 -13,3 -17,6 -3,-2 -4,-6 -2,-8 -12,7 -11,10 -3,6 0,7 5,2 6,-2 9,16 18,21 7,6 4,8 -1,5 -4,5 -16,10 0,8 2,9 4,6 2,1 23,0 -9,3 -17,8 0,3 4,8 -2,-1 -3,-3 -8,-9 -4,-2 -12,-2 -2,-4 -3,-2 -6,0 -1,-4 -2,0 -2,4 0,7 3,7 4,5 18,11 -9,-3 -19,-11 -10,-7 -3,-2 -1,-3 0,-2 5,-12 -2,-6 -17,-38 -3,-4 -3,-2 -3,0 -8,0 -4,3 0,3 2,5 7,18 3,5 5,5 9,8 0,1 -6,-2 -3,1 -2,1 1,24 5,8 2,12 5,10 6,7 4,9 6,5 2,6 7,7 5,7 -3,-1 -34,-18 -9,-4 -12,1 -10,2 -7,5 -3,8 -9,0 -7,2 0,1 9,4 16,2 15,7 -13,5 1,2 11,4 15,14 3,13 -7,6 -3,4 -13,5 -3,6 2,3 4,3 7,2 11,3 -10,2 -4,3 -2,4 0,3 5,11 3,4 5,6 26,0 3,2 3,1 13,-3 -2,3 -21,13 -2,3 6,7 0,4 -1,3 2,3 7,1 21,0 5,1 -2,4 -5,5 -1,3 1,4 1,7 0,3 5,5 4,1 6,1 11,-2 5,-2 5,-4 3,0 15,5 4,1 6,-6 24,5 33,2 20,3 21,1 19,3 21,-2 0,-1 -1,-3 -5,-7;-718,5506 8,-1 7,3 8,10 6,1 7,-1 12,1 23,5 10,0 14,-2 10,0 9,-8 5,-11 12,-11 15,-10 1,-6 -6,-4 -11,-4 0,-4 7,2 7,1 16,-1 5,-4 4,-7 2,-5 -1,-6 -4,2 -5,5 -4,3 -6,1 2,-7 -1,-10 3,-1 7,0 -5,-10 -10,-2 -12,-1 -3,-4 -2,-4 -6,-7 -8,-4 -10,1 -10,3 4,-4 2,-3 -7,-2 -8,1 -4,-2 0,-5 3,-6 5,-4 4,-9 4,-11 5,-6 1,-8 -1,-4 1,-7 -2,-2 1,-7 7,-13 2,-8 2,-16 -4,-6 -6,-6 -4,-7 -3,-8 -2,-12 -13,-14 -5,-3 -6,-3 14,-9 -12,-5 -12,-1 -14,2 -8,0 -8,-3 -3,-2 -2,1 -5,8 -4,-8 -8,-3 -14,0 -22,-2 -9,-2 -3,-4 -3,-4 -4,-3 -4,-1 -17,-3 -3,-2 -8,-6 -11,-4 -9,-2 -7,4 -3,3 -4,1 -12,0 4,-1 2,-3 1,-6 -1,-5 -6,-3 -7,0 -11,-6 -15,-1 -7,-6 -49,-8 -2,0 -7,2 -7,1 -7,-1 -21,-5 -10,1 13,12 17,6 2,2 -6,1 -32,-4 -11,-4 -11,-1 5,6 14,7 8,4 5,1 5,4 15,5 -49,-10 -12,1 -3,3 -10,-1 -4,7 15,10 8,5 11,2 9,4 4,4 -5,2 -29,-1 -14,0 1,4 2,4 15,6 8,1 7,0 7,-2 5,-2 17,1 -7,4 -1,9 -6,2 7,4 8,3 13,8 4,1 26,2 27,4 28,6 -14,3 -7,5 -11,-9 -7,-4 -22,-1 -7,1 -10,2 -3,-1 -3,-2 -15,-4 -15,-1 18,8 22,13 5,4 8,8 -3,3 -4,2 16,15 6,2 10,1 8,2 3,0 3,1 7,5 -10,3 -11,1 -33,-1 -4,0 -5,1 -2,2 -2,5 -2,1 -8,0 -7,-1 -6,0 -5,2 9,5 -11,2 -10,-1 -9,1 0,4 4,3 -6,3 -1,4 6,2 6,-1 12,3 16,1 -14,3 -5,3 0,4 1,3 16,5 16,2 -1,4 1,4 -17,1 -16,-3 2,8 3,6 1,5 -1,4 -7,-1 -2,6 -3,5 -11,-3 0,6 3,4 6,2 7,-1 10,0 11,3 16,1 24,-1 17,-9 5,1 7,6 3,1 25,-3 16,-3 5,1 -3,6 -5,5 6,5 9,4 5,2 13,3 6,2 4,7 6,6 -33,-3 -30,7 5,5 6,3 11,2 1,3 6,2 9,6 -3,7 2,6 6,4 3,5 3,4 13,1 14,4 4,-1 16,1 5,-1 -1,6 9,1 4,-2 2,-4 4,-3 1,-5 -3,-4 -4,-3 4,-3 -7,-5 8,2 10,6 0,4 -2,5 -3,5 1,6 6,3 16,2 -7,6 6,1 6,-2 9,-5 10,-3 10,-3 -10,-6 -11,-4 -5,-5 4,-3;-4000,6898 0,-4 0,-3 0,1 0,-1 0,-6 0,-3 0,-7 0,-7 0,-10 0,2 0,6 0,-7 0,-4 0,-5 0,-3 0,-4 0,-4 0,-7 0,-5 0,2 0,5 0,4 0,14 0,5 0,-3 0,-18 0,-6 0,-2 0,-4 0,-2 0,2 0,-2 0,-4 0,-6 0,-44 0,-8 0,-3 0,-5 0,-7 0,-9 0,1 0,1 0,3 0,3 0,-3 0,-6 0,-8 0,-7 0,-11 0,-9 0,-4 0,-4 0,-14 0,-5 0,-11 0,-1 0,-1 0,-1 0,-5 0,-5 0,-6 0,-6 0,-3 0,1 0,8 0,2 0,2 0,-9 0,-15 0,2 0,4 0,2 0,6 0,6 0,6 0,3 0,2 0,4 0,5 0,2 0,4 0,9 0,5 0,4 0,7 0,4 0,2 0,4 0,1 0,1 0,3 0,1 0,1 0,3 0,-1 0,-2 0,-4 0,-2 0,-2 0,-8 0,-4 0,-6 0,-1 0,2 0,5 0,6 0,2 0,1 0,-4 0,-2 0,-1 0,2 0,3 0,5 0,3 0,-3 0,-4 0,-2 0,-4 0,-11 0,-14 0,-9 0,-6 0,-17 0,-2 0,-2 0,-3 0,-4 0,3 0,2 0,-1 0,-2 0,-3 0,-4 0,-3 0,-1 0,-2 0,-8 0,-6 0,1 0,2 0,-2 0,-8 0,-7 0,-4 0,-11 0,-5 0,-4 0,2 0,2 0,3 0,5 0,6 0,1 0,-2 0,-4 0,-5 0,-7 0,-8 0,-4 0,-1 0,3 0,-2 0,-1 0,1 0,3 0,3 0,1 0,4 0,5 0,2 0,-1 0,-7 0,-11 0,-3 0,-2 0,-2 0,-13 0,-2 0,-3 0,-2 0,-1 0,1 0,-3 0,-7 0,-8 0,-5 0,-3 0,-6 0,-3 0,1 0,-1 0,-3 0,-3 0,2 0,-1 0,-4 0,-3 0,-3 0,-3 0,-4 0,-3 0,-2 0,-1 0,-2 0,-4 0,-2 0,-5 0,-4 0,-2 0,5 0,4 0,3 0,-2 0,-14 0,-4 0,-3 0,-2 0,1 0,6 0,6 0,3 0,5 0,5 0,-6 0,-5 0,-7 0,5 0,4 0,13 0,6 0,8 0,6 0,3 0,-2 0,1 0,2 0,3 0,2 0,8 0,6 0,4 0,6 0,12 0,12 0,12 0,8 0,5 0,1 0,-1 0,-10 0,-1 0,-1 0,1 0,5 0,5 0,11 0,4 0,2 0,-1 0,5 0,6 0,8 0,9 0,1 0,-3 0,3 0,8 0,5 0,3 0,12 0,8 0,-4 0,-12 0,-4 0,-1 0,-1 0,2 0,3 0,12 0,2 0,-2 0,-4 0,-2 0,-7 0,-6 0,-2 0,-1 0,5 0,-7 0,-9 0,-12 0,-10 0,-4 0,-7 0,-5 0,-7 0,-5 0,-8 0,-5 0,-15 0,-5 0,-12 6000,-4 0,-11 0,-10 0,-4 0,-15 0,-3 0,7 0,5 0,6 0,15 0,2 0,6 0,7 0,-4 0,3 0,-2 0,-2 0,-2 0,1 0,-2 0,-5 0,-9 0,-5 0,-2 0,6 0,-1 0,2 0,10 0,-12 0,-6 0,-10 0,7 0,3 0,4 0,4 0,4 0,-1 0,-5 0,-6 0,-8 0,-4 0,-2 0,-5 0,9 0,-5 0,9 0,5 0,-1 0,-2 0,-17 0,-13 0,-14 0,-8 0,1 0,8 0,5 0,-5 0,-5 0,-13 0,-4 0,-8 0,-3 0,-1 0,-13 0,-17 0,-2 0,-4 0,-4 0,-1 0,-4 0,-8 0,-4 0,-1 0,5 0,7 0,3 0,-14 0,-5 0,-7 0,-9 0,-4 0,-7 0,-2 0,-5 0,-7 0,-6 0,-2 0,-9 0,-8 0,-8 0,-10 0,-4 0,-7 0,-8 0,4 0,19 0,3 0,1 0,1 0,4 0,5 0,5 0,4 0,-3 0,4 0,-1 0,-6 0,-3 0,-3 0,-3 0,-4 0,-3 0,-2 0,-3 0,-10 0,-6 0,-17 0,-5 0,-1 0,-2 0,-7 0,-9 0,1 0,-8 0,-5 0,-2 0,-12 0,4 0,-16 0,-15 0,6 0,-3 0,-6 0,-7 0,-2 0,2 0,-1 0,-5 0,-6 0,-2 0,-5 0,-6 0,-6 0,-8 0,-2 0,-4 0,-2 0,-11 0,-21 0,-2 0,-7 0,-4 0,-5 0,-8 0,-21 0,-4 0,-4 0,2 0,8 0,3 0,5 0,7 0,3 0,2 0,17 0,12 0,4 0,-4 0,3 0,-2 0,-6 0,-4 0,-6 0,-10 0,-36 0,-8 0,-1 0,-1 0,7 0,6 0,11 0,9 0,17 0,6 0,7 0,-12 0,-12 0,-3 0,-8 0,-3 0,-16 0,-8 0,-2 0,3 0,13 0,6 0,1 0,-1 0,-9 0,-7 0,8 0,4 0,2 0,-1 0,-5 0,-7 0,-2 0,-5 0,-6 0,-7 0,-19 0,-22 0,-17 0,2 0,-1 0,-2 0,-10 0,-3 0,-3 0,-2 0,-14 0,-9 0,-26 0,-18 0,-19 0,-10 0,-6 0,-4 0,-5 0,-5 0,-3 0,-3 0,5 0,13 0,5 0,-11 0,-5 0,-10 0,-5 0,-8 0,-8 0,-12 0,-8 0,-4 0,-14 0,-8 0,-14 0,-7 0,-5 0,-4 0,2 0,-1 0,-4 0,-13 0,-11 0,-22 0,-6 0,-3 0,-10 0,-1 0,3 0,17 0,10 0,7 0,5 0,7 0,-1 0,-3 0,1 0,-3 0,-6 0,-14 0,-3 0,-4 0,-6 0,-4 0,-25 0,-18 0,-16 0,-14 0,-15 0,-7 0,-14 0,-11 0,-14 0,-6 0,-16 0,-1 0,8 0,-2 0,-4 0,-11 0,-14 0,-10 0,-6 0,-12 0,-23 0,-11 0,-5 0,-7 0,-10 0,-7 0,-10 0,-15 0,10 0,1 0,-12 0,-7 0,-14 0,2 0,8 0,4 0,-2 0,-7 0,-4 0,-5 0,-18 0,-6 0,-17 0,-8 0,-8 0,-21 0,-28 0,-20 0,-8 0,-5 0,-7 0,-20 0,-20 0,-4 0,8 0,7 0,11 0,8 0,7 0,9 0,44 0,46 0,14 0,12 0,12 0,12 0,14 0,73 0,19 0,59 0,35 0,33 0,15 0,44 0,28 0,63 0,5 0,3 0,24 0,13 0,14 0,18 0,9 0,6 0,6 0,7 0,3 0,2 0,3 0,-5 0,2 0,22 0,-3 0,3 0,-1 0,7 0,8 0,12 0,14 0,10 0,9 0,9 0,10 0,33 0,26 0,16 0,5 0,3 0,22 0,18 0,12 0,8 0,19 0,5 0,7 0,12 0,12 0,2 0,5 0,3 0,4 0,11 0,5 0,3 0,13 0,10 0,5 0,3 0,4 0,10 0,8 0,7 0,16 0,18 0,24 0,6 0,12 0,-4 0,-2 0,-4 0,4 0,4 0,1 0,-1 0,4 0,3 0,5 0,11 0,3 0,-1 0,-15 0,-4 0,-5 0,-9 0,-3 0,-3 0,-5 0,-11 0,-10 0,-16 0,-10 0,-5 0,-4 0,-6 0,-3 0,-4 0,-2 0,-1 0,6 0,11 0,-2 0,-4 0,2 0,-1 0,-12 0,-58 0,-7 0,-14 0,-1 0,-3 0,-4 0,-3 0,5 0,4 0,10 0,19 0,3 0,-4 0,-7 0,2 0,5 0,12 0,10 0,6 0,3 0,22 0,11 0,14 0,5 0,5 0,1 0,-14 0,-4 0,6 0,3 0,10 0,2 0,-1 0,-7 0,-4 0,1 0,-6 0,-1 0,5 0,-5 0,-7 0,-12 0,-3 0,-5 0,-21 0,-6 0,-6 0,-15 0,-22 0,-10 0,-13 0,-17 0,-28 0,-22 0,-5 0,-10 0,-7 0,-6 0,-7 0,-5 0,-1 0,1 0,6 0,-9 0,-9 0,-9 0,-8 0,-5 0,8 0,-3 0,-8 0,-3 0,4 0,10 0,-1 0,-12 0,-1 0,-14 0,-1 0,2 0,8 0,-3 0,-9 0,-4 0,1 0,20 0,8 0,-1 0,1 0,6 0,6 0,1 0,-1 0,4 0,20 0,4 0,2 0,1 0,-2 0,-5 0,-4 0,-2 0,1 0,4 0,-1 0,2 0,4 0,3 0,5 0,1 0,12 0,-1 0,-3 0,-10 0,-7 0,-3 0,-4 0,-1 0,-1 0,6 0,-8 0,-8 0,3 0,-3 0,-9 0,-2 0,15 0,-2 0,-10 0,-2 0,10 0,9 0,-3 0,-21 0,-5 0,3 0,13 0,4 0,4 0,-3 0,3 0,-7 0,3 0,-13 0,-9 0,-15 0,-25 0,-10 0,-12 0,-11 0,-12 0,-9 0,-34 0,-6 0,-12 0,-14 0,-4 0,-5 0,-10 0,-3 0,-7 0,-17 0,-12 0,-34 0,-4 0,-9 0,-7 0,-29 0,-3 0,-14 0,-8 0,-9 0,-11 0,-11 0,-7 0,-16 0,-19 0,-5 0,-17 0,-4 0,-6 0,-11 0,-2 0,-2 0,-11 0,3 0,1 0,-6 0,-11 0,-10 0,-29 0,-13 0,-13 0,-2 0,6 0,1 0,-3 0,21 0,3 0,7 0,5 0,10 0,1 0,-1 0,-12 0,-3 0,-1 0,-2 0,-7 0,-6 0,-2 0,-5 0,-3 0,-16 0,-8 0,-5 0,-3 0,-1 0,2 0,4 0,13 0,18 0,5 0,-1 0,-13 0,-15 0,-8 0,-7 0,2 0,3 0,18 0,12 0,17 0,11 0,7 0,8 0,2 0,-10 0,-3 0,9 0,-2 0,-5 0,-16 0,-5 0,-19 0,-21 0,-11 0,-4 0,-12 0,-4 0,-11 0,-8 0,-9 0,8 0,-5 0,-14 0,-6 0,-19 0,-10 0,-12 0,-6 0,-10 0,-4 0,-5 0,-12 0,-14 0,-6 0,-13 0,-11 0,-21 0,-18 0,-18 0,-6 0,-19 0,-25 0,-42 0,-2 0,-3 0,-3 0,-2 0,-12 0,-8 0,-7 0,-16 0,-27 0,-4 0,-7 0,-6 0,-4 0,-7 0,-6 0,-3 0,-19 0,-25 0,-10 0,-10 0,-14 0,-9 0,-11 0,-9 0,-26 0,-25 0,-32 0,-8 0,-9 0,-15 0,-20 0,-8 0,-21 0,-32 0,-11 0,-18 0,-25 0,-22 0,-9 0,-10 0,-16 0,-15 0,-11 0,-7 0,-5 0,-7 0,-40 0,-7 0,-7 0,-14 0,-16 0,-10 0,-14 0,-25 0,-9 0,-12 0,-7 0,-6 0,2 0,9 0,-2 0,9 0,-1 0,4 0,-3 0,36 0,7 0,-7 0,-12 0,-2 0,7 0,11 0,2 0,-5 0,-5 0,-20 0,-18 0,-5 0,-7 0,-7 0,2 0,-2 0,4 0,-1 0,-14 0,-19 0,-3 0,-3 0,2 0,1 0,-9 0,-3 0,-8 0,-6 0,-5 0,-9 0,-9 0,-10 0,-11 0,-11 0,-10 0,-9 0,-18 0,-19 0,-7 0,-13 0,-7 0,-17 0,-6 0,-7 0,-4 0,-12 0,-7 0,-4 0,-5 0,-1 0,-3 0,-10 0,-12 0,-8 0,-14 0,-10 0,-8 0,2 0,-3 0,-7 0,-9 0,-3 0,-4 0,-2 0,-4 0,-18 0,-8 0,-3 0,-5 0,-6 0,-6 0,-44 0,-29 0,-21 0,-41 0,-21 0,-13 0,-19 0,-10 0,-17 0,-8 0,-7 0,-12 0,-6 0,-9 0,-3 0,-1 0,3 0,1 0,-5 0,1 0,3 0,6 0,7 0,7 0,10 0,9 0,5 0,11 0,10 0,-1 0,-3 0,4 0,8 0,10 0,9 0,1 0,4 0,1 0,-6 0,-1 0,-10 0,-3 0,4 0,5 0,3 0,2 0,2 0,12 0,6 0,3 0,11 0,11 0,4 0,10 0,7 0,3 0,7 0,2 0,2 0,2 0,1 0,1 0,8 0,-5 0,-7 0,-2 0,13 0,12 0,-3 0,-4 0,-11 0,-8 0,-1 0,3 0,9 0,4 0,4 0,1 0,11 0,2 0,2 0,1 0,-1 0,3 0,-1 0,3 0,10 0,7 0,4 0,14 0,8 0,10 0,2 0,1 0,4 0,2 0,-1 0,7 0,6 0,42 0,4 0,10 0,10 0,5 0,1 0,11 0,6 0,-2 0,-9 0,-2 0,-2 0,11 0,7 0,8 0,4 0,9 0,1 0,-9 0,-8 0,-2 0,6 0,-4 0,-5 0,-2 0,-1 0,-3 0,-4 0,-2 0,-5 0,-2 0,-23 0,-10 0,-12 0,-6 0,-4 0,-1 0,-4 0,-1 0,2 0,-1 0,-5 0,-6 0,-3 0,-3 0,-2 0,-4 0,-3 0,-1 0,8 0,11 0,3 0,1 0,15 0,11 0,5 0,8 0,4 0,1 0,-3 0,1 0,1 0,6 0,7 0,3 0,7 0,2 0,5 0,7 0,9 0,10 0,10 0,9 0,22 0,4 0,10 0,4 0,6 0,9 0,15 0,13 0,-9 0,-3 0,-1 0,4 0,2 0,-6 0,-9 0,-7 0,-3 0,-6 0,-36 0,-3 0,-21 0,-9 0,-15 0,-9 0,-10 0,-15 0,-19 0,-4 0,-1 0,-1 0,2 0,-6 0,-5 0,12 0,4 0,-4 0,-6 0,-28 0,-16 0,-7 0,-20 0,-11 0,-13 0,-8 0,3 0,-9 0,-14 0,-9 0,-3 0,-3 0,-5 0,-4 0,-2 0,-15 0,-16 0,-5 0,-8 0,-6 0,-1 0,2 0,10 0,5 0,5 0,14 0,13 0,4 0,2 0,1 0,1 0,13 0,-10 0,-13 0,-2 0,-6 0,-6 0,-2 0,6 0,3 0,-1 0,-6 0,-6 0,1 0,2 0,-3 0,-8 0,-14 0,-4 0,-7 0,-5 0,-2 0,-5 0,-3 0,-9 0,2 0,3 0,5 0,3 0,1 0,-1 0,-12 0,-10 0,-8 0,-5 0,-1 0,4 0,-1 0,-2 0,-7 0,-6 0,-4 0,-1 0,3 0,-5 0,-7 0,-17 0,-4 0,-2 0,-6 0,3 0,3 0,8 0,4 0,-3 0,-5 0,-3 0,-10 0,-1 0,-1 -7,0 -8,0 -21,0 -25,0 -9,0 2,0 1,0 -5,0 -4,0 -9,0 -5,0 -15,0 -5,0 -7,0 -2,0 -6,0 -4,0 -10,0 -8,0 -3,0 -4,0 -5,0 -6,0 -2,0 2,0 12,0 -1,0 -3,0 -12,0 -5,0 -10,0 -9,0 -8,0 -3,0 -8,0 -3,0 4,0 8,0 7,0 8,0 13,0 8,0 -2,0 -10,0 -5,0 -22,0 -26,0 -33,0 -16,0 -24,0 -21,0 -26,0 -3,0 -11,0 -33,0 -12,0 -17,0 -38,0 -5,0 -7,0 -9,0 -1,0 4,0 -2,0 -4,0 -13,0 -4,0 -9,0 2,0 -4,0 2,0 -7,0 -14,0 -13,0 -2,0 2,0 -3,0 -5,0 -2,0 4,0 2,0 4,0 2,0 -6,0 -14,0 -35,0 -8,0 -5,0 -39,0 -16,0 -12,0 -13,0 -58,0 -13,0 -24,0 -5,0 -9,0 -17,0 -5,0 -1,0 2,0 4,0 4,0 -2,0 -3,0 -2,0 10,0 5,0 7,0 5,0 5,0 21,0 10,0 12,0 5,0 35,0 8,0 18,0 26,0 18,0 9,0 10,0 -1,0 7,0 -2,0 -9,0 -2,0 -8,0 -10,0 -5,0 -16,0 -4,0 -8,0 -1,0 -4,0 -8,0 -8,0 5,0 4,0 -1,0 -3,0 1,0 30,0 2,0 -1,0 1,0 -29,0 -23,0 -3,0 -31,0 -12,0 -6,0 -6,0 2,0 8,0 18,0 23,0 22,0 6,0 -7,0 -14,0 -7,0 -11,0 -16,0 -7,0 -4,0 -10,0 -7,0 -3,0 -1,0 -4,0 2,0 3,0 -3,0 -7,0 -7,0 -2,0 -2,0 -3,0 -8,0 -7,0 -2,0 -2,0 -11,0 -28,0 -3,0 -23,0 -10,0 -8,0 -10,0 -21,0 -5,0 -24,0 -34,0 -25,0 -4,0 5,0 23,0 4,0 2,0 -10,0 -10,0 -9,0 -9,0 -6,0 -3,0 -2,0 -4,0 -13,0 -3,0 -7,0 4,0 14,0 2,0 -2,0 -14,0 -8,0 -1,0 1,0 -10,0 -11,0 -1,0 28,0 4,0 5,0 11,0 -2,0 -5,0 -5,0 -7,0 -3,0 -2,0 7,0 -3,0 -2,0 -4,0 -6,0 -14,0 -12,0 -3,0 -3,0 -4,0 -14,0 6,0 6,0 13,0 4,0 5,0 4,0 6,0 16,0 4,0 -1,0 -3,0 5,0 3,0 1,0 2,0 6,0 10,0 17,0 6,0 1,0 19,0 -5,0 -17,0 -23,0 -8,0 -7,0 -7,0 17,0 4,0 2,0 4,0 2,0 -5,0 2,0 1,0 -9,0 -7,0 -5,0 4,0 7,0 9,0 4,0 2,0 7,0 9,0 -3,0 2,0 2,0 5,0 1,0 7,0 -3,0 -4,0 -21,0 10,0 -13,0 -2,0 -6,0 3,0 4,0 11,0 -10,0 1,0 4,0 -2,0 -7,0 -5,0 -4,0 -3,0 2,0 -4,0 -3,0 -7,0 -5,0 -1,0 -5,0 -14,0 -11,0 -2,0 -5,0 -2,0 -1,0 2,0 -3,0 -3,0 -5,0 -5,0 -5,0 -5,0 3,0 -3,0 -9,0 -3,0 -1,0 4,0 -1,0 -2,0 -2,0 -9,0 -4,0 -5,0 -9,0 -1,0 9,0 -4,0 -26,0 -23,0 -16,0 -7,0 -4,0 -1,0 -1,0 -5,0 -18,0 -7,0 -7,0 -6,0 1,0 8,0 -1,0 -15,0 -9,0 -5,0 -3,0 -2,0 -3,0 -2,0 1,0 1,0 7,0 -10,0 -4,0 -9,0 -1,0 -2,0 -2,0 -3,0 -5,0 -4,0 -16,0 -4,0 2,0 -1,0 -5,0 -2,0 -3,0 -9,0 -11,0 -6,0 -11,0 -21,0 -4,0 -6,0 -4,0 -7,0 2,0 5,0 3,0 -9,0 -2,0 7,0 6,0 3,0 2,0 -16,0 -16,0 -3,0 1,0 8,0 10,0 7,0 -4,0 -7,0 -2,0 -3,0 -2,0 -11,0 -6,0 -2,0 -5,0 -18,0 -22,0 -21,0 -30,0 -64,0 -4,0 4,0 6,0 20,0 -3,0 -22,0 -7,0 -9,0 -57,0 -6,0 -42,0 -47,0 -20,0 -31,0 -12,0 -8,0 -6,0 -4,0 -6,0 -20,0 -8,0 -41,0 -39,0 -22,0 -13,0 -19,0 -13,0 -26,0 -44,0 -14,0 -14,0 -22,0 -9,0 -18,0 -13,0 -32,0 -24,0 -12,0 -3,0 -14,0 3,0 13,0 7,0 -1,0 -4,0 -10,0 2,0 -5,0 -4,0 -7,0 -4,0 -52,0 -11,0 -14,0 -24,0 -19,0 -6,0 49,0 6,0 2,0 -62,0 -24,0 -7,0 -5,0 -26,0 -6,0 -3,0 10,0 16,0 5,0 -50,0 -35,0 -15,0 -49,0 -30,0 -7,0 -14,0 -17,0 -20,0 -11,0 -12,0 -34,0 -26,0 -87,0 -25,0 -27,0 -63,0 -14,0 -18,0 -11,0 -7,0 -7,0 -15,0 -29,0 -22,0 -4,0 -18,0 -20,0 -42,0 -14,0 1,0 5,0 -8,0 3,0 -3,0 -6,0 -13,0 -8,0 -7,0 -3,0 -5,0 -3,0 -6,0 -13,0 -5,0 -7,0 1,0 6,0 4,0 8,0 9,0 8,0 2,0 -1,0 -5,0 -14,0 -3,0 -6,0 -5,0 1,0 1,0 14,0 1,0 -9,0 -12,0 -2,0 -1,0 3,0 -3,0 -10,0 -4,0 -13,0 -12,0 3,0 -4,0 1,0 -2,0 -4,0 -7,0 -14,0 -6,0 -1,0 -2,0 -4,0 -8,0 -26,0 -18,0 2,0 -9,0 -1,0 -7,0 -2,0 -6,0 -5,0 -3,0 -5,0 -4,0 -4,0 1,0 -5,0 4,0 -5,0 -8,0 -4,0 -4,0 -6,0 -7,0 -1,0 5,0 -1,0 -4,0 -5,0 -3,0 5,0 18,0 8,0 10,0 -5,0 -11,0 -9,0 -4,0 -5,0 -9,0 3,0 5,0 21,0 8,0 3,0 3,0 -1,0 -3,0 -8,0 -25,0 -7,0 -14,0 -17,0 -12,0 4,0 -2,0 -4,0 -18,0 -13,0 -6,0 1,0 6,0 1,0 -6,0 -13,0 -27,0 -4,0 -4,0 3,0 8,0 13,0 6,0 4,0 1,0 -1,0 -10,0 -5,0 -4,0 -3,0 -3,0 -5,0 -2,0 -1,0 2,0 -1,0 1,0 -1,0 -5,0 7,0 8,0 5,0 2,0 5,0 14,0 14,0 9,0 -1,0 3,0 17,0 18,0 19,0 15,0 4,0 -1,0 -13,0 -28,0 -29,0 -21,0 -9,0 -9,0 -3,0 -3,0 -6,0 -10,0 -2,0 4,0 9,0 2,0 -5,0 -7,0 -5,0 -1,0 -8,0 -9,0 -11,0 -9,0 -9,0 -9,0 -7,0 -2,0 -9,0 12,0 26,0 31,0 27,0 3,0 6,0 2,0 11,0 14,0 13,0 5,0 -2,0 -4,0 -6,0 -6,0 -10,0 -17,0 -4,0 4,0 11,0 6,0 -13,0 16,0 5,0 -1,0 3,0 -13,0 -9,0 -5,0 -5,0 -3,0 -6,0 -11,0 -15,0 -5,0 -4,0 -3,0 -5,0 -5,0 9,0 8,0 14,0 11,0 16,0 16,0 6,0 10,0 3,0 -4,0 10,0 11,0 6,0 13,0 2,0 -1,0 -6,0 -5,0 -7,0 3,0 5,0 12,0 19,0 40,0 15,0 13,0 5,0 2,0 5,0 8,0 11,0 8,0 5,0 6,0 10,0 14,0 22,0 25,0 12,0 9,0 8,0 15,0 9,0 13,0 9,0 16,0 32,0 48,0 44,0 12,0 13,0 22,0 41,0 18,0 29,0 19,0 16,0 11,0 7,0 5,0 -3,0 -12,0 -9,0 -2,0 5,0 2,0 13,0 33,0 6,0 4,0 41,0 24,0 9,0 21,0 74,0 42,0 24,0 14,0 41,0 39,0 4,0 17,0 13,0 10,0 12,0 12,0 -6,0 9,0 14,0 27,0 21,0 30,0 35,0 19,0 10,0 10,0 20,0 18,0 15,0 9,0 1,0 1,0 2,0 6,0 3,0 11,0 9,0 22,0 20,0 20,0 11,0 24,0 18,0 15,0 14,0 11,0 17,0 49,0 8,0 16,0 14,0 10,0 10,6 16,10 21,10 27,10 18,8 29,8 71,5 37,4 25,-1 26,14 12,4 55,2 26,10 98,0 12,-4 12,-5 20,-13 9,-3 13,3 31,12 33,6 19,8 8,11 16,4 9,-9 35,-8 21,2 10,3 -3,12 22,-3 18,-6 18,-12 12,-2 22,5 45,3 24,6 24,16 8,3 55,15 7,-1 8,-2 -2,-5 -4,-5 5,-7 6,4 -1,3 0,4 11,1 10,-1 11,-4 -1,-18 14,-17 -4,-8 12,-5 11,6 5,9 20,5 18,13 10,1 3,-10 5,-10 -7,-3 -9,-10 -17,-25 -16,-7 -12,-10 -3,-6 -1,-8 3,-15 8,-3 10,0 9,0 22,0 3,0 1,0 8,0 -16,0 -9,0 -18,0 -15,0 -34,0 -8,0 -6,0 -2,0 1,0 11,0 15,0 14,0 26,0 -1,0 2,0 11,0 7,0 6,0 13,0 6,0 11,0 1,0 -4,0 -3,0 3,0 11,0 6,0 10,0 16,0 15,0 47,0 15,0 32,0 39,0 14,0 26,0 11,0 19,0 32,0 8,0 18,0 9,0 67,0 9,0 9,0 5,0 9,0 10,0 11,0 12,0 29,0 33,0 33,0 57,0 48,0 12,0 24,0 48,0 27,0 19,0 16,0 30,0 12,0 29,0 -4,0 -3,0 4,0 3,0 0,16 0,15 0,10 0,11 0,14 0,8 0,7 0,4 0,6 0,-6 0,-7 0,-2 0,-4 0,-7 0,-5 0,-3 0,7 0,9 0,7 0,2 0,-4 0,-18 0,-26 0,-4 0,-12 0,-4 0,1 0,-5 0,-6 0,6 0,8 0,9 0,18 0,8 0,8 0,19 0,2 0,3 0,2 0,-7 0,-27 0,-8 0,-14 0,-4 0,-3 0,5 0,2 0,-6 0,-8 0,-1 0,10 0,6 0,8 0,12 0,7 0,5 0,5 0,3 0,-5 0,1 0,2 0,10 0,1 0,-12 0,-4 0,-2 0,4 0,8 0,-1 0,-6 0,3 0,4 0,1 0,3 0,2 0,2 0,9 0,8 0,3 0,-2 0,1 0,-4 0,10 0,5 0,-1 0,4 0,9 0,6 0,3 0,1 0,4 0,10 0,11 0,6 0,3 0,4 0,15 0,10 0,1 0,7 0,8 0,6 0,-2 0,-3 0,1 0,5 0,3 0,4 0,9 0,7 0,12 0,6 0,2 0,-1 0,-7 0,-7 0,-7 0,-7 0,-1 0,7 0,1 0,-3 0,-2 0,4 0,4 0,3 0,8 0,7 0,3 0,5 0,3 0,4 0,11 0,3 0,1 0,-1 0,4 0,5 0,5 0,6 0,14 0,3 0,5 0,8 0,10 0,3 0,1 0,-4 0,-4 0,-1 0,5 0,5 0,9 0,21 0,12 0,3 0,18 0,20 0,5 0,1 0,-5 0,-3 0,-6 0,1 0,2 0,3 0,10 0,3 0,-2 0,-2 0,-3 0,-6 0,-1 0,3 0,-2 0,1 0,3 0,5 0,1 0,2 0,3 0,10 0,2 0,6 0,3 0,2 0,5 0,4 0,9 0,2 0,5 0,9 0,8 0,4 0,1 0,-8 0,5 0,-12 0,3 0,5 0,16 0,27 0,14 0,8 0,8 0,11 0,2 0,-6 0,10 0,-3 0,-4 0,-3 0,-7 0,-10 0,-6 0,-10 0,8 0,-1 0,-2 0,-25 0,-9 0,-7 0,-1 0,7 0,2 0,1 0,-8 0,-10 0,-7 0,-3 0,-8 0,-7 0,1 0,8 0,9 0,-13 0,-1 0,1 0,-4 0,2 0,15 0,8 0,2 0,5 0,16 0,10 0,18 0,12 0,7 0,8 0,18 0,25 0,26 0,8 0,9 0,10 0,13 0,6 0,3 0,16 0,11 0,5 0,26 0,17 0,39 0,3 0,5 0,5 0,28 0,-4 0,1 0,3 0,4 0,5 0,12 0,6 0,10 0,6 0,2 0,4 0,6 0,4 0,5 0,1 0,2 0,4 0,2 0,-5 0,-8 0,-3 0,4 0,7 0,5 0,6 0,1 0,7 0,8 0,15 0,20 0,5 0,-3 0,-5 0,-3 0,6 0,9 0,-1 0,1 0,15 0,15 0,-1 0,3 0,12 0,11 0,-1 0,-1 0,7 0,1 0,-2 0,-2 0,7 0,8 0,6 0,4 0,11 0,2 0,3 0,4 0,9 0,7 0,-9 0,-4 0,1 0,6 0,3 0,2 0,-2 0,-7 0,-8 0,-1 0,2 0,-3 0,-15 0,-4 0,-5 0,-12 0,5 0,-3 0,-7 0,-1 0,2 0,-5 0,-24 0,-18 0,-3 0,-4 0,-3 0,1 0,12 0,5 0,3 0,6 0,7 0,-17 0,-3 0,-5 0,-12 0,-8 0,-11 0,-18 0,-25 0,-10 0,-3 0,-1 0,8 0,1 0,-3 0,5 0,3 0,1 0,-3 0,-4 0,-9 0,-7 0,-8 0,-8 0,-4 0,-3 0,4 0,3 0,3 0,2 0,-2 0,-12 0,-8 0,-10 0,2 0,-1 0,-9 0,-18 0,-12 0,-3 0,1 0,3 0,12 0,5 0,2 0,6 0,23 0,7 0,12 0,9 0,-2 0,2 0,16 0,1 0,-3 0,2 0,5 0,19 0,16 0,2 0,7 0,11 0,8 0,7 0,-2 0,-2 0,7 0,5 0,-6 0,1 0,-5 0,5 0,13 0,3 0,-1 0,4 0,3 0,1 0,3 0,4 0,3 0,1 0,4 0,5 0,-4 0,-1 0,-3 0,4 0,7 0,3 0,-5 0,3 0,4 0,7 0,7 0,8 0,12 0,11 0,7 0,5 0,-12 0,-9 0,-7 0,-21 0,-7 0,-2 0,1 0,2 0,12 0,-4 0,-11 0,-2 0,1 0,-7 0,-8 0,-10 0,-7 0,-3 0,-16 0,-2 0,-22 0,-2 0,-5 0,-5 0,-2 0,2 0,-3 0,-4 0,-8 0,-6 0,-20 0,-8 0,-7 0,-4 0,-17 0,-6 0,-8 0,-8 0,4 0,7 0,5 0,6 0,1 0,-2 0,-5 0,-11 0,-6 0,-3 0,-8 0,-4 0,-3 0,-6 0,-14 0,-7 0,-32 0,-18 0,-6 0,-24 0,-11 0,4 0,-3 0,-13 0,-4 0,-4 0,-17 0,-27 0,-3 0,-1 0,-24 0,-7 0,-5 0,-14 0,-16 0,-8 0,-11 0,-13 0,-17 0,-9 0,-22 0,-2 0,-9 0,-8 0,-5 0,-4 0,10 0,1 0,-2 0,-7 0,2 0,-4 0,-13 0,-15 0,-13 0,-6 0,-24 0,-14 0,-2 0,-3 0,7 0,6 0,5 0,6 0,8 0,5 0,10 0,9 0,-1 0,-1 0,1 0,-1 0,7 0,5 0,4 0,7 0,5 0,5 0,-1 0,6 0,-2 0,-11 0,1 0,7 0,1 0,-4 0,-12 0,-7 0,3 0,-7 0,-5 0,-9 0,-6 0,-6 0,-1 0,-8 0,-9 0,-9 0,7 0,6 0,2 0,6 0,1 0,-4 0,-4 0,-9 0,-5 0,-4 0,-9 0,-3 0,-2 0,5 0,20 0,4 0,-4 0,-10 0,-5 0,-11 0,-3 0,-1 0,7 0,10 0,13 0,8 0,10 0,9 0,3 0,7 0,-1 0,-4 0,-4 0,-7 0,-6 0,-9 0,-16 0,-8 0,-24 0,-17 0,-7 0,-7 0,-13 0,-7 0,-11 0,-8 0,3 0,8 0,5 0,7 0,-2 0,-5 0,-9 0,-6 0,-8 0,1 0,-9 0,-5 0,-1 0,-2 0,-2 0,-5 0,-6 0,-7 0,-1 0,-13 0,-4 0,-14 0,-3 0,-5 0,-4 0,-9 0,-19 0,-13 0,-5 0,-6 0,-3 0,10 0,10 0,13 0,2 0,-4 0,-3 0,-5 0,-1 0,-2 0,-3 0,-5 0,-8 0,-10 0,-2 0,-2 0,-4 0,-4 0,-4 0,-2 0,-6 0,-3 0,-2 0,3 0,8 0,4 0,4 0,1 0,6 0,-5 0,-15 0,-10 0,-27 0,-17 0,-8 0,-13 0,-9 0,-10 0,4 0,4 0,16 0,10 0,-1 0,-21 0,-12 0,3 0,3 0,14 0,5 0,18 0,2 0,6 0,7 0,-1 0,-3 0,-10 0,-9 0,-6 0,12 0,22 0,12 0,11 0,8 0,15 0,10 0,3 0,10 0,6 0,2 0,4 0,3 0,11 0,17 0,-4 0,2 0,9 0,6 0,-1 0,-13 0,-8 0,-6 0,-7 0,-1 0,-1 0,5 0,4 0,2 0,3 0,3 0,5 0,2 0,2 0,-2 0,3 0,3 0,3 0,6 0,9 0,-5 0,-3 0,-1 0,6 0,-4 0,-1 0,-1 0,-2 0,-1 0,9 0,7 0,1 0,-7 0,-5 0,-2 0,4 0,11 0,15 0,13 0,3 0,6 0,6 0,1 0,-5 0,1 0,2 0,6 0,5 0,1 0,-3 0,2 0,4 0,8 0,11 0,7 0,22 0,9 0,7 0,9 -4,7 -11,17 -36,17 -9,7 -4,7 -4,6 4,0 4,-2 4,-2 2,4 -2,6 -10,15 0,4 4,13 8,14 0,18 2,13 -3,8 -1,11 6,13 5,4 3,4 0,15 -11,7 -13,1 -15,8 -7,11 -23,19 -26,13 -1,2 1,2 2,2 -6,0 -4,-1 -3,0 -19,10 -17,10 -33,17 -25,4 -32,13 -22,5 9,1 9,0 50,-18 -5,5 -9,4 -4,2 -21,15 -20,10 -23,18 -30,7 -21,8 -12,-1 -14,-2 -8,-1 -6,2 -5,5 1,4 -1,5 -12,8 -17,7 -15,10 -31,26 -7,9 6,1 5,0 5,2 9,0 10,-2 -9,6 -11,5 -29,22 -8,11 -2,11 3,15 -5,11 -23,14 -8,8 -16,4 -8,0 -4,-6 -3,-12 -15,-16 -5,-7 -7,-9 -7,-1 -4,1 -12,15 -11,12 -2,5 -1,7 -8,25 6,4 6,2 8,5 6,4 -15,14 -7,0 -9,-6 -26,6 -5,-2 -4,-5 -9,-6 -13,-3 -14,-7 -15,-4 -11,-4 -7,1 11,7 -5,1 -14,-6 -8,-4 -2,-8 -3,-13 7,-3 10,-17 13,-7 -2,-7 -3,-5 -8,-5 -7,3 -4,0 -3,-11 6,-29 9,-21 9,-8 20,-15 22,-7 39,-23 21,-8 5,-4 13,-18 11,-21 12,-33 9,-16 17,-18 36,-27 33,-19 30,-12 24,-2 55,3 10,-1 11,-3 2,-9 -4,-5 -12,-6 -12,-8 -1,-11 11,-7 54,-21 55,-17 17,-8 20,-14 49,-19 7,-9 30,-19 13,-15 2,-12 -6,-11 -3,-9 -5,-8 -12,3 -14,9 -21,34 -39,3 -8,3 -14,6 -1,4 -4,5 -3,1 -15,1 -10,-5 -12,-13 -14,-19 -14,-28 -1,-11 8,-11 22,-6 18,-10 11,-10 1,-24 5,-14 -7,-8 -15,2 -19,-5 -14,-9 -6,-8 1,-23 -3,-8 -26,-16 -14,-16 -3,-7 -5,-8 -34,0 -7,9 -1,15 6,8 12,4 8,18 -2,13 5,6 4,4 10,3 13,2 1,18 -10,8 -4,12 -5,21 -17,28 -9,24 -7,12 -10,6 -20,0 -10,2 -34,17 -2,3 0,4 6,7 -4,9 -4,9 -7,7 -7,4 -16,-3 -5,-1 -10,0 -8,-3 -4,0 12,13 -3,3 -12,5 -16,1 -5,1 -3,-4 -2,2 0,6 -19,26 -13,11 -6,2 -11,-3 -20,5 -11,1 -6,-1 -10,-4 -5,3 -2,3 -17,11 -22,6 -42,34 -13,13 -27,14 -17,21 -14,7 -20,6 -5,0 -6,-3 -5,0 -4,3 4,2 4,2 -1,7 -23,21 -14,6 -3,5 -3,5 -3,4 -7,2 -5,-1 -8,2 1,10 1,7 -1,6 -7,17 -13,14 -7,34 -6,10 -14,7 -32,8 -44,22 -9,0 -27,9 -17,1 -21,-7 -26,-21 -21,-22 -8,-4 -27,-8 -24,-3 -23,-7 -8,-4 -32,-22 -14,-7 -3,-4 -3,-7 -9,-6 -8,-3 -18,-3 -20,-7 -8,3 -22,0 -14,8 -26,5 -9,12 -12,0 -8,0 -5,2 -1,4 0,3 -8,-1 -7,0 -4,-2 -3,-2 -3,2 -2,-1 0,-2 -8,-1 -8,2 -22,6 -3,1 -16,2 -6,2 -5,6 -4,2 -2,1 -14,-3 -5,-4 -7,-6 -53,-27 -10,-11 -11,-17 -1,-7 5,-25 11,-13 1,-3 3,-6 5,-3 2,-5 -9,-3 -5,0 -2,-10 2,-2 5,-3 2,-3 1,-14 -10,-8 -15,-9 -69,-30 -17,-15 -6,-3 -51,-9 -37,-10 -17,-4 -21,-17 -11,-7 9,-2 9,-8 -3,-3 -14,-6 -6,-2 -3,1 -3,-1 -23,-29 -21,-21 -12,-10 -11,-13 -26,-36 0,-10 13,-36 6,-9 11,-8 19,-7 4,-6 -6,-6 -19,-11 -33,-15 -14,-12 -3,-12 -10,-5 -3,-16 -6,-10 -1,-4 -7,-8 0,-6 10,-8 -5,-3 -5,-2 -12,-1 -39,-1 -31,-17 -16,-16 -14,-28 -17,-17 -8,-4 -12,8 -14,1 -15,-2 -7,-6 -12,-3 -11,2 -25,2 -11,0 -17,-5 -15,3 -25,2 -54,-4 -6,-2 -7,-7 -17,-12 -26,-1 -24,-8 -6,-5 -10,-13 -3,-10 -2,-1 -3,3 -4,-1 -1,-8 -9,-3 -8,-1 -18,6 -15,9 -8,1 -13,14 -6,10 -4,10 1,3 -1,4 -11,4 -3,9 8,12 7,5 4,1 -10,0 -8,-8 -9,12 -40,24 3,6 0,3 -7,-6 -5,-2 -20,1 -23,-3 -8,-1 -35,-16 -10,0 -20,7 -34,2 -12,2 -14,-5 -11,1 -9,-6 -6,1 7,14 12,26 -1,16 3,14 -3,14 -6,9 8,22 -1,12 -7,15 21,-3 -7,6 -6,4 -6,-1 -6,0 -18,-6 -9,-1 -2,1 1,9 -5,12 7,3 9,1 7,5 4,5 -2,10 6,10 15,8 -8,-1 -9,-5 -13,-18 -5,-10 -11,-3 -11,-1 -5,1 -6,2 -1,7 1,5 4,11 1,15 7,14 -1,3 -2,6 6,5 7,4 10,11 14,28 17,30 -1,3 -4,3 2,8 10,35 4,4 4,10 2,17 1,11 0,6 -1,6 -7,13 -6,28 -1,9 5,5 -9,0 -4,7 1,6 10,11 -7,-1 -3,2 -1,16 12,10 8,6 -4,2 -8,-1 0,5 4,3 4,5 -5,3 -3,3 0,9 1,4 -1,4 -18,-6 -4,1 0,7 9,11 1,3 -11,1 -9,6 -5,4 -6,7 0,6 6,13 8,4 8,3 15,9 20,-1 13,2 12,5 7,1 10,4 0,6 -4,4 3,4 12,5 14,6 15,2 15,6 11,-4 9,1 10,-4 14,-10 20,-5 16,4 28,0 15,-1 25,2 14,0 23,5 19,-7 34,-3 21,-5 59,-8 21,-1 29,5 13,4 12,-2 16,4 9,-1 10,-6 38,-8 9,7 8,1 26,-4 27,-8 14,-1 21,3 16,5 4,1 16,3 14,12 15,46 10,54 7,10 9,3 -7,7 -5,-3 -2,-4 -2,-2 5,49 4,18 7,19 14,-7 11,-8 6,-7 8,-22 5,-4 9,-5 -3,5 -6,4 -9,29 -6,9 -9,7 -29,15 -3,2 -1,6 10,0 8,-3 -1,3 -3,4 -3,11 -4,28 1,5 -2,6 -9,1 -7,1 -8,2 -40,17 -13,17 -14,12 -3,6 0,5 7,12 -6,7 -6,2 -6,3 5,6 4,4 8,1 11,-1 10,-3 8,-1 -23,9 -38,-3 -9,1 -6,2 -3,7 5,3 5,6 -5,4 -7,2 -12,0 -10,-2 -3,3 7,6 -6,3 -7,-2 -10,-1 -11,2 -9,7 -6,0 -4,0 -7,2 -7,1 -4,-1 -7,4 -39,9 -17,1 -15,-4 -9,1 -7,6 -5,9 -25,7 5,5 12,1 13,3 5,4 -10,5 -8,1 -4,2 -3,4 5,2 3,-1 10,-1 16,1 -6,5 -7,1 -2,1 -13,0 -6,-1 -14,0 -3,5 -1,4 4,9 19,8 47,9 20,-1 15,1 17,5 7,5 24,3 23,-5 21,-19 10,-6 24,11 37,0 8,-7 3,5 6,7 6,-3 3,-4 38,1 6,1 -10,5 -8,10 -2,40 -11,11 -12,18 -6,10 0,4 1,5 16,0 11,-1 22,4 11,-3 -1,-8 4,-11 4,-4 5,-6 18,0 19,-3 25,0 36,-6 15,3 15,7 28,5 2,2 -16,-1 -15,5 -2,5 2,4 6,10 43,16 30,5 32,9 17,9 10,12 4,2 4,2 -4,4 3,45 3,8 6,6 10,5 14,6 54,8 8,3 43,16 26,9 13,3 8,1 16,1 13,-3 16,-1 13,4 10,-4 11,3 -8,1 -13,4 -19,-3 -13,4 -10,0 -7,4 -7,5 5,4 5,1 19,1 15,-3 25,-11 7,0 7,1 -4,3 -7,2 -9,3 -7,5 17,1 -2,2 -3,4 -18,14 3,4 5,8 5,6 5,2 8,5 17,14 10,11 8,13 12,37 3,6 6,7 7,-1 5,-2 17,5 30,14 9,11 8,6 34,11 19,3 29,1 21,1 26,1 9,-6 6,-5 9,-3 14,-2 -5,5 -10,5 3,10 3,8 10,10 7,2 35,2 38,-1 16,-15 -6,-7 9,-4 5,2 3,6 2,7 3,3 12,-6 4,-4 0,-12 5,17 -3,11 2,11 5,6 4,4 28,-4 31,2 11,-5 27,-21 8,-3 11,-2 -15,5 -32,26 -9,3 -15,1 -9,3 -6,4 -2,3 1,26 -6,4 -7,1 -4,-1 -9,-1 -2,6 2,5 18,3 12,4 1,7 -8,5 -9,11 -11,9 -2,20 -2,6 -7,8 10,3 -2,17 -3,9 -27,9 -22,9 5,30 2,8 -8,16 1,18 3,29 7,1 5,0 19,-6 8,0 6,-5 6,-1 5,4 2,9 15,10 10,4 8,2 7,-4 6,-5 1,11 4,20 -14,3 -12,-2 -11,-13 -11,-17 -17,-1 -13,-5 -12,5 -8,4 0,6 2,4 14,13 19,13 19,0 14,4 9,1 26,-1 13,2 12,6 27,25 14,10 30,4 27,11 8,1 -13,-9 -2,-3 -1,-6 9,-11 -2,-7 0,-14 -8,-7 -10,-15 -5,-2 0,-18 1,-4 -2,-16 10,-7 11,-3 36,0 3,-3 5,-5 -3,-8 -4,-6 -10,-6 -14,-4 -8,0 -11,8 -6,-3 -5,-4 -9,-20 -5,-14 -2,-2 -5,2 -9,1 -11,-4 5,-3 6,-5 -2,-2 -10,-3 -9,-6 -4,-4 -11,-5 -7,-7 3,-8 2,-7 3,-7 -3,-6 -13,-9 -5,-8 11,0 8,-2 4,-2 4,-3 -3,-4 5,-12 14,-3 6,-4 7,-7 1,-9 -9,-7 -7,-4 27,2 3,-4 4,-4 15,3 37,-12 23,6 5,0 5,-10 -5,-10 -20,-10 5,-7 6,-1 18,1 30,-6 6,1 24,15 10,3 31,3 6,6 13,5 8,7 20,12 20,-2 12,-3 13,-1 12,-13 30,-14 28,1 9,-13 5,-17 8,-5 7,-3 23,-4 24,-6 9,-3 -1,4 -2,3 1,4 0,7 -21,4 -18,1 -12,-1 -12,2 -3,6 2,6 -5,4 -4,2 -1,3 1,4 21,-10 17,-8 4,-2 13,-1 34,10 57,12 61,11 14,2 15,2 5,4 5,3 8,8 19,11 33,5 12,5 25,8 58,9 24,2 24,0 21,-7 23,-9 4,-5 -12,4 -18,7 -6,1 15,-24 8,-8 17,-6 14,-2 43,4 15,4 4,3 16,8 10,9 8,12 1,8 2,9 3,4 0,-1 0,5 0,10 0,13 0,6 0,11 0,8 0,10 0,4 0,-5 0,-8 0,-14 0,-17 0,-20 0,-2 0,-1 0,-4 0,-1 0,3 0,18 0,16 0,7 0,12 0,16 0,19 0,21 0,5 0,19 0,38 0,18 0,11 0,9 0,11 0,11 0,8 0,25 0,3 0,7 0,5 0,-7 0,-5 0,-21 0,-7 0,-23 0,-12 0,4 0,6 0,10 0,8 0,8 0,31 0,14 0,9 0,4 0,20 0,15 0,2 0,2 0,5 0,4 0,-1 0,-5 0,-4 0,-2 0,4 0,5 0,7 0,8 0,7 0,8 0,6 0,3 0,4 0,-1 0,1 0,3 0,10 0,4 0,4 0,3 0,4 0,4 0,8 0,5 0,3 0,2 0,8 0,1 0,9 0,-1 0,6 0,4 0,4 0,4 0,-1 0,-8 0,-8 0,-2 0,-4 0,6 0,1 0,7 0,10 0,7 0,6 0,1 0,-7 0,-3 0,4 0,8 0,4 0,-3 0,-1 0,2 0,2 0,5 0,6 0,4 0,-4 0,-9 0,3 0,6 0,4 0,3 0,9 0,7 0,1 0,-2 0,1 0,14 0,5 0,10 0,6 0,-5 0,5 0,7 0,4 0,3 0,-11 0,-3 0,-1 0,-3 0,-1 0,-2 0,7 0,-2 0,-5 0,-1 0,-2 0,-3 0,6 0,8 0,5 0,3 0,-8 0,-8 0,-5 0,-1 0,6 0,-4 0,-6 0,-3 0,1 0,-4 0,-4 0,6 0,-3 0,-4 0,-1 0,-6 0,-3 0,-5 0,-6 0,-3 0,2 0,-3 0,-4 0,2 0,-6 0,-9 0,-2 0,1 0,4 0,4 0,6 0,5 0,2 0,1 0,5 0,11 0,1 0,-3 0,-9 0,-2 0,-2 0,-2 0,-1 0,4 0,2 0,6 0,1 0,4 0,1 0,2 0,3 0,2 0,8 0,2 0,1 0,-1 0,2 0,10 0,1 0,8 0,-1 0,-5 0,4 0,3 0,4 0,6 0,7 0,8 0,12 0,9 0,7 0,4 0,11 0,13 0,5 0,2 0,3 0,1 0,3 0,2 0,1 0,1 0,8 0,3 0,11 0,11 0,7 0,12 0,11 0,6 0,6 0,7 0,10 0,11 0,7 0,5 0,5 0,16 0,8 0,1 0,7 0,4 0,6 0,3 0,-3 0,3 0,7 0,4 0,3 0,6 0,2 0,-2 0,3 0,3 0,-1 0,9 0,7 0,3 0,14 0,4 0,4 0,13 0,1 0,9 0,13 0,1 0,12 0,13 0,16 0,6 0,6 0,1 0,4 0,3 0,-3 0,1 0,6 0,3 0,3 0,3 0,5 0,4 0,4 0,10 0,11 0,13 0,7 0,11 0,1 0,9 0,7 0,3 0,-4 0,-4 0,3 0,-3 0,5 0,-2 0,-1 0,-1 0,-4 0,-1 0,5 0,8 0,-6 0,-1 0,5 0,1 0,-2 0,-5 0,-4 0,-2 0,-11 0,-2 0,1 0,-3 0,-1 0,-2 0,-2 0,-2 0,-4 0,-3 0,-2 0,-2 0,1 0,-2 0,-3 0,-3 0,-1 0,-2 0,-4 0,6 0,-4 0,-4 0,-3 0,-5 0,-3 0,-12 0,-7 0,-6 0,-7 0,-4 0,-5 0,-9 0,-9 0,-8 0,-4 0,-4 0,-8 0,-12 0,-31 0,-4 0,-6 0,-5 0,-6 -9,-5 -13,-7 -6,-8 -7,0 -6,3 -9,2 -1,-5 1,-4 -14,6 -7,-5 -5,-8 -20,-11 -22,2 -3,-2 6,-2 1,-1 -4,-1 -6,0 -9,-2 -6,0 -3,-5 -5,-7 -12,-2 -7,-1 -3,-3 19,-1 -1,-3 -1,-3 -2,-3 -21,-5 -4,-4 -4,-2 -10,0 1,2 1,3 -14,-1 -4,6 -3,-2 1,-4 4,-4 4,-7 -3,-4 -4,-2 3,-2 8,-1 3,-3 -9,-2 -12,-8 -11,0 -7,-5 -8,0 -6,3 -10,3 -3,-5 -1,-3 6,-9 10,-8 10,-3 -7,-2 -5,-4 -6,-15 -4,-5 -3,-10 2,-9 2,-4 5,-6 -13,1 -14,3 2,-6 -9,-9 2,-6 1,-5 -2,-8 4,-2 2,-5 -4,-3 2,-3 0,-10 3,-16 -1,-4 8,-14 -2,-5 -1,-6 11,-6 10,0 10,0 3,-1 4,-4 3,-5 8,0 13,4 9,1 5,-8 15,-10 9,-5 15,-2 16,-9 -3,-10 7,-3 19,-4 6,-5 3,-5 5,-4 6,-11 -2,-7 -8,-3 -17,-7 -8,-6 -6,-3 -18,-8 -6,-1 -6,-4 -6,-2 -6,1 -19,-7 1,-3 15,-1 8,1 6,4 7,1 5,-1 7,3 5,1 5,-2 6,-6 -12,-4 -8,0 -5,-11 -5,-5 -3,-2 -19,-5 -13,-6 -14,-4 -7,1 -9,-5 -21,-6 -11,-8 -25,-7 -12,-6 -34,0 -32,1 -11,-2 11,-1 7,-3 9,1 20,-1 11,-1 14,-10 -11,-3 -17,-3 7,-13 5,-9 -7,-5 0,-24 -10,-1 -5,-10 4,-5 -1,-12 3,-7 4,-7 -2,-7 -15,-17 0,-7 3,-5 2,-7 -7,-14 -5,-12 -6,-10 -13,-12 -7,-9 -15,-28 -8,-5 -9,-4 -11,3 -9,3 -12,-1 -18,-3 -28,2 -27,-1 -6,-3 3,-10 -10,-1 -9,3 -9,-4 -7,-3 -14,-9 -5,-6 -1,-10 8,-9 6,-11 -16,-13 -10,-1 -27,4 -49,-8 -43,6 5,7 0,5 2,8 2,8 -1,6 -3,6 -10,7 -25,26 -7,11 -5,4 4,0 20,-6 4,1 5,2 -6,9 -5,3 -3,6 11,2 9,-1 6,7 -4,10 -9,3 -7,1 -15,16 -15,9 -27,32 -10,22 -9,-2 -4,9 -3,9 -1,7 -15,4 0,4 -3,21 -15,3 -10,12 -2,22 -10,4 -8,-1 0,5 2,6 -5,20 -1,19 -4,5 -2,7 2,6 2,3 11,1 9,-5 0,3 -2,3 -24,4 -4,0 -9,2 -5,1 -12,1 -9,12 -10,9 -1,4 0,17 -3,8 0,8 -6,-6 3,-11 -8,-5 -9,-2 1,-6 4,-2 1,-6 -3,-10 -19,-22 -4,-2 -2,-3 -10,2 -12,-6 -12,-1 -4,7 -16,9 -8,-1 7,-4 7,-6 -4,-4 -4,-2 -7,-2 -24,-7 8,-5 -7,-6 -8,-1 -5,-3 -1,-3 -25,-11 -41,-27 -21,-8 -14,-8 -13,1 -16,-7 -42,-6 -27,3 -19,-3 -10,5 -1,3 1,2 1,2 -3,1 -8,1 -3,-3 0,-5 -4,-1 -14,3 -4,2 5,6 9,4 -1,1 -2,3 -4,1 -13,-1 -10,1 -34,11 -7,5 -27,9 -12,10 -7,11 0,9 4,15 5,4 25,-5 24,-9 4,1 8,6 14,6 -4,2 -22,-7 -8,4 -13,7 0,4 6,4 2,5 -3,4 1,7 10,7 15,7 11,7 11,4 -2,1 -12,-2 -12,-5 -14,-8 -18,-6 -12,-2 -6,-2 -10,-2 -9,-9 -11,-3 -19,-1 -4,7 6,22 5,11 6,8 10,1 7,6 6,0 5,-2 19,-3 10,7 12,2 23,7 -1,1 -15,-1 -9,-1 -14,-1 -7,1 -3,5 5,5 22,12 7,5 4,5 -1,4 4,6 21,12 17,6 5,-5 -4,-15 0,-6 13,22 6,5 7,3 16,3 5,3 -19,-1 -46,-8 -20,-7 -5,-6 -13,-8 -6,-6 -3,-8 -8,-4 -10,-2 -14,-10 -6,-8 -14,-7 -9,-5 -3,-2 -5,-5 -4,0 -4,3 0,6 1,10 7,8 3,7 -4,7 3,4 6,0 11,-2 12,0 19,5 -3,3 -9,1 -15,-1 -13,6 -11,10 -4,13 3,4 38,15 10,6 -6,0 -14,-7 -21,-5 -12,7 -7,7 -4,15 1,8 -1,10 9,3 9,-2 10,0 22,1 48,6 30,-4 13,0 19,6 17,0 12,-4 7,-4 1,-7 6,-4 4,2 -3,5 -1,7 50,9 7,3 -21,1 -5,8 10,12 -1,1 -11,-6 -5,-9 2,-7 -2,-3 -11,-1 -23,-1 -14,3 -14,2 -5,2 2,5 -3,1 -6,-4 -5,-10 -11,-2 -30,4 -43,-2 -20,-5 -12,1 -22,8 -9,6 -3,13 1,5 17,3 9,0 8,2 -7,3 -10,3 -7,8 -10,2 -7,7 -2,10 2,7 5,2 14,-1 35,1 32,-7 23,-4 45,2 26,6 -5,2 -28,-4 -27,0 -47,7 -19,3 -20,-1 -11,2 -6,7 4,13 10,3 5,-4 7,0 6,6 6,3 6,7 18,7 8,0 11,4 7,-1 4,-3 6,-3 13,0 37,6 4,1 7,5 -23,-2 -20,-3 -12,-1 -2,4 5,3 7,4 3,6 8,3 9,0 18,1 12,2 22,-1 32,-3 21,-6 8,1 8,1 4,3 -16,2 -1,4 2,2 26,5 29,1 -5,4 -63,-6 -17,4 -13,0 -8,-2 -25,-3 -5,2 5,7 15,11 1,3 7,3 38,6 18,8 9,1 7,-1 13,1 24,-2 11,-10 10,-2 31,-12 -1,3 -27,16 -10,4 -8,8 2,8 9,5 31,2 5,3 1,5 -4,4 -12,-1 -9,2 -3,6 4,3 18,7 9,2 17,3 30,-6 2,-2 -8,-7 0,-4 8,0 16,11 20,2 8,2 10,2 13,-11 6,-3 4,-1 5,-8 4,-1 6,4 11,3 15,1 25,-2 11,1 6,0 -5,8 -4,2 6,7 5,2 17,5 17,2 11,4 14,5 -2,3 -4,4 -10,0 -3,2 12,5 16,5 -3,2 -12,3 -10,-2 -13,-4 -17,-7 6,-2 8,-5 -11,-8 -60,-20 -28,-6 -14,1 -3,6 -6,4 -6,8 -11,0 -6,-2 -3,3 4,9 10,6 16,6 7,6 7,10 23,10 32,24 27,7 10,9 16,3 14,7 10,1 20,5 10,7 -7,1 -17,-5 -9,-1 0,7 5,8 14,7 67,20 7,-3 8,-6 20,1 23,11 18,13 -10,-2 -10,-5 -21,-8 -9,-1 -6,1 -2,5 -8,2 -6,-2 -7,4 -1,8 9,13 6,8 8,6 28,18 6,9 13,5 16,-1 5,2 -5,6 -18,5 -1,3 60,8 28,0 9,4 16,3 11,5 -6,2 -29,-5 -18,-2 -8,0 -7,-1 -23,-1 -5,20 4,11 8,0 2,10 10,6 14,2 7,2 10,6 17,-2 17,2 -4,2 -22,3 -5,6 8,3 8,2 7,1 14,10 9,5 9,-1 14,5 13,-2 13,3 18,2 64,1 2,5 -14,1 -48,1 -24,0 -10,-1 -4,1 1,3 9,4 4,5 17,11 21,7 16,-1 17,-8 12,-1 5,-2 9,-10 4,0 -1,9 11,8 -3,2 -17,-2 -14,2 -10,6 -3,6 6,5 7,2 -4,4 -27,-9 -18,-2 -8,2 4,7 -2,6 25,15 8,1 14,-1 13,-4 11,1 11,2 -2,4 -24,1 -7,4 3,3 17,3 17,6 19,2 16,5 3,-1 3,-2 5,-17 14,-14 5,-1 -5,12 5,4 6,2 2,3 -7,1 -6,4 -9,14 4,4 18,7 23,2 24,-5 9,-1 14,2 25,4 14,2 7,0 2,2 -7,1 -2,1 -5,1 -23,-2 -62,1 -5,2 -1,4 6,6 7,4 24,6 24,0 26,11 10,8 5,12 16,10 40,6 2,2 -5,5 1,9 11,11 7,4 3,1 9,-4 10,-8 17,-4 21,-1 6,2 -17,5 -13,5 -1,6 7,3 9,0 11,0 11,4 2,3 0,3 3,4 16,9 49,6 3,-3 -2,-17 -6,-11 0,-8 10,8 12,22 10,10 4,6 0,2 0,3 0,2 0,-3 0,-5 0,-19 0,-6 0,-8 0,-18 0,-3 0,1 0,3 0,17 0,-2 0,1 0,5 0,5 0,6 0,16 0,6 0,1 0,-3 0,11 0,1 0,-7 0,-5 0,-8 0,2 0,17 0,7 0,3 0,8 0,3 0,2 0,3 0,-3 0,6 0,-1 0,3 0,-4 0,1 0,6 0,3 0,-3 0,-3 0,-7 0,-14 0,-7 0,-4 0,-1 0,4 0,4 0,5 0,10 0,4 0,15 0,8 0,1 0,17 0,3 0,1 0,4 0,3 0,6 0,6 0,11 0,-2 0,-5 0,-6 0,-3 0,1 0,4 0,2 0,-1 0,-3 0,-2 0,-3 0,-4 0,-11 0,-12 0,-6 0,-17 0,-10 0,-8 0,-3 0,3 0,10 0,10 0,28 0,16 0,13 0,3 0,-9 0,-11 0,-7 0,-3 0,-9 0,-5 0,-5 0,-4 0,1 0,9 0,10 0,7 0,6 0,6 0,3 0,8 0,4 0,5 0,-2 0,-11 0,-5 0,-2 0,-8 0,-4 0,-2 0,4 0,-3 0,-9 0,-14 0,-8 0,-7 0,-4 0,15 0,4 0,6 0,12 0,14 0,8 0,2 0,-3 0,-7 0,-3 0,-3 0,-3 0,-2 0,-1 0,5 0,1 0,-8 0,-6 0,-2 0,1 0,-3 0,-12 0,-6 0,-7 0,-7 0,-8 0,-2 0,5 0,-6 0,-11 0,-4 0,-7 0,-5 0,-4 0,-4 0,-1 0,1 0,-2 0,3 0,9 0,2 0,-3 0,-10 0,-1 0,7 0,-1 0,-1 0,-8 0,1 0,2 0,10 0,1 0,-2 0,2 0,8 0,4 0,-8 0,-6 0,-6 0,-3 0,-5 0,-4 0,-3 0,1 0,6 0,-4 0,-3 0,-5 0,-7 0,1 0,-3 0,1 0,-2 0,-7 0,-1 0,6 0,1 0,-1 0,-5 0,-6 0,-5 0,-12 0,-3 0,-5 0,3 0,3 0,16 0,2 0,-1 0,-7 0,-1 0,1 0,4 0,1 0,-9 0,-19 0,-31 0,-28 0,-5 0,-4 0,3 0,-3 0,-25 0,-1 0,5 0,5 0,-1 0,-4 0,-9 0,-8 0,-11 0,-4 0,-2 0,-3 0,-3 0,-27 0,-5 0,-12 0,-5 0,-1 0,-9 0,-21 0,-8 0,-38 0,-15 0,-17 0,-6 0,-1 0,4 0,3 0,10 0,4 0,2 0,1 0,10 0,3 0,18 0,-5 0,-1 0,6 0,2 0,2 0,5 0,1 0,4 0,3 0,-2 0,8 0,7 0,11 0,4 0,3 0,6 0,1 0,-3 0,-2 0,-4 0,-7 0,-8 0,-9 0,-8 0,-3 0,-2 0,-2 0,-8 0,-3 0,-4 0,-5 0,-1 0,-3 0,-5 0,-4 0,-2 0,-1 0,-9 0,-10 0,-18 0,-9 0,-4 0,-5 0,-5 0,-6 0,-15 0,-5 0,-6 0,-12 0,-11 0,-18 0,-8 0,-11 0,-4 0,-2 0,-3 0,-15 0,-12 0,-8 0,-1 0,3 0,-4 0,-15 0,-16 0,-3 0,-6 0,-3 0,-9 0,-1 0,8 0,6 0,8 0,6 0,12 0,11 0,5 0,3 0,-3 0,1 0,3 0,8 0,20 0,6 0,4 0,6 0,9 0,5 0,18 0,3 0,-1 0,-8 0,-23 0,-3 0,1 0,-3 0,-4 0,-8 0,-14 0,1 0,8 0,3 0,8 0,1 0,-2 0,2 0,12 0,10 0,6 0,20 0,9 0,10 0,8 0,7 0,15 0,9 0,12 0,3 0,3 0,10 0,14 0,21 0,5 0,-4 0,-6 0,-1 0,1 0,-1 0,-9 0,-3 0,-4 0,-8 0,-5 0,3 0,1 0,-2 0,-4 0,-5 0,-4 0,5 0,5 0,12 0,18 0,7 0,19 0,13 0,14 0,6 0,10 0,7 0,2 0,7 0,7 0,11 0,23 0,33 0,7 0,4 0,4 0,10 0,8 0,28 0,3 0,3 0,1 0,-13 0,-1 0,4 0,-3 0,-7 0,-19 0,-17 0,-15 0,-12 0,-3 0,-6 0,-7 0,-21 0,-7 0,-6 0,-7 0,-9 0,-20 0,-10 0,-4 0,-1 0,-2 0,-2 0,2 0,1 0,10 0,5 0,7 0,23 0,8 0,9 0,7 0,6 0,7 0,5 0,-2 0,5 0,10 0,4 0,3 0,-3 0,-2 0,2 0,20 0,11 0,4 0,10 0,3 0,1 0,4 0,8 0,6 0,-1 0,-7 0,-4 0,-5 0,-2 0,-1 0,1 0,3 0,5 0,5 0,3 0,8 0,2 0,12 0,18 0,9 0,-1 0,-2 0,-4 0,-2 0,-2 0,-2 0,-3 0,-3 0,-1 0,-9 0,-8 0,-9 0,-10 0,-6 0,2 0,-3 0,-3 0,-3 0,-4 0,-1 0,-3 0,3 0,1 0,1 0,2 0,-3 0,-9 0,2 0,17 0,11 0,9 0,1 0,6 0,1 0,-3 0,-5 0,-2 0,9 0,25 0,-6 0,9 0,8 0,1 0,-4 0,-7 0,-5 0,-11 0,-3 0,-2 0,-7 0,-18 0,-4 0,-5 0,3 0,2 0,2 0,5 0,4 0,10 0,10 0,-1 0,3 0,6 0,11 0,9 0,16 0,-4 0,35 0,13 0,6 0,4 0,13 0,3 0,-9 0,-2 0,-6 0,-15 0,-9 0,-11 0,-8 0,2 0,-7 0,-3 0,-4 0,-5 0,-4 0,-9 0,-6 0,-2 0,-12 0,-17 0,-7 0,-11 0,-9 0,4 0,22 0,25 0,13 0,1 0,-4 0,1 0,4 0,10 0,17 0,18 0,6 0,5 0,5 0,11 0,-3 0,-6 0,-5 0,6 0,5 0,8 0,10 0,17 0,-1 0,3 0,8 0,6 0,5 0,7 0,21 0,24 0,6 0,4 0,-4 0,2 0,4 0,4 0,6 0,4 0,-4 0,-14 0,-36 0,-6 0,-5 0,-7 0,-11 0,-38 0,-31 0,-10 0,-23 0,-7 0,-11 0,-10 0,-5 0,-11 0,-14 0,-4 0,-5 0,-5 0,-13 0,-12 0,-9 0,-12 0,-11 0,-9 0,-7 0,-11 0,-58 0,-7 0,2 0,-8 0,-12 0,-8 0,1 0,-9 0,-5 0,-3 0,3 0,5 0,5 0,2 0,3 0,4 0,1 0,-5 0,-1 0,7 0,7 0,2 0,-4 0,2 0,-1 0,-3 0,-2 0,-5 0,-8 0,-6 0,-7 0,-3 0,-8 0,-6 0,3 0,-1 0,-3 0,-8 0,8 0,18 0,5 0,25 0,5 0,13 0,10 0,24 0,8 0,28 0,8 0,13 0,9 0,8 0,15 0,8 0,12 0,24 0,9 0,11 0,4 0,8 0,1 0,-1 0,-8 0,-12 0,-18 0,-13 0,-15 0,-38 0,-16 0,-4 0,-4 0,-6 0,-5 0,-2 0,-1 0,2 0,1 0,2 0,2 0,1 0,4 0,7 0,16 0,10 0,18 0,3 0,1 0,3 0,12 0,10 0,15 0,27 0,6 0,16 0,12 0,1 0,-1 0,-12 0,-3 0,5 0,-3 0,3 0,6 0,22 0,8 0,12 0,9 0,9 0,38 0,9 0,18 0,13 0,7 0,35 0,-1 0,-6 0,-2 0,2 0,2 0,5 0,-3 0,1 0,1 0,1 0,-12 0,-7 0,-10 0,-11 0,-9 0,-11 0,3 0,5 0,6 0,15 0,20 0,5 0,1 0,-5 0,-8 0,-13 0,-11 0,-17 0,-12 0,-7 0,-7 0,-5 0,-1 0,2 0,5 0,6 0,6 0,4 0,3 0,7 0,5 0,8 0,12 0,10 0,22 0,1 0,-5 0,-6 0,7 0,-2 0,-14 0,-5 0,-1 0,3 0,6 0,7 0,10 0,-2 0,-15 0,1 0,4 0,9 0,3 0,-6 0,-15 0,-14 0,-4 0,-10 0,-9 0,-11 0,-9 0,-6 0,-8 0,-9 0,-12 0,-9 0,-5 0,-7 0,-5 0,-15 0,-13 0,-23 0,-6 0,-6 0,-8 0,-25 0,-4 0,-7 0,2 0,9 0,17 0,3 0,5 0,16 0,14 0,10 0,8 0,16 0,7 0,4 0,3 0,4 0,-3 0,1 0,4 0,-2 0,-11 0,-3 0,-3 0,-5 0,5 0,19 0,-1 0,-3 0,-8 0,-4 0,-13 0,-18 0,-3 0,-1 0,-7 0,-8 0,-16 0,-13 0,1 0,3 0,21 0,10 0,12 0,13 0,19 0,5 0,5 0,7 0,11 0,8 0,17 0,-1 0,-2 0,-8 0,-3 0,-5 0,-6 0,-4 0,10 0,3 0,-6 0,-2 0,1 0,-2 0,4 0,-4 0,-9 0,-12 0,-4 0,-11 0,-5 0,-6 0,-3 0,-3 0,-4 0,-3 0,-25 -6000,-3;-1554,6623 11,-1 19,4 8,2 19,8 11,2 18,0 8,0 1,-1 -11,-3 -9,-1 -12,-5 -12,-10 -9,-6 1,-2 10,-4 11,-2 11,2 5,-1 4,-3 2,-3 1,-3 -2,-6 -6,-7 -9,-5 1,-2 7,0 33,3 4,0 2,-2 0,-3 2,-3 3,-3 -1,-2 -14,-9 17,6 13,1 24,-2 9,-3 5,-6 9,2 3,0 5,-3 0,-3 -3,-5 -2,-4 -4,-2 -7,-1 -2,-2 3,-3 5,-3 7,0 1,-2 0,-1 -1,-2 -2,-2 -4,0 -4,-3 17,-5 2,-1 0,-3 -1,-3 -3,-3 -5,-2 -13,-1 -7,-2 2,-3 0,-5 -2,-5 -10,-8 -10,-4 -9,-2 -16,0 -8,2 0,-6 -9,-4 2,-4 3,-2 -1,-4 -4,-5 -8,-4 -8,-3 -16,-4 -14,-6 -9,-2 -24,0 -24,-4 -33,-8 -23,-7 -17,-7 -24,-12 -17,-6 -10,-1 -19,-1 -16,-3 -54,-6 -18,-4 -3,-3 -8,-4 0,-2 3,-1 1,-2 -7,-6 -13,-3 -6,0 -8,3 -3,0 -1,-1 0,-1 4,-4 -8,-1 -35,-5 -60,3 -24,4 -29,6 -17,1 -25,1 -20,8 -9,5 -1,2 1,2 2,2 3,1 7,0 1,1 -5,4 -5,-2 -13,-6 -6,1 -8,3 0,2 -15,1 -13,4 -13,5 -2,2 7,2 -2,1 -4,0 -10,0 -14,-7 -6,-1 -92,-2 -24,0 -4,-1 -4,4 -4,9 -1,6 1,3 3,3 5,0 5,-3 4,-4 5,-2 32,5 13,3 6,3 6,5 8,3 3,2 6,8 5,4 5,3 6,2 15,1 -10,2 -9,0 -30,-9 -10,0 0,2 4,2 11,4 -7,0 -3,2 -1,4 6,7 25,8 8,1 3,2 -3,1 -5,1 -26,-9 -18,-3 -5,1 -9,3 -3,2 -5,4 1,2 9,6 -2,2 -6,0 -16,7 -25,-1 -63,3 -13,-1 -21,-5 -13,-2 -6,1 -5,3 -5,4 -4,4 1,4 9,2 6,0 17,-1 21,4 13,0 3,1 8,3 4,1 6,-1 3,-2 21,3 7,2 1,1 3,2 10,-2 9,0 11,1 18,1 42,0 6,3 3,3 4,6 -2,2 -26,-6 -6,0 -30,3 -11,4 4,3 16,6 16,5 24,6 6,2 1,3 -17,4 -30,-1 -8,5 -25,4 -17,-2 -9,3 -22,-5 -48,-6 -20,-5 -10,-1 -12,3 -20,5 -23,1 -2,2 13,8 9,1 10,0 17,-5 12,-2 -15,8 0,3 -1,4 -4,2 -5,5 2,2 6,0 12,-1 30,-9 14,1 8,4 10,2 -3,1 -25,0 -13,2 -7,3 -6,4 2,2 7,2 22,-1 -15,7 -10,5 -1,2 1,2 1,2 2,1 25,-4 6,-1 -5,3 -11,4 -1,2 5,1 2,3 0,1 8,2 7,0 8,-1 24,-8 3,-3 1,-3 -1,-3 1,-2 9,1 8,-1 3,0 10,6 6,-1 4,-3 1,-2 1,-4 -2,-6 0,-1 7,4 11,0 1,2 1,7 -1,6 -1,1 -37,8 -6,2 -8,4 2,2 7,2 11,1 24,0 3,1 -5,2 -12,1 -2,1 -2,3 -13,-2 -15,0 -15,2 0,2 6,2 12,5 5,1 16,-1 17,2 13,-2 11,-4 15,-8 20,-5 2,-2 11,-4 22,-11 21,-6 1,-2 -3,-2 -9,-2 2,-2 11,-1 8,-4 1,-2 -8,-14 -3,-3 -5,-1 -20,2 5,-4 14,-4 4,-3 -2,-2 1,-1 5,1 3,-1 -2,-4 -2,-4 -3,-3 1,-1 6,1 5,-1 8,-4 7,-12 3,-3 2,3 3,9 3,4 3,0 2,1 2,3 4,10 14,7 6,2 6,0 3,-1 10,-7 6,-1 4,0 4,5 5,10 1,11 -2,12 1,8 7,6 8,1 11,-2 7,-3 16,-12 12,-6 10,-7 6,-2 10,-1 3,0 2,2 1,2 -3,17 3,6 5,4 19,2 10,2 10,4 8,2 7,0 6,-1 7,-3 11,-7 14,-10 18,-8 10,-13 2,-2 2,-1 2,2 2,2 0,6 -5,7 -17,19 0,4 2,3 12,0 27,-2 9,-3 19,-11 5,-3 3,-1 1,2 7,2 5,3 8,6 19,11 3,1 6,-1 9,-3 4,-3 9,-2 9,1 13,4 13,3 5,5 1,3 -11,17 5,3 24,4 21,1 5,-2 14,-8 9,-4 5,-3 1,-7 5,-3 11,-3;633,5351 -14,-3 -3,0 1,1 12,2 4,0;593,5346 -20,-2 -7,2 -1,1 6,0 17,0 5,-1;511,5331 -19,-7 -1,1 12,6 8,0;533,5339 -10,-1 -4,1 23,4 14,1 2,0 -25,-5;-251,4949 -4,-6 -9,2 -1,2 11,4 2,0 1,-2;-202,4923 1,-5 -4,-1 -4,2 -8,0 -7,-1 2,9 14,-2 6,-2;-441,5418 -20,-12 -9,2 -6,-1 -3,0 4,5 5,10 9,5 10,11 8,3 4,-1 1,-1 4,-12 -5,-5 -2,-4;-661,5659 -6,-1 0,1 10,7 6,1 2,0 -4,-4 -8,-4;-511,5545 -12,0 -5,1 -5,2 -6,14 2,5 3,2 2,2 7,1 6,-3 3,-2 5,-10 1,-8 -1,-4;-578,5634 -40,-5 -13,0 -2,3 3,2 11,2 5,13 -17,6 -1,2 1,3 2,1 11,3 4,1 4,0 7,-4 8,-7 11,-2 8,-3 -2,-15;-613,5593 4,-13 3,-8 0,-2 -3,-4 -16,-5 -6,0 0,1 4,5 -3,6 1,4 -1,1 -3,-1 -12,-7 -4,0 -1,1 3,6 1,4 1,2 4,2 4,2 2,0 4,-1 9,5 9,2;-597,5581 -2,-1 -5,1 -2,1 -1,3 0,4 3,4 13,4 -6,2 0,1 3,5 14,6 4,1 3,0 -7,-11 -17,-20;-104,6051 -3,-1 -9,10 7,12 8,0 2,-3 -1,-3 -5,-1 1,-6 0,-6 0,-2;-131,6054 2,-7 5,1 8,-6 4,0 7,2 -2,-6 -6,-17 -2,-3 -1,-6 -2,-1 -2,-10 -4,-4 -4,-8 -2,-1 -6,3 6,13 2,7 -1,4 -3,4 -9,0 -7,-2 -2,2 0,3 -2,1 -9,0 -3,1 -2,2 -1,2 9,2 8,-1 13,4 -8,14 -10,1 -2,2 2,2 5,1 9,7 5,1 6,0 -1,-7;-78,6081 0,-1 -5,-8 0,-4 -8,1 -1,1 -2,5 1,5 1,1 3,1 2,-1 5,2 2,0 2,-2;-317,5879 -5,-1 -6,0 -9,6 -3,4 1,3 3,1 9,-2 4,-4 1,-3 1,-2 5,-1 -1,-1;-420,5332 4,-2 11,1 -3,-5 -12,-4 -8,-5 -9,-4 -5,5 -5,0 -8,8 -2,13 11,3 15,0 11,-10;-255,5923 -11,0 6,6 6,1 13,0 -2,-3 -12,-4;-293,5874 -1,0 -4,2 -6,6 10,2 4,-1 -1,-3 -2,-6;-306,5903 -1,-2 8,0 10,-3 7,0 6,-2 -3,-5 -4,-2 -3,0 -13,5 -18,-2 -3,1 -2,1 -1,2 0,3 -1,1 -6,-3 -3,0 -2,2 0,3 0,4 4,7 6,1 9,0 11,-4 3,-2 0,-2 -4,-3;-662,6181 -2,-4 -3,0 -9,4 -8,3 -2,2 -3,4 5,0 5,0 13,-4 3,-3 1,-2;-670,6144 2,-3 -2,1 -7,3 -12,9 -4,6 -1,3 3,0 3,-3 11,-2 3,-1 0,-3 3,-4 1,-6;-719,6214 9,-4 3,-3 -5,-2 -6,-1 -8,1 -12,2 -4,7 8,0 11,1 4,-1;-663,6223 -2,-14 -5,0 -7,4 -5,1 -2,-2 0,-2 3,-2 9,-9 0,-3 -1,-1 -8,3 -20,11 -16,19 21,4 16,-5 17,-4;-273,5919 -9,-3 -3,2 -1,7 -10,2 -6,2 -3,3 1,1 6,2 12,-6 5,-5 8,-1 1,-1 -1,-3;-641,6226 -4,-7 -8,1 -1,1 -2,1 1,6 0,8 8,-7 6,-3;-620,5836 -13,-17 -4,-1 -5,-4 -13,-5 11,0 4,-1 0,-4 -2,-2 -16,-8 -10,-3 -12,-8 -5,0 -6,-6 -5,-2 -2,0 -3,1 -7,5 12,6 2,2 8,3 0,1 -14,4 -6,3 1,2 6,3 -3,0 -2,2 -4,1 -1,2 0,4 0,4 5,2 1,2 2,1 6,-1 6,-4 8,2 8,-1 1,1 -7,8 1,2 4,2 20,6 24,11 6,1 2,-1 3,-6 -1,-7;-628,5696 -3,-1 -4,0 -3,2 -5,5 11,3 4,-2 2,-2 0,-3 -2,-2;-614,5751 -1,-5 -2,-5 3,-6 0,-4 5,-1 2,-2 19,-2 18,1 3,-2 0,-2 -3,-3 -9,-5 -12,-9 -4,-1 -4,-1 -2,1 -3,15 -12,-2 -11,0 -5,2 -4,4 -8,9 -24,3 -6,5 -2,3 1,2 4,4 7,-2 4,1 2,2 0,1 -4,3 0,1 24,4 2,7 5,0 6,-2 8,-6 3,-8;-721,5768 12,-5 -9,-10 -14,0 -20,7 0,2 2,2 3,1 3,1 5,-2 7,2 5,0 6,2;-725,5712 -4,-1 -6,1 -3,1 -3,6 -1,4 1,7 0,8 11,0 3,-1 2,-24 0,-1;-995,5391 0,-3 -8,4 -3,4 -21,2 9,4 4,-1 14,-1 4,-1 1,-8;-742,5697 -8,-2 -4,1 0,1 2,4 7,1 4,-2 1,-2 -2,-1;1371,5438 3,-7 -3,-3 -11,6 -12,0 -6,-9 -5,0 -18,8 -3,4 0,3 2,11 0,3 5,4 1,6 10,6 8,0 3,-5 4,-3 15,-4 2,-2 1,-2 -7,-5 -2,-3 2,-4 11,-4;1255,5497 -4,-2 -15,1 -18,-7 -6,2 2,5 2,1 6,2 4,3 1,4 4,-2 11,-1 5,-1 4,-2 4,-3;1267,5560 -10,-5 -2,1 -3,6 5,3 3,3 2,0 3,-3 2,-5;1136,5489 18,-6 12,0 8,-2 2,-4 1,-9 -9,-3 -9,1 -13,-3 -42,14 0,12 2,5 20,1 10,-6;1049,5485 -7,-1 -8,2 -12,8 -2,2 7,-1 8,-4 6,-1 9,-4 -1,-1;1006,5489 -10,-2 -5,3 -11,1 -3,15 1,1 5,-1 17,-7 6,-8 0,-2;1073,5475 -4,0 -6,8 -1,2 7,5 5,6 12,9 6,11 3,0 -3,-10 -15,-26 -4,-5;1061,5578 -2,-2 -6,2 -1,7 2,6 -2,5 3,3 9,-8 2,-3 -3,-5 -2,-5;1128,5442 -15,0 -6,4 -6,1 3,5 5,1 14,-3 5,-6 0,-2;1105,5725 -4,-2 -14,3 7,5 15,2 8,-1 -9,-4 -3,-3;831,5479 -2,-2 1,14 10,15 5,-1 -5,-4 -1,-2 -2,-6 1,-3 25,-1 -3,-2 -25,-2 -4,-6;-118,4590 -4,-8 -6,8 -9,7 -2,6 0,2 11,-5 10,-10;-106,5069 -9,-3 -3,-4 -2,-2 -5,-1 -6,0 -20,8 -5,0 4,3 14,3 7,4 17,-3 8,-5;489,5307 -10,-7 -6,2 -2,2 3,5 15,9 0,-11;1040,4286 3,-4 0,-2 -2,-3 1,-6 -9,5 -12,-2 -8,0 -2,4 2,3 12,1 4,1 7,-1 4,4;395,5174 10,-6 2,-1 0,-2 -12,-2 -13,6 -9,-1 -3,3 0,2 9,2 16,-1;859,5471 -4,-2 -10,0 -5,2 2,3 5,2 4,0 6,-1 2,-4;673,5358 -9,0 3,2 9,3 4,0 -7,-5;496,6109 -9,-2 -7,1 3,10 3,1 6,1 5,-5 -1,-6;810,6334 -10,0 -11,1 -8,4 -1,2 14,4 13,2 7,-4 0,-6 -4,-3;847,6367 -11,0 -7,2 16,4 26,4 2,3 3,0 5,-3 0,-4 -2,-3 -32,-3;1123,6487 -5,-3 -12,2 -23,-2 -9,3 7,5 21,6 11,0 11,-7 -1,-4;509,6031 0,-12 -9,1 -4,4 -2,3 1,7 -2,7 3,4 3,0 6,-6 4,-8";
+const $=id=>document.getElementById(id);
+const S={features:[],filtered:[],meta:{},checked:new Set(),groups:new Map(),sel:null,collapsed:new Set()};
+
+/* ---------- small helpers ---------- */
+const kids=(el,name)=>{const o=[];for(const c of el.children)if(c.localName===name)o.push(c);return o;};
+const kid=(el,name)=>{for(const c of el.children)if(c.localName===name)return c;return null;};
+const txt=el=>el?(el.textContent||'').trim():'';
+const tpl=document.createElement('template');
+function cellText(td){ // text of a table cell with <br> and <p> kept as line breaks
+  let h=td.innerHTML.replace(/<br\s*\/?>/gi,'\n').replace(/<\/p>/gi,'\n');
+  const t=document.createElement('template');t.innerHTML=h;
+  return (t.content.textContent||'').replace(/[ \t\u00a0]+/g,' ').replace(/ ?\n ?/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+function htmlTable(desc){tpl.innerHTML=desc||'';return tpl.content.querySelector('table');}
+const uniq=a=>[...new Set(a.filter(x=>x!==''&&x!=null))];
+const clean=s=>String(s).replace(/^OTHER:/i,'').toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+function levelFt(s){ // "FL195" "FL 85" "2000 FT ALT" "SFC" "UNL" -> feet
+  if(!s)return null;s=s.trim().toUpperCase();
+  if(s.startsWith('SFC')||s==='GND')return 0;
+  if(s.startsWith('UNL'))return 99999;
+  let m=s.match(/^FL\s*(\d+)/);if(m)return +m[1]*100;
+  m=s.match(/^(\d+)\s*(FT|M)?/);if(m)return m[2]==='M'?Math.round(+m[1]/0.3048):+m[1];
+  return null;
+}
+function dms(v,isLat){const h=v<0?(isLat?'S':'W'):(isLat?'N':'E');v=Math.abs(v);let d=Math.floor(v),m=Math.floor((v-d)*60),s=((v-d)*60-m)*60;
+  s=Math.round(s*100)/100;if(s>=60){s=0;m++;}if(m>=60){m=0;d++;}
+  return String(d).padStart(isLat?2:3,'0')+String(m).padStart(2,'0')+s.toFixed(2).padStart(5,'0')+h;}
+
+/* ---------- KML reading ---------- */
+function parseCoords(el){const o=[];if(!el)return o;for(const t of el.textContent.trim().split(/\s+/)){const p=t.split(',');if(p.length>=2){const x=+p[0],y=+p[1];if(isFinite(x)&&isFinite(y))o.push([x,y,p.length>2?+p[2]:NaN]);}}return o;}
+function findAll(el,name,out=[]){for(const c of el.children){if(c.localName===name)out.push(c);else findAll(c,name,out);}return out;}
+
+function geometryOf(pm){
+  const pt=findAll(pm,'Point')[0];
+  const polys=findAll(pm,'Polygon'),lines=findAll(pm,'LineString');
+  if(polys.length){
+    let flat=[],walls=[];
+    for(const p of polys){const ob=kid(p,'outerBoundaryIs');if(!ob)continue;const c=parseCoords(findAll(ob,'coordinates')[0]);if(c.length<2)continue;
+      const zs=c.map(v=>v[2]).filter(isFinite);const zmin=zs.length?Math.min(...zs):NaN,zmax=zs.length?Math.max(...zs):NaN;
+      (!zs.length||zmax-zmin<0.01?flat:walls).push({c,zmin,zmax,extrude:txt(kid(p,'extrude'))==='true'||txt(kid(p,'extrude'))==='1'});}
+    if(flat.length){ // airspace volume: roof (+ floor + walls) -> one 2D footprint
+      flat.sort((a,b)=>(b.zmax||0)-(a.zmax||0));const roof=flat[0];
+      const ring=roof.c.map(v=>[v[0],v[1]]);const a=ring[0],b=ring[ring.length-1];if(a[0]!==b[0]||a[1]!==b[1])ring.push([a[0],a[1]]);
+      const lowM=flat.length>1?flat[flat.length-1].zmin:0;
+      return {kind:'area',coords:ring,upM:roof.zmax,lowM};
+    }
+    if(walls.length){ // route segment drawn as a vertical curtain -> centreline
+      const line=[];let up=-Infinity,low=Infinity;
+      for(const w of walls){up=Math.max(up,w.zmax);low=Math.min(low,w.zmin);
+        for(const v of w.c){const l=line[line.length-1];if(!line.some(q=>q[0]===v[0]&&q[1]===v[1]))line.push([v[0],v[1]]);}}
+      if(line.length>=2)return {kind:'line',coords:line,upM:up,lowM:low};
+    }
+  }
+  if(lines.length){const c=parseCoords(kid(lines[0],'coordinates')).map(v=>[v[0],v[1]]);if(c.length>=2)return {kind:'line',coords:c};}
+  if(pt){const c=parseCoords(kid(pt,'coordinates'));if(c.length)return {kind:'point',coords:[[c[0][0],c[0][1]]]};}
+  return null;
+}
+
+function describe(f,path,name,desc){
+  const cat=path[0]||'Other';const A=f.attr;const table=htmlTable(desc);
+  if(cat==='Aerodromes'&&path.length>2){
+    const ad=path[1]||'';const i=ad.lastIndexOf(' - ');A.ICAO=i>0?ad.slice(i+3).trim():'';A.AD_NAME=i>0?ad.slice(0,i).trim():ad;
+    const kv={};if(table){const th=[...table.querySelectorAll('th')].map(cellText);const tr=[...table.querySelectorAll('tr')].find(r=>r.querySelector('td'));
+      if(tr)[...tr.querySelectorAll('td')].forEach((td,j)=>kv[th[j]||('COL'+j)]=cellText(td));}
+    f.cat='Aerodromes';
+    if(/^Runway/i.test(path[2])){f.group=['Aerodromes','Runway thresholds'];f.layerKey='AD-THR';f.fileKey='Runways';
+      A.RWY_PAIR=path[3]||'';A.RWY=(table&&table.getAttribute('txt_desig'))||name.replace(/^RWY\s*|\s*THR$/g,'');A.DIMENSION=kv['Dimensions']||'';A.SURFACE=kv['RWY Surface']||'';A.THR_ELEV=kv['THR Elevation']||'';A.REMARKS=kv['Remarks']||'';
+      f.title=A.AD_NAME+' '+name;f.desig=A.ICAO+' '+A.RWY;f.typeLabel='Runway threshold';}
+    else{const g=path[2]==='Ils'?'ILS':path[2];f.group=['Aerodromes',g];f.layerKey='AD-'+clean(g);f.fileKey=clean(g)==='ILS'?'ILS':'AD_'+clean(g);
+      A.IDENT=path[3]||(table&&table.getAttribute('code_id'))||'';A.TYPE=name.replace(A.IDENT,'').trim()||g;A.FREQ=kv['Frequency']||'';A.CHANNEL=kv['Channel']||'';A.REMARKS=kv['Remarks']||'';
+      f.title=A.AD_NAME+' '+name;f.desig=A.IDENT;f.typeLabel=g+' '+A.TYPE;}
+  }else if(cat==='Aerodromes'){
+    f.cat='Aerodromes';f.group=['Aerodromes','Reference points'];f.layerKey='AD-ARP';f.fileKey='Aerodromes';
+    const i=name.lastIndexOf(' - ');A.ICAO=i>0?name.slice(i+3).trim():(table&&table.getAttribute('code_id'))||'';A.NAME=i>0?name.slice(0,i).trim():name;
+    const kv={};if(table)for(const tr of table.querySelectorAll('tr')){const td=tr.querySelectorAll('td');if(td.length>=2)kv[cellText(td[td.length-2])]=cellText(td[td.length-1]);}
+    const get=re=>{for(const k in kv)if(re.test(k))return kv[k];return '';};
+    const el=get(/^Elevation/i).split('/');A.ELEV_FT=parseFloat(el[0])||null;A.REF_TEMP=(el[1]||'').trim();
+    A.MAGVAR=get(/^Magnetic/i);A.LOCATION=get(/^Direction/i);A.TRAFFIC=get(/^Type of Traffic/i);A.ADMIN=get(/^AD Administration/i);
+    const arp=get(/^ARP/i);A.ARP_LAT=(arp.match(/Lat:\s*(\S+)/)||[])[1]||'';A.ARP_LON=(arp.match(/Long:\s*(\S+)/)||[])[1]||'';
+    A.REMARKS=get(/^Remarks/i);f.title=A.NAME;f.desig=A.ICAO;f.typeLabel='Aerodrome';f.extra=kv;
+  }else if(cat==='Airspaces'){
+    const type=path[1]||'';const sub=path.slice(2);
+    f.cat='Airspaces';f.group=['Airspaces',type,...sub];f.layerKey=['ASP',clean(type),...sub.map(clean)].join('-');f.fileKey='Airspace';
+    const tn=table&&table.getAttribute('txt_name')||'';let des=name;
+    if(tn&&name.includes(tn))des=name.replace(tn,'').trim();else{const m=name.match(/^(EG[DPR]\d+\S*)\s+(.*)$/)||name.match(/^(.*)\s+(\S+)$/);if(m){if(/^EG[DPR]\d/.test(m[1])){des=m[1];}else des=m[2];}}
+    A.DESIG=des;A.NAME=tn||name;A.TYPE=type.replace(/^OTHER:/,'');A.SUBTYPE=sub.filter(s=>!/^[A-G]$/.test(s)).join(' / ');
+    const b=[],r=[],up=[],lo=[],cl=[];
+    if(table)for(const tr of table.querySelectorAll('tr')){const td=tr.querySelectorAll('td');if(!td.length)continue;const t=cellText(td[0]);
+      for(const m of t.matchAll(/Upper limit:[ ]*([^\n]*)/g))up.push(m[1].trim());
+      for(const m of t.matchAll(/Lower limit:[ ]*([^\n]*)/g))lo.push(m[1].trim());
+      for(const m of t.matchAll(/Class:[ ]*([^\n]*)/g))cl.push(m[1].trim());
+      b.push(t.split(/\n?Upper limit:/)[0].replace(/\n/g,' ').trim());if(td[1])r.push(cellText(td[1]));}
+    A.UPPER=uniq(up).join(' / ');A.LOWER=uniq(lo).join(' / ');
+    const folderClass=sub.find(s=>/^[A-G]$/.test(s))||'';A.CLASS=uniq(cl).join('/')||folderClass;
+    const T=type.replace(/^OTHER:/,'');
+    if(T==='Danger')f.cg='DANGER';else if(T==='Restricted')f.cg='RESTRICTED';else if(T==='Prohibited')f.cg='PROHIBITED';else if(/TMZ/.test(T))f.cg='TMZ';
+    else if(T==='RAS'&&!folderClass){const k=/\bFBZ\b/.test(name)?'FBZ':/\bNPZ\b/.test(name)?'NPZ':'OTHER';f.cg=k==='FBZ'?'FBZ':'OTHER';f.layerKey+='-'+k;f.group=['Airspaces',type,k==='FBZ'?'Flight buffer zones':k==='NPZ'?'NPZ':'Other'];}
+    else if(T==='D_OTHER'){const s0=(sub[0]||'').replace(/^OTHER:/,'');
+      if(/^MTA /.test(name)){f.cg='MTA';f.layerKey='ASP-D_OTHER-MTA';f.group=['Airspaces',type,'MTA'];}
+      else f.cg=s0==='GAS'?'GAS':s0==='HI_RADIO'?'HIRTA':s0==='LASER'?'LASER':s0==='SHOOTING'?'SMALLARMS':(s0==='MILOPS'&&sub[1]==='REFUEL')?'AARA':'OTHER';}
+    else f.cg=folderClass?'CLASS_'+folderClass:'OTHER';
+    const uf=up.map(levelFt).filter(v=>v!=null),lf=lo.map(levelFt).filter(v=>v!=null);
+    A.UPPER_FT=uf.length?Math.max(...uf):(isFinite(f.upM)?Math.round(f.upM/0.3048):null);
+    A.LOWER_FT=lf.length?Math.min(...lf):(isFinite(f.lowM)?Math.round(f.lowM/0.3048):null);
+    A.BOUNDARY=uniq(b).join(' || ');A.REMARKS=uniq(r).join('\n\n');
+    f.title=A.NAME;f.desig=A.DESIG;f.typeLabel=A.TYPE+(A.CLASS?' class '+A.CLASS:'')+(A.SUBTYPE?' '+A.SUBTYPE:'');
+  }else if(cat==='Significant Points'){
+    const type=path[1]||'Point';
+    f.cat='Significant Points';f.fileKey='Points';A.IDENT=name;
+    if(/^Designated/i.test(type)){const k=/^[A-Z]{5}$/.test(name)?'5LNC':/^VP\d+/.test(name)?'VRP':'DP';A.TYPE=k;f.layerKey='PT-'+k;
+      f.group=['Significant Points',type,k==='5LNC'?'5-letter name codes':k==='VRP'?'Visual reference points':'Other designated points'];}
+    else{f.group=['Significant Points',type];f.layerKey='NAV-'+clean(type);A.TYPE=type;}
+    const kv={};if(table){const th=[...table.querySelectorAll('th')].map(cellText);const tr=[...table.querySelectorAll('tr')].find(r=>r.querySelector('td'));
+      if(tr)[...tr.querySelectorAll('td')].forEach((td,i)=>kv[th[i]||('COL'+i)]=cellText(td));}
+    A.FREQ=kv['Frequency']||'';A.CHANNEL=kv['Channel']||'';A.REMARKS=kv['Remarks']||'';
+    f.title=name;f.desig=name;f.typeLabel=A.TYPE==='VRP'?'Visual reference point':A.TYPE==='5LNC'?'5-letter name code':A.TYPE;
+  }else if(cat==='Routes'){
+    const rt=path[1]||'';const route=path[2]||name.split(' ')[0];
+    f.cat='Routes';f.group=['Routes',rt];f.layerKey='RTE-'+clean(rt);f.fileKey='Routes';
+    A.ROUTE=route;A.SEGMENT=name;const seg=name.startsWith(route+' ')?name.slice(route.length+1):name;const ft=seg.split('-');
+    A.FROM_PT=(ft[0]||'').trim();A.TO_PT=(ft.slice(1).join('-')||'').trim();A.RTE_TYPE=rt;
+    const rows=[],rr=[];if(table)for(const tr of table.querySelectorAll('tr')){const td=[...tr.querySelectorAll('td')];if(!td.length)continue;
+      if(td.length===1)rr.push(cellText(td[0]).replace(/^Route Remarks:\s*/i,''));else rows.push(td.map(cellText));}
+    const col=i=>uniq(rows.map(r=>r[i]||'')).join(' | ');
+    A.NAV_SPEC=col(0).replace(/[()]/g,'');A.MAG_TRACK=col(1);A.DIST_NM=parseFloat(col(2))||null;
+    const lim=(rows[0]&&rows[0][3]||'').split('/').map(s=>s.trim());A.UPPER=(lim[0]||'').replace(/\s+/g,' ');A.LOWER=(lim[1]||'').replace(/\s+/g,' ');
+    A.UPPER_FT=levelFt(A.UPPER);A.LOWER_FT=levelFt(A.LOWER);
+    if(A.UPPER_FT==null&&isFinite(f.upM))A.UPPER_FT=Math.round(f.upM/0.3048);if(A.LOWER_FT==null&&isFinite(f.lowM))A.LOWER_FT=Math.round(f.lowM/0.3048);
+    A.MIN_ALT=col(4);A.LEVELS_DN=col(6).replace(/\n/g,' ');A.LEVELS_UP=col(7).replace(/\n/g,' ');A.REMARKS=col(8);A.RTE_RMK=rr.join('\n\n');
+    f.title=name;f.desig=route;f.typeLabel=rt+' route';f.cg='ROUTE';
+  }else{
+    f.cat=cat;f.group=path.slice();f.layerKey=path.map(clean).join('-')||'OTHER';f.fileKey=clean(cat)||'Other';
+    A.NAME=name;A.PATH=path.join(' / ');A.REMARKS=table?[...table.querySelectorAll('td')].map(cellText).join(' | '):(desc||'').replace(/<[^>]+>/g,' ');
+    f.title=name;f.desig='';f.typeLabel=path[path.length-1]||cat;
+  }
+  if(f.kind==='point'){const lk=f.layerKey;f.blockKey=lk==='AD-ILS'?(/^(LLZ|GP)$/.test(A.TYPE)?A.TYPE:'ILS'):lk.replace(/^(AD|PT|NAV)-/,'')||'POINT';A.LAT=+f.coords[0][1].toFixed(8);A.LON=+f.coords[0][0].toFixed(8);A.LAT_DMS=dms(f.coords[0][1],true);A.LON_DMS=dms(f.coords[0][0],false);}
+  f.search=(name+' '+(f.desig||'')+' '+(A.REMARKS||'')+' '+(A.SUBTYPE||'')).toUpperCase();
+}
+
+function parseKml(text){
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  if(doc.getElementsByTagName('parsererror').length)throw new Error('That file is not valid KML (the XML could not be parsed).');
+  const root=doc.documentElement;if(root.localName!=='kml')throw new Error(root.localName.includes('AIXM')?'This is the AIXM XML package. Load the KML package instead (…_KML.zip).':'That XML file is not KML. Load the KML package (…_KML.zip).');
+  const top=kid(root,'Document')||root;const meta={};
+  const d=txt(kid(top,'description'));meta.note=d.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
+  const ts=kid(top,'TimeSpan');meta.effective=(ts?txt(kid(ts,'begin')):'').slice(0,10)||((d.match(/effective (\d{4}-\d{2}-\d{2})/)||[])[1]||'');
+  const styles={},maps={};for(const e of findAll(top,'Style')){const id=e.getAttribute('id');const ls=kid(e,'LineStyle');const c=ls&&txt(kid(ls,'color'));if(id&&/^[0-9a-f]{8}$/i.test(c||''))styles['#'+id]=[parseInt(c.slice(6,8),16),parseInt(c.slice(4,6),16),parseInt(c.slice(2,4),16)];}
+  for(const e of findAll(top,'StyleMap')){for(const p of kids(e,'Pair'))if(txt(kid(p,'key'))==='normal')maps['#'+e.getAttribute('id')]=txt(kid(p,'styleUrl'));}
+  const colourOf=u=>styles[u]||styles[maps[u]]||null;
+  const feats=[];let skipped=0;
+  (function walk(el,path){for(const c of el.children){
+    if(c.localName==='Folder'||c.localName==='Document')walk(c,path.concat(txt(kid(c,'name'))));
+    else if(c.localName==='Placemark'){const g=geometryOf(c);if(!g){skipped++;continue;}
+      const f={id:feats.length+1,kind:g.kind,coords:g.coords,upM:g.upM,lowM:g.lowM,attr:{}};
+      describe(f,path.filter(Boolean),txt(kid(c,'name')),txt(kid(c,'description')));
+      if(f.kind!=='point'&&!f.cg)f.cg='OTHER';feats.push(f);}
+  }})(top,[]);
+  // a VOR with a DME of the same ident at the same place becomes one VOR/DME
+  const dmes=new Map();for(const f of feats)if(f.layerKey==='NAV-DME')dmes.set(f.attr.IDENT,f);const gone=new Set();
+  for(const v of feats){if(v.layerKey!=='NAV-VOR')continue;const d=dmes.get(v.attr.IDENT);if(!d)continue;
+    if(Math.abs(d.coords[0][0]-v.coords[0][0])>0.01||Math.abs(d.coords[0][1]-v.coords[0][1])>0.006)continue; // more than about 0.4 NM apart: keep both
+    gone.add(d);v.layerKey='NAV-VORDME';v.blockKey='VORDME';v.group=['Significant Points','VOR/DME'];v.attr.TYPE='VORDME';v.typeLabel='VOR/DME';
+    v.attr.CHANNEL=d.attr.CHANNEL||'';if(!v.attr.FREQ)v.attr.FREQ=d.attr.FREQ||'';v.attr.REMARKS=uniq([v.attr.REMARKS,d.attr.REMARKS]).join('\n\n');v.search+=' VORDME '+(d.attr.REMARKS||'').toUpperCase();}
+  if(gone.size){const keep=feats.filter(f=>!gone.has(f));feats.length=0;keep.forEach((f,i)=>{f.id=i+1;feats.push(f);});}
+  meta.merged=gone.size;
+  // derive a runway centreline wherever both thresholds of a runway are present
+  const pairs=new Map();for(const f of feats)if(f.layerKey==='AD-THR'){const k=f.attr.ICAO+'|'+f.attr.RWY_PAIR;(pairs.get(k)||pairs.set(k,[]).get(k)).push(f);}
+  for(const p of pairs.values()){if(p.length!==2)continue;const [a,b]=p;const f={id:feats.length+1,kind:'line',coords:[a.coords[0],b.coords[0]],attr:{ICAO:a.attr.ICAO,AD_NAME:a.attr.AD_NAME,RWY_PAIR:a.attr.RWY_PAIR,RWY:a.attr.RWY+'/'+b.attr.RWY,DIMENSION:a.attr.DIMENSION,SURFACE:a.attr.SURFACE,REMARKS:'Derived by joining the two published thresholds.'}};
+    f.cat='Aerodromes';f.group=['Aerodromes','Runway centrelines (derived)'];f.layerKey='AD-RWY';f.fileKey='Runways';f.title=a.attr.AD_NAME+' RWY '+a.attr.RWY_PAIR;f.desig=a.attr.ICAO+' '+a.attr.RWY_PAIR;f.typeLabel='Runway centreline';f.cg='RUNWAY';
+    f.search=(f.title+' '+f.desig).toUpperCase();feats.push(f);}
+  if(!feats.length)throw new Error('No placemarks with geometry were found in that KML.');
+  return {feats,meta,skipped};
+}
+
+async function readFile(file){
+  const name=file.name.toLowerCase();
+  if(name.endsWith('.kml'))return await file.text();
+  if(typeof JSZip==='undefined')throw new Error('The zip library did not load. Check the internet connection, or unzip the package and choose the .kml directly.');
+  let zip=await JSZip.loadAsync(await file.arrayBuffer());
+  for(let depth=0;depth<3;depth++){
+    const names=Object.keys(zip.files);
+    const kml=names.find(n=>/\.kml$/i.test(n));if(kml)return await zip.files[kml].async('string');
+    const kmz=names.find(n=>/\.kmz$/i.test(n));if(kmz){zip=await JSZip.loadAsync(await zip.files[kmz].async('arraybuffer'));continue;}
+    if(names.some(n=>/\.xml$/i.test(n)))throw new Error('This looks like the AIXM XML package. Load the KML package instead (…_KML.zip).');
+    break;
+  }
+  throw new Error('No .kml or .kmz was found inside that zip.');
+}
+
+/* ---------- layers, groups, filters ---------- */
+const prefix=()=>clean($('prefix').value)||'AIP';
+const eff=()=>(S.meta.effective||'').replace(/[^0-9\-]/g,'');
+const layerOf=f=>prefix()+($('dlayer').checked&&eff()?'_'+eff():'')+'-'+f.layerKey;
+const gkey=f=>f.group.join('\u001f');
+const COLOUR_DEFAULT={CLASS_A:['Class A',[46,49,146]],CLASS_C:['Class C',[236,0,140]],CLASS_D:['Class D',[0,166,80]],CLASS_E:['Class E',[0,173,239]],CLASS_G:['Class G, ATZ',[145,143,143]],
+  CLASS_B:['Class B',[145,143,143]],CLASS_F:['Class F',[145,143,143]],TMZ:['TMZ',[242,158,196]],DANGER:['Danger areas',[227,5,19]],FBZ:['Danger area buffer zones',[227,5,19]],RESTRICTED:['Restricted areas',[122,33,130]],PROHIBITED:['Prohibited areas',[255,204,0]],
+  MTA:['Military training areas',[148,95,75]],AARA:['Air-to-air refuelling',[42,37,104]],HIRTA:['HIRTA',[0,160,219]],GAS:['Gas venting sites',[229,0,125]],LASER:['Laser sites',[0,150,64]],SMALLARMS:['Small arms ranges',[0,0,0]],
+  OTHER:['Other areas (not on the charts)',[145,143,143]],ROUTE:['Routes',[0,0,0]],RUNWAY:['Runway centrelines',[0,0,0]]};
+const COLOURS=(()=>{try{return JSON.parse(localStorage.getItem('aip.colours'))||{};}catch(e){return {};}})();
+const hex2rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));const rgb2hex=c=>'#'+c.map(v=>v.toString(16).padStart(2,'0')).join('');
+const rgbOf=k=>COLOURS[k]?hex2rgb(COLOURS[k]):(COLOUR_DEFAULT[k]||COLOUR_DEFAULT.OTHER)[1];
+function renderColours(){const box=$('colours');box.textContent='';const keys=Object.keys(COLOUR_DEFAULT).filter(k=>S.features.some(f=>f.cg===k));
+  for(const k of keys){const l=document.createElement('label');l.textContent=COLOUR_DEFAULT[k][0];const i=document.createElement('input');i.type='color';i.value=rgb2hex(rgbOf(k));i.setAttribute('aria-label','Colour for '+COLOUR_DEFAULT[k][0]);
+    i.oninput=()=>{COLOURS[k]=i.value;try{localStorage.setItem('aip.colours',JSON.stringify(COLOURS));}catch(e){}renderTree();renderLegend();draw();if(S.sel)select(S.sel);};box.append(l,i);}
+  const r=document.createElement('button');r.type='button';r.className='linkbtn';r.textContent='Reset to chart colours';r.onclick=()=>{for(const k in COLOURS)delete COLOURS[k];try{localStorage.removeItem('aip.colours');}catch(e){}renderColours();renderTree();renderLegend();draw();};box.append(r);}
+function screenColour(f,dark,ink){if(!f.cg)return null;let c=rgbOf(f.cg);if(c[0]+c[1]+c[2]===0)return ink;if(dark){const lum=0.3*c[0]+0.6*c[1]+0.1*c[2];if(lum<110)c=c.map(v=>Math.round(v+(255-v)*0.45));}return 'rgb('+c.join(',')+')';}
+function renderLegend(){const keys=Object.keys(COLOUR_DEFAULT).filter(k=>S.filtered.some(f=>f.cg===k));const L=$('legend');L.textContent='';L.style.display=keys.length?'':'none';
+  for(const k of keys){const s=document.createElement('span');const i=document.createElement('i');const c=rgbOf(k);i.style.background=c[0]+c[1]+c[2]===0?'var(--ink)':'rgb('+c.join(',')+')';s.append(i,COLOUR_DEFAULT[k][0]);L.append(s);}}
+function colorVar(f){
+  if(f.cat==='Aerodromes')return '--c-ad';if(f.cat==='Routes')return '--c-rte';if(f.cat==='Significant Points')return '--c-pt';
+  if(f.cat==='Airspaces'){const t=f.group[1];if(/^(Danger|Prohibited|Restricted)$/.test(t))return '--c-sua';if(t==='D_OTHER')return '--c-oth';if(/TMZ|RAS/.test(t))return '--c-tmz';return '--c-ctl';}
+  return '--c-oth';
+}
+function buildGroups(){
+  S.groups=new Map();S.checked=new Set();const root={name:'',children:new Map(),keys:[],count:0};
+  for(const f of S.features){const k=gkey(f);f.gk=k;S.checked.add(k);let n=root;
+    f.group.forEach((g,i)=>{if(!n.children.has(g))n.children.set(g,{name:g,children:new Map(),keys:new Set(),count:0,color:colorVar(f),cg:f.cg,path:f.group.slice(0,i+1).join('/')});n=n.children.get(g);n.count++;n.keys.add(k);});}
+  S.tree=root;S.collapsed=new Set();
+  for(const c of root.children.values())for(const d of c.children.values())if(d.children.size&&!/^Designated/.test(d.name))S.collapsed.add(d.path);
+  renderTree();
+}
+function renderTree(){
+  const ul=$('tree');ul.textContent='';
+  const make=(node,parent)=>{for(const n of node.children.values()){
+    const li=document.createElement('li');const lab=document.createElement('label');
+    const tw=document.createElement('button');tw.className='tw';tw.type='button';
+    if(n.children.size){tw.textContent=S.collapsed.has(n.path)?'▸':'▾';tw.setAttribute('aria-label',(S.collapsed.has(n.path)?'Expand ':'Collapse ')+n.name);tw.onclick=e=>{e.preventDefault();S.collapsed.has(n.path)?S.collapsed.delete(n.path):S.collapsed.add(n.path);renderTree();};}
+    else{tw.disabled=true;tw.setAttribute('aria-hidden','true');tw.tabIndex=-1;}
+    const cb=document.createElement('input');cb.type='checkbox';const ks=[...n.keys];const on=ks.filter(k=>S.checked.has(k)).length;
+    cb.checked=on===ks.length;cb.indeterminate=on>0&&on<ks.length;
+    cb.onchange=()=>{ks.forEach(k=>cb.checked?S.checked.add(k):S.checked.delete(k));renderTree();applyFilters();};
+    const sw=document.createElement('span');sw.className='sw';{const c=n.cg&&n.children.size===0?rgbOf(n.cg):null;sw.style.background=c?(c[0]+c[1]+c[2]===0?'var(--ink)':'rgb('+c.join(',')+')'):'var('+n.color+')';if(n.children.size&&n.path.startsWith('Airspaces'))sw.style.visibility='hidden';}
+    const nm=document.createElement('span');nm.textContent=n.name.replace(/^OTHER:/,'').replace('D_OTHER','Other activity areas').replace(/^RAS$/,'RAS (other regulated)');
+    const ct=document.createElement('span');ct.className='n';ct.textContent=n.count.toLocaleString();
+    lab.append(tw,cb,sw,nm,ct);li.append(lab);
+    if(n.children.size&&!S.collapsed.has(n.path)){const sub=document.createElement('ul');li.append(sub);make(n,sub);}
+    parent.append(li);}};
+  make(S.tree,ul);
+}
+let filterTimer=0;
+function applyFilters(){
+  const q=$('q').value.trim().toUpperCase();const lmin=$('lmin').value===''?null:+$('lmin').value,lmax=$('lmax').value===''?null:+$('lmax').value;
+  const vb=$('inview').checked?viewBox():null;
+  const R=+$('rad').value;const rs=S.anchor&&R>0?radiusSet(S.anchor,R):null;
+  S.filtered=S.features.filter(f=>{
+    if(rs&&!rs.has(f.id))return false;
+    if(!S.checked.has(f.gk))return false;
+    if(q&&!f.search.includes(q))return false;
+    if((lmin!=null||lmax!=null)&&f.attr.UPPER_FT!=null&&f.attr.LOWER_FT!=null){if(lmin!=null&&f.attr.UPPER_FT<lmin)return false;if(lmax!=null&&f.attr.LOWER_FT>lmax)return false;}
+    if(vb&&(f.bb[2]<vb[0]||f.bb[0]>vb[2]||f.bb[3]<vb[1]||f.bb[1]>vb[3]))return false;
+    return true;});
+  if(S.sel&&S.sel!==S.anchor&&!S.filtered.includes(S.sel))select(null);
+  renderTable();renderLegend();draw();
+  const b=$('export');const n=S.filtered.length;b.disabled=!n;b.textContent=S.features.length?(n?'Export '+n.toLocaleString()+' features as a zip':'Nothing matches the filters'):'Load a dataset to export';
+}
+
+/* ---------- radius around a feature ---------- */
+function ptSeg(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1];const l=dx*dx+dy*dy;let t=l?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l:0;t=t<0?0:t>1?1:t;const x=a[0]+t*dx-p[0],y=a[1]+t*dy-p[1];return x*x+y*y;}
+function inRing(p,r){let c=false;for(let i=0,j=r.length-1;i<r.length;j=i++){if((r[i][1]>p[1])!==(r[j][1]>p[1])&&p[0]<(r[j][0]-r[i][0])*(p[1]-r[i][1])/(r[j][1]-r[i][1])+r[i][0])c=!c;}return c;}
+function radiusSet(anchor,R){
+  const key=anchor.id+'|'+R;if(S.radCache&&S.radCache.key===key)return S.radCache.set;
+  const lat0=(anchor.bb[1]+anchor.bb[3])/2,lon0=(anchor.bb[0]+anchor.bb[2])/2,c=Math.cos(lat0*Math.PI/180);
+  const P=p=>[(p[0]-lon0)*c*60,(p[1]-lat0)*60];const A=anchor.coords.map(P);const R2=R*R;
+  const box=pts=>{let b=[Infinity,Infinity,-Infinity,-Infinity];for(const p of pts){if(p[0]<b[0])b[0]=p[0];if(p[1]<b[1])b[1]=p[1];if(p[0]>b[2])b[2]=p[0];if(p[1]>b[3])b[3]=p[1];}return [b[0]-R,b[1]-R,b[2]+R,b[3]+R];};
+  const inb=(p,b)=>p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3];const Abox=box(A);
+  const near=(pts,segs)=>{if(segs.length===1){for(const p of pts){const x=p[0]-segs[0][0],y=p[1]-segs[0][1];if(x*x+y*y<=R2)return true;}return false;}
+    for(const p of pts)for(let i=0;i<segs.length-1;i++)if(ptSeg(p,segs[i],segs[i+1])<=R2)return true;return false;};
+  const set=new Set();const dLat=R/60,dLon=R/60/c;
+  for(const f of S.features){
+    if(f===anchor){set.add(f.id);continue;}
+    if(f.bb[2]<anchor.bb[0]-dLon||f.bb[0]>anchor.bb[2]+dLon||f.bb[3]<anchor.bb[1]-dLat||f.bb[1]>anchor.bb[3]+dLat)continue;
+    const B=f.coords.map(P);
+    if((f.kind==='area'&&inRing(A[0],B))||(anchor.kind==='area'&&inRing(B[0],A))){set.add(f.id);continue;}
+    const Bbox=box(B);
+    if(near(B.filter(p=>inb(p,Abox)),A)||near(A.filter(p=>inb(p,Bbox)),B))set.add(f.id);
+  }
+  S.radCache={key,set};return set;
+}
+function setAnchor(f){S.anchor=f;S.radCache=null;updateAnchorUi();applyFilters();}
+function updateAnchorUi(){const n=$('anchorname');if(S.anchor){n.className='';n.innerHTML='';const b=document.createElement('b');b.textContent=S.anchor.title+(S.anchor.desig&&S.anchor.desig!==S.anchor.title?' ('+S.anchor.desig+')':'');n.append(b);}
+  else{n.className='hint';n.textContent='None chosen. Select a feature, then use the button in its details.';}$('clearanchor').hidden=!S.anchor;}
+
+/* ---------- table + detail ---------- */
+function renderTable(){
+  const tb=$('tbody');tb.textContent='';const max=400;const frag=document.createDocumentFragment();
+  S.filtered.slice(0,max).forEach(f=>{const tr=document.createElement('tr');tr.dataset.id=f.id;if(f===S.sel)tr.className='sel';
+    for(const v of [f.title,f.desig,f.typeLabel,f.attr.LOWER||'',f.attr.UPPER||'',layerOf(f)]){const td=document.createElement('td');td.textContent=v;tr.append(td);}
+    frag.append(tr);});
+  tb.append(frag);
+  $('more').textContent=S.filtered.length>max?'Showing the first '+max+' of '+S.filtered.length.toLocaleString()+'. The export includes all of them.':(S.features.length&&!S.filtered.length?'Nothing matches. Tick more groups or clear the search and level band.':'');
+}
+$('tbody').addEventListener('click',e=>{const tr=e.target.closest('tr');if(!tr)return;const f=S.features[+tr.dataset.id-1];select(f,true);});
+function select(f,zoom){
+  S.sel=f;for(const tr of $('tbody').children)tr.classList.toggle('sel',f&&+tr.dataset.id===f.id);
+  const d=$('detail');d.textContent='';
+  if(!f){const p=document.createElement('p');p.className='hint';p.textContent='Select a row, or click a feature on the map, to see every attribute that will be exported.';d.append(p);draw();return;}
+  const h=document.createElement('h3');h.textContent=f.title;const l=document.createElement('div');l.className='lay mono';l.textContent=layerOf(f);
+  const dl=document.createElement('dl');const all=Object.assign({},f.attr,f.blockKey?{BLOCK:blockName(f.blockKey)}:{},f.extra||{});
+  for(const k in all){if(all[k]===''||all[k]==null)continue;const dt=document.createElement('dt');dt.textContent=k;const dd=document.createElement('dd');dd.textContent=all[k];dl.append(dt,dd);}
+  const ab=document.createElement('button');ab.className='ghost';ab.type='button';const R=+$('rad').value||0;
+  ab.textContent=S.anchor===f?'Stop filtering around this feature':'Keep only features within '+R+' NM of this';ab.onclick=()=>{setAnchor(S.anchor===f?null:f);select(f);};
+  d.append(h,l,ab,dl);d.scrollTop=0;
+  if(zoom)fitBox(f.bb,f.kind==='point'?0.6:0);else draw();
+}
+
+/* ---------- map ---------- */
+const cv=$('map');const ctx=cv.getContext('2d');const V={cx:-3,cy:0,k:60,w:0,h:0};
+const mercY=lat=>Math.log(Math.tan(Math.PI/4+Math.max(-85,Math.min(85,lat))*Math.PI/360))*180/Math.PI;
+const invY=y=>(2*Math.atan(Math.exp(y*Math.PI/180))-Math.PI/2)*180/Math.PI;
+V.cy=mercY(55);
+let coastPath=null;
+function buildCoast(){if(typeof Path2D==='undefined')return;coastPath=new Path2D();for(const r of COAST.split(';')){let x=0,y=0,first=true;for(const p of r.split(' ')){const c=p.split(',');x+=+c[0];y+=+c[1];const X=x/100,Y=-mercY(y/100);first?coastPath.moveTo(X,Y):coastPath.lineTo(X,Y);first=false;}coastPath.closePath();}}
+function prep(f){let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity;for(const p of f.coords){if(p[0]<a)a=p[0];if(p[0]>c)c=p[0];if(p[1]<b)b=p[1];if(p[1]>d)d=p[1];}f.bb=[a,b,c,d];
+  if(f.kind!=='point'&&typeof Path2D!=='undefined'){const P=new Path2D();f.coords.forEach((p,i)=>i?P.lineTo(p[0],-mercY(p[1])):P.moveTo(p[0],-mercY(p[1])));if(f.kind==='area')P.closePath();f.path=P;}}
+const sx=lon=>(lon-V.cx)*V.k+V.w/2, sy=lat=>(V.cy-mercY(lat))*V.k+V.h/2;
+function viewBox(){const hw=V.w/2/V.k,hh=V.h/2/V.k;return [V.cx-hw,invY(V.cy-hh),V.cx+hw,invY(V.cy+hh)];}
+function resize(){const r=cv.getBoundingClientRect();const dpr=window.devicePixelRatio||1;V.w=r.width;V.h=r.height;cv.width=Math.max(1,Math.round(r.width*dpr));cv.height=Math.max(1,Math.round(r.height*dpr));draw();}
+function fitBox(bb,pad){let [a,b,c,d]=bb;if(pad){a-=pad;c+=pad;b-=pad/2;d+=pad/2;}const y1=mercY(b),y2=mercY(d);V.cx=(a+c)/2;V.cy=(y1+y2)/2;
+  V.k=Math.min(V.w/Math.max(c-a,1e-4),V.h/Math.max(y2-y1,1e-4))*0.86;V.k=Math.max(4,Math.min(V.k,40000));draw();viewChanged();}
+function fitAll(){const s=S.filtered.length?S.filtered:S.features;if(!s.length)return fitBox([-12,49,4,61.5]);
+  // ignore the oceanic giants when framing, unless they are all there is
+  const core=s.filter(f=>f.bb[2]-f.bb[0]<12);const u=core.length?core:s;let bb=[Infinity,Infinity,-Infinity,-Infinity];for(const f of u){bb=[Math.min(bb[0],f.bb[0]),Math.min(bb[1],f.bb[1]),Math.max(bb[2],f.bb[2]),Math.max(bb[3],f.bb[3])];}fitBox(bb,0.3);}
+let raf=0;function draw(){if(!ctx||raf)return;raf=requestAnimationFrame(()=>{raf=0;paint();});}
+function paint(){
+  const css=getComputedStyle(document.documentElement);const C=n=>css.getPropertyValue(n).trim();const dpr=window.devicePixelRatio||1;
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=C('--sea');ctx.fillRect(0,0,V.w,V.h);
+  const T=()=>ctx.setTransform(V.k*dpr,0,0,V.k*dpr,(V.w/2-V.cx*V.k)*dpr,(V.h/2+V.cy*V.k)*dpr);
+  if(coastPath){T();ctx.fillStyle=C('--land');ctx.fill(coastPath);ctx.strokeStyle=C('--coast');ctx.lineWidth=1/V.k;ctx.stroke(coastPath);}
+  // graticule
+  ctx.setTransform(dpr,0,0,dpr,0,0);const vb=viewBox();const span=vb[2]-vb[0];const step=span>40?10:span>16?5:span>6?2:span>2.5?1:span>1?0.5:0.25;
+  ctx.strokeStyle=C('--grat');ctx.lineWidth=1;ctx.fillStyle=C('--ink-soft');ctx.font='11px ui-monospace,"SF Mono",Consolas,monospace';ctx.beginPath();
+  for(let x=Math.ceil(vb[0]/step)*step;x<=vb[2];x+=step){ctx.moveTo(sx(x),0);ctx.lineTo(sx(x),V.h);}
+  for(let y=Math.ceil(vb[1]/step)*step;y<=vb[3];y+=step){ctx.moveTo(0,sy(y));ctx.lineTo(V.w,sy(y));}ctx.stroke();
+  for(let x=Math.ceil(vb[0]/step)*step;x<=vb[2];x+=step)ctx.fillText(Math.abs(x)+(x<0?'W':x>0?'E':''),sx(x)+3,12);
+  for(let y=Math.ceil(vb[1]/step)*step;y<=vb[3];y+=step)ctx.fillText(y+'N',3,sy(y)-3);
+  const cols={};for(const v of ['--c-ctl','--c-tmz','--c-sua','--c-oth','--c-rte','--c-pt','--c-ad'])cols[v]=C(v);
+  const isDark=(()=>{const m=C('--paper').match(/^#(..)(..)(..)/);return m?parseInt(m[1],16)+parseInt(m[2],16)+parseInt(m[3],16)<300:false;})();
+  const vis=f=>!(f.bb[2]<vb[0]||f.bb[0]>vb[2]||f.bb[3]<vb[1]||f.bb[1]>vb[3]);
+  T();ctx.lineJoin='round';
+  for(const f of S.filtered){if(f.kind==='point'||!f.path||!vis(f))continue;const c=screenColour(f,isDark,C('--ink'))||cols[colorVar(f)];ctx.strokeStyle=c;ctx.lineWidth=(f.kind==='line'?1.2:1)/V.k;
+    if(f.kind==='area'){ctx.globalAlpha=0.06;ctx.fillStyle=c;ctx.fill(f.path);ctx.globalAlpha=1;}ctx.stroke(f.path);}
+  if(S.sel&&S.sel.path){ctx.strokeStyle=C('--sel');ctx.lineWidth=3.5/V.k;ctx.stroke(S.sel.path);}
+  ctx.setTransform(dpr,0,0,dpr,0,0);const label=V.k>260;ctx.font='11px -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+  for(const f of S.filtered){if(f.kind!=='point'||!vis(f))continue;const x=sx(f.coords[0][0]),y=sy(f.coords[0][1]);const c=cols[colorVar(f)];ctx.fillStyle=c;ctx.strokeStyle=c;ctx.lineWidth=1.3;
+    ctx.beginPath();if(V.k<150){ctx.rect(x-1,y-1,2,2);ctx.fill();}else if(f.cat==='Aerodromes'){ctx.arc(x,y,4,0,6.3);ctx.stroke();ctx.beginPath();ctx.arc(x,y,1.4,0,6.3);ctx.fill();}
+    else if(f.attr.TYPE==='VRP'){ctx.arc(x,y,3,0,6.3);ctx.stroke();}
+    else if(f.layerKey.startsWith('PT-')){ctx.moveTo(x,y-3.5);ctx.lineTo(x+3.2,y+2.5);ctx.lineTo(x-3.2,y+2.5);ctx.closePath();ctx.fill();}
+    else{ctx.rect(x-3,y-3,6,6);ctx.stroke();}
+    if(label){ctx.fillStyle=C('--ink');ctx.fillText(f.desig||f.title,x+6,y+4);}}
+  if(S.anchor){const a=S.anchor,R=+$('rad').value||0;ctx.strokeStyle=C('--accent');ctx.lineWidth=2;ctx.setLineDash([7,5]);
+    if(a.kind==='point'&&R>0){const lo=a.coords[0][0],la=a.coords[0][1],cc=Math.cos(la*Math.PI/180);ctx.beginPath();for(let i=0;i<=90;i++){const t=i/90*2*Math.PI;const x=sx(lo+R/60/cc*Math.sin(t)),y=sy(la+R/60*Math.cos(t));i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();}
+    else if(a.path){const dpr2=dpr;ctx.setTransform(V.k*dpr2,0,0,V.k*dpr2,(V.w/2-V.cx*V.k)*dpr2,(V.h/2+V.cy*V.k)*dpr2);ctx.lineWidth=2.5/V.k;ctx.setLineDash([7/V.k,5/V.k]);ctx.stroke(a.path);ctx.setTransform(dpr,0,0,dpr,0,0);}
+    ctx.setLineDash([]);if(a.kind==='point'){ctx.fillStyle=C('--accent');ctx.beginPath();ctx.arc(sx(a.coords[0][0]),sy(a.coords[0][1]),4,0,6.3);ctx.fill();}}
+  if(S.sel&&S.sel.kind==='point'){const x=sx(S.sel.coords[0][0]),y=sy(S.sel.coords[0][1]);ctx.strokeStyle=C('--sel');ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,9,0,6.3);ctx.stroke();}
+}
+let viewTimer=0;function viewChanged(){if($('inview').checked){clearTimeout(viewTimer);viewTimer=setTimeout(applyFilters,250);}}
+function zoomAt(px,py,factor){const lon=V.cx+(px-V.w/2)/V.k,my=V.cy-(py-V.h/2)/V.k;V.k=Math.max(4,Math.min(V.k*factor,40000));V.cx=lon-(px-V.w/2)/V.k;V.cy=my+(py-V.h/2)/V.k;draw();viewChanged();}
+function pick(px,py){
+  const dpr=window.devicePixelRatio||1;let best=null,bestA=Infinity;
+  for(const f of S.filtered){if(f.kind!=='point')continue;const dx=sx(f.coords[0][0])-px,dy=sy(f.coords[0][1])-py;if(dx*dx+dy*dy<64)return f;}
+  ctx.setTransform(V.k*dpr,0,0,V.k*dpr,(V.w/2-V.cx*V.k)*dpr,(V.h/2+V.cy*V.k)*dpr);ctx.lineWidth=9/V.k;
+  for(const f of S.filtered){if(f.kind==='line'&&f.path&&ctx.isPointInStroke(f.path,px*dpr,py*dpr))return f;}
+  for(const f of S.filtered){if(f.kind!=='area'||!f.path)continue;if(ctx.isPointInPath(f.path,px*dpr,py*dpr)){const a=(f.bb[2]-f.bb[0])*(f.bb[3]-f.bb[1]);if(a<bestA){bestA=a;best=f;}}}
+  return best;
+}
+(function mapEvents(){
+  const pts=new Map();let moved=0,pinch=0;
+  cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,[e.offsetX,e.offsetY]);moved=0;cv.classList.add('drag');if(pts.size===2){const p=[...pts.values()];pinch=Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1]);}});
+  cv.addEventListener('pointermove',e=>{
+    const vbx=V.cx+(e.offsetX-V.w/2)/V.k,vby=invY(V.cy-(e.offsetY-V.h/2)/V.k);$('cursor').textContent=dms(vby,true).slice(0,6)+dms(vby,true).slice(-1)+' '+dms(vbx,false).slice(0,7)+dms(vbx,false).slice(-1);
+    if(!pts.has(e.pointerId))return;const o=pts.get(e.pointerId);const dx=e.offsetX-o[0],dy=e.offsetY-o[1];pts.set(e.pointerId,[e.offsetX,e.offsetY]);
+    if(pts.size===1){V.cx-=dx/V.k;V.cy+=dy/V.k;moved+=Math.abs(dx)+Math.abs(dy);draw();}
+    else if(pts.size===2){const p=[...pts.values()];const d=Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1]);if(pinch)zoomAt((p[0][0]+p[1][0])/2,(p[0][1]+p[1][1])/2,d/pinch);pinch=d;moved=99;}});
+  const up=e=>{if(!pts.has(e.pointerId))return;pts.delete(e.pointerId);cv.classList.remove('drag');if(moved<5&&e.type==='pointerup'&&S.filtered.length){const f=pick(e.offsetX,e.offsetY);select(f);if(f){const tr=[...$('tbody').children].find(t=>+t.dataset.id===f.id);if(tr)tr.scrollIntoView({block:'nearest'});}}else viewChanged();};
+  cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+  cv.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.offsetX,e.offsetY,Math.exp(-e.deltaY*0.0015));},{passive:false});
+  $('zin').onclick=()=>zoomAt(V.w/2,V.h/2,1.6);$('zout').onclick=()=>zoomAt(V.w/2,V.h/2,1/1.6);$('zfit').onclick=fitAll;
+  if(typeof ResizeObserver!=='undefined')new ResizeObserver(resize).observe($('mapwrap'));else window.addEventListener('resize',resize);
+  if(window.matchMedia)window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw);
+  new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+})();
+renderLegend();
+
+/* ---------- export: schemas ---------- */
+const SCHEMA={
+  Aerodromes:[['ID','N',8],['ICAO','C'],['NAME','C'],['ELEV_FT','N',10,2],['REF_TEMP','C'],['MAGVAR','C'],['LOCATION','C'],['TRAFFIC','C'],['ADMIN','C'],['LAT','N',13,8],['LON','N',13,8],['LAT_DMS','C'],['LON_DMS','C'],['REMARKS','C'],['BLOCK','C'],['LAYER','C'],['EFFECTIVE','C']],
+  Runways:[['ID','N',8],['ICAO','C'],['AD_NAME','C'],['RWY_PAIR','C'],['RWY','C'],['DIMENSION','C'],['SURFACE','C'],['THR_ELEV','C'],['LAT','N',13,8],['LON','N',13,8],['LAT_DMS','C'],['LON_DMS','C'],['REMARKS','C'],['BLOCK','C'],['COLOR','C'],['LAYER','C'],['EFFECTIVE','C']],
+  ILS:[['ID','N',8],['ICAO','C'],['AD_NAME','C'],['IDENT','C'],['TYPE','C'],['FREQ','C'],['CHANNEL','C'],['LAT','N',13,8],['LON','N',13,8],['LAT_DMS','C'],['LON_DMS','C'],['REMARKS','C'],['BLOCK','C'],['LAYER','C'],['EFFECTIVE','C']],
+  Airspace:[['ID','N',8],['DESIG','C'],['NAME','C'],['TYPE','C'],['SUBTYPE','C'],['CLASS','C'],['LOWER','C'],['UPPER','C'],['LOWER_FT','N',8],['UPPER_FT','N',8],['BOUNDARY','C'],['REMARKS','C'],['COLOR','C'],['LAYER','C'],['EFFECTIVE','C']],
+  Points:[['ID','N',8],['IDENT','C'],['TYPE','C'],['FREQ','C'],['CHANNEL','C'],['LAT','N',13,8],['LON','N',13,8],['LAT_DMS','C'],['LON_DMS','C'],['REMARKS','C'],['BLOCK','C'],['LAYER','C'],['EFFECTIVE','C']],
+  Routes:[['ID','N',8],['ROUTE','C'],['SEGMENT','C'],['FROM_PT','C'],['TO_PT','C'],['RTE_TYPE','C'],['NAV_SPEC','C'],['MAG_TRACK','C'],['DIST_NM','N',9,1],['LOWER','C'],['UPPER','C'],['LOWER_FT','N',8],['UPPER_FT','N',8],['MIN_ALT','C'],['LEVELS_DN','C'],['LEVELS_UP','C'],['REMARKS','C'],['RTE_RMK','C'],['COLOR','C'],['LAYER','C'],['EFFECTIVE','C']],
+  _other:[['ID','N',8],['NAME','C'],['ICAO','C'],['IDENT','C'],['TYPE','C'],['PATH','C'],['LAT','N',13,8],['LON','N',13,8],['REMARKS','C'],['BLOCK','C'],['COLOR','C'],['LAYER','C'],['EFFECTIVE','C']]
+};
+const BLOCKS=(()=>{try{return JSON.parse(localStorage.getItem('aip.blocks.v2'))||{};}catch(e){return {};}})();
+const BLOCK_DEFAULT={ARP:'ARP',THR:'THR',LLZ:'LLZ',GP:'GP','5LNC':'Fix',DP:'Fix',VRP:'Generic',VOR:'VOR',NDB:'NDB',DME:'DME',VORDME:'VORDME'};
+const blockName=k=>(BLOCKS[k]||BLOCK_DEFAULT[k]||k).replace(/[^A-Za-z0-9_$\-]/g,'_');
+const BLOCK_LABEL={ARP:'Aerodrome reference point',THR:'Runway threshold',LLZ:'ILS localiser',GP:'ILS glidepath','5LNC':'5-letter name code',VRP:'Visual reference point',DP:'Other designated point',VOR:'VOR',VORDME:'VOR/DME',NDB:'NDB',DME:'DME'};
+function renderBlocks(){const box=$('blocks');box.textContent='';const keys=uniq(S.features.map(f=>f.blockKey));
+  for(const k of keys){const l=document.createElement('label');l.textContent=BLOCK_LABEL[k]||k;const i=document.createElement('input');i.type='text';i.value=blockName(k);i.setAttribute('aria-label','Block name for '+(BLOCK_LABEL[k]||k));
+    i.oninput=()=>{BLOCKS[k]=i.value.trim();try{localStorage.setItem('aip.blocks.v2',JSON.stringify(BLOCKS));}catch(e){}if(S.sel)select(S.sel);};box.append(l,i);}}
+const schemaFor=k=>SCHEMA[k]||SCHEMA._other;
+function valueOf(f,name){if(name==='ID')return f.id;if(name==='LAYER')return layerOf(f);if(name==='COLOR')return f.cg?rgbOf(f.cg).join(','):'';if(name==='BLOCK')return f.blockKey?blockName(f.blockKey):'';if(name==='EFFECTIVE')return S.meta.effective||'';const v=f.attr[name];return v==null?'':v;}
+
+/* ---------- export: shapefile ---------- */
+const enc=new TextEncoder();
+function encTrunc(s,max){s=String(s).replace(/\s*\n+\s*/g,' ');let b=enc.encode(s);if(b.length<=max)return b;let n=max;while(n>0&&(b[n]&0xC0)===0x80)n--;return b.slice(0,n);}
+function ringArea(r){let a=0;for(let i=0;i<r.length-1;i++)a+=r[i][0]*r[i+1][1]-r[i+1][0]*r[i][1];return a/2;}
+function writeShapefile(feats,shapeType,schemaKey){
+  // shapeType: 1 point, 3 polyline, 5 polygon
+  const recs=feats.map(f=>{let c=f.coords;if(shapeType===5&&ringArea(c)>0)c=c.slice().reverse();return c;});
+  let shpLen=100;for(const c of recs)shpLen+=8+(shapeType===1?20:44+4+16*c.length);
+  const shp=new DataView(new ArrayBuffer(shpLen)),shx=new DataView(new ArrayBuffer(100+8*recs.length));
+  let bb=[Infinity,Infinity,-Infinity,-Infinity];for(const c of recs)for(const p of c){if(p[0]<bb[0])bb[0]=p[0];if(p[1]<bb[1])bb[1]=p[1];if(p[0]>bb[2])bb[2]=p[0];if(p[1]>bb[3])bb[3]=p[1];}
+  for(const [dv,len] of [[shp,shpLen],[shx,100+8*recs.length]]){dv.setInt32(0,9994);dv.setInt32(24,len/2);dv.setInt32(28,1000,true);dv.setInt32(32,shapeType,true);bb.forEach((v,i)=>dv.setFloat64(36+8*i,v,true));}
+  let o=100;recs.forEach((c,i)=>{const clen=shapeType===1?20:44+4+16*c.length;shx.setInt32(100+8*i,o/2);shx.setInt32(104+8*i,clen/2);
+    shp.setInt32(o,i+1);shp.setInt32(o+4,clen/2);o+=8;shp.setInt32(o,shapeType,true);
+    if(shapeType===1){shp.setFloat64(o+4,c[0][0],true);shp.setFloat64(o+12,c[0][1],true);}
+    else{let b=[Infinity,Infinity,-Infinity,-Infinity];for(const p of c){if(p[0]<b[0])b[0]=p[0];if(p[1]<b[1])b[1]=p[1];if(p[0]>b[2])b[2]=p[0];if(p[1]>b[3])b[3]=p[1];}
+      b.forEach((v,j)=>shp.setFloat64(o+4+8*j,v,true));shp.setInt32(o+36,1,true);shp.setInt32(o+40,c.length,true);shp.setInt32(o+44,0,true);
+      c.forEach((p,j)=>{shp.setFloat64(o+48+16*j,p[0],true);shp.setFloat64(o+56+16*j,p[1],true);});}
+    o+=clen;});
+  // dbf
+  const schema=schemaFor(schemaKey);const cells=feats.map(f=>schema.map(([n,t,len,dec])=>{const v=valueOf(f,n);
+    if(t==='N')return enc.encode(v===''||v==null||!isFinite(v)?'':(dec?(+v).toFixed(dec):String(Math.round(v))));return encTrunc(v,254);}));
+  const fl=schema.map(([n,t,len],i)=>t==='N'?len:Math.max(1,...cells.map(r=>r[i].length)));
+  const recLen=1+fl.reduce((a,b)=>a+b,0),hdr=32+32*schema.length+1;const dbf=new Uint8Array(hdr+recLen*feats.length+1);const dv=new DataView(dbf.buffer);
+  const now=new Date();dbf[0]=3;dbf[1]=now.getFullYear()-1900;dbf[2]=now.getMonth()+1;dbf[3]=now.getDate();dv.setUint32(4,feats.length,true);dv.setUint16(8,hdr,true);dv.setUint16(10,recLen,true);
+  schema.forEach(([n,t,len,dec],i)=>{const p=32+32*i;dbf.set(enc.encode(n).slice(0,10),p);dbf[p+11]=t.charCodeAt(0);dbf[p+16]=fl[i];dbf[p+17]=dec||0;});dbf[hdr-1]=0x0D;
+  let p=hdr;for(const r of cells){dbf.fill(0x20,p,p+recLen);let q=p+1;r.forEach((b,i)=>{schema[i][1]==='N'?dbf.set(b,q+fl[i]-b.length):dbf.set(b,q);q+=fl[i];});p+=recLen;}dbf[p]=0x1A;
+  return {shp:shp.buffer,shx:shx.buffer,dbf};
+}
+const LISP=";;; AIP_Blocks.lsp  -  swaps imported AIP points for your own symbol blocks (AutoCAD Map 3D)\n;;; Written out by the UK AIP converter. Block names used in this export: __NAMES__\n;;;\n;;;   AIPBLOCKS      After MAPIMPORT of the point shapefiles (with \"Create object data\" on), replaces every\n;;;                  POINT that carries a BLOCK value with that block. The block is placed on the same\n;;;                  layer, the object data is copied across, and block attributes are filled in where a\n;;;                  tag matches a column name (IDENT, FREQ, ICAO ...). Blocks missing from the drawing are\n;;;                  loaded from your symbol folder, where the file name must equal the block name.\n;;;   AIPLOADBLOCKS  Only loads the block definitions, without placing anything. Use it before MAPIMPORT\n;;;                  if you would rather let the import dialog create the blocks itself.\n;;;   AIPCOLOURS     Colours the imported outlines and route lines in the style of the UK AIP charts (ENR 6)\n;;;                  (read from the COLOR column). By default it sets each layer's colour and leaves the\n;;;                  objects ByLayer; choose Objects to colour every polyline individually instead.\n;;;   AIPLABELS      Adds a centred label inside every airspace outline: NAME, then \"Class X\" when a class is\n;;;                  published, then UPPER underlined, then LOWER. You give a text height; labels shrink (down\n;;;                  to a quarter of it) where the airspace is narrow. Labels go on a \"<airspace layer>-TXT\"\n;;;                  layer in the same colour. Running it again replaces the labels it made before.\n;;;   AIPBLOCKDIR    Choose a different symbol folder (it is remembered between sessions).\n;;;\n;;; Load with APPLOAD, or drag the file into the drawing window.\n\n(vl-load-com)\n(setq *aip-names* '(__LIST__))\n\n(defun aip:ms () (vla-get-ModelSpace (vla-get-ActiveDocument (vlax-get-acad-object))))\n\n(defun aip:pickdir (/ f d)\n  (setq f (getfiled \"Pick any symbol DWG inside your block folder\" (if (getenv \"AIPBlockDir\") (strcat (getenv \"AIPBlockDir\") \"\\\\\") \"\") \"dwg\" 0))\n  (if f (progn (setq d (vl-filename-directory f)) (setenv \"AIPBlockDir\" d) d)))\n\n(defun aip:dir (/ d)\n  (setq d (getenv \"AIPBlockDir\"))\n  (if (and d (/= d \"\") (vl-file-directory-p d)) d (aip:pickdir)))\n\n;; make sure a block definition exists; returns T when it does\n(defun aip:ensure (name dir / path o)\n  (cond\n    ((tblsearch \"BLOCK\" name) T)\n    ((and dir (setq path (findfile (strcat dir \"\\\\\" name \".dwg\"))))\n     (setq o (vl-catch-all-apply 'vla-InsertBlock\n               (list (aip:ms) (vlax-3d-point '(0.0 0.0 0.0)) path 1.0 1.0 1.0 0.0)))\n     (if (vl-catch-all-error-p o)\n       nil\n       (progn (vla-Delete o) (if (tblsearch \"BLOCK\" name) T))))\n    (T nil)))\n\n;; case-insensitive assoc on string keys\n(defun aip:assoc (key lst / r)\n  (foreach p lst\n    (if (and (null r) (listp p) (= (type (car p)) 'STR) (= (strcase (car p)) (strcase key))) (setq r p)))\n  r)\n\n(defun aip:cols (tb / def cols)\n  (setq def (ade_odtabledefn tb) cols (cdr (aip:assoc \"columns\" def)))\n  (vl-remove nil (mapcar '(lambda (c) (cdr (aip:assoc \"colname\" c))) cols)))\n\n(defun aip:odfield (e fld / val)\n  (foreach tb (ade_odgettables e)\n    (if (and (null val) (member (strcase fld) (mapcar 'strcase (aip:cols tb))))\n      (setq val (ade_odgetfield e tb fld 0))))\n  (if val (vl-princ-to-string val)))\n\n(defun aip:copyod (src dst / n i v)\n  (foreach tb (ade_odgettables src)\n    (setq n (ade_odrecordqty src tb) i 0)\n    (while (< i n)\n      (if (ade_odaddrecord dst tb)\n        (foreach c (aip:cols tb)\n          (if (setq v (ade_odgetfield src tb c i)) (ade_odsetfield dst tb c i v))))\n      (setq i (1+ i)))))\n\n(defun aip:label (e / v r)\n  (foreach f '(\"IDENT\" \"RWY\" \"ICAO\" \"NAME\")\n    (if (and (null r) (setq v (aip:odfield e f)) (/= v \"\")) (setq r v)))\n  r)\n\n(defun aip:attribs (ins src / tag v)\n  (if (= (vla-get-HasAttributes ins) :vlax-true)\n    (foreach a (vlax-invoke ins 'GetAttributes)\n      (setq tag (strcase (vla-get-TagString a)) v (aip:odfield src tag))\n      (if (and (or (null v) (= v \"\")) (member tag '(\"ID\" \"IDENT\" \"NAME\" \"LABEL\" \"DESIGNATOR\" \"TEXT\" \"CODE\")))\n        (setq v (aip:label src)))\n      (if (and v (/= v \"\")) (vla-put-TextString a v)))))\n\n(defun c:AIPBLOCKDIR () (if (aip:pickdir) (princ (strcat \"\\nSymbol folder: \" (getenv \"AIPBlockDir\")))) (princ))\n\n(defun c:AIPLOADBLOCKS (/ dir ok bad)\n  (setq dir (aip:dir) ok 0 bad '())\n  (foreach n *aip-names* (if (aip:ensure n dir) (setq ok (1+ ok)) (setq bad (cons n bad))))\n  (princ (strcat \"\\n\" (itoa ok) \" block definitions ready.\"))\n  (if bad (progn (princ \"\\nNo DWG found for: \") (princ (reverse bad))))\n  (princ))\n\n(defun c:AIPBLOCKS (/ doc ss i e ed bn dir ins done skipped missing)\n  (if (null ade_odgettables)\n    (princ \"\\nThis command needs AutoCAD Map 3D (object data functions were not found).\")\n    (progn\n      (setq ss (ssget \"_X\" '((0 . \"POINT\") (410 . \"Model\"))) i 0 done 0 skipped 0 missing '())\n      (if (null ss)\n        (princ \"\\nNo points found in model space.\")\n        (progn\n          (setq doc (vla-get-ActiveDocument (vlax-get-acad-object)))\n          (vla-StartUndoMark doc)\n          (while (< i (sslength ss))\n            (setq e (ssname ss i) ed (entget e) i (1+ i) bn (aip:odfield e \"BLOCK\"))\n            (cond\n              ((or (null bn) (= bn \"\")) (setq skipped (1+ skipped)))\n              ((member bn missing) nil)\n              ((not (aip:ensure bn (if dir dir (setq dir (aip:dir))))) (setq missing (cons bn missing)))\n              (T\n               (setq ins (vla-InsertBlock (aip:ms) (vlax-3d-point (cdr (assoc 10 ed))) bn 1.0 1.0 1.0 0.0))\n               (vla-put-Layer ins (cdr (assoc 8 ed)))\n               (aip:copyod e (vlax-vla-object->ename ins))\n               (aip:attribs ins e)\n               (entdel e)\n               (setq done (1+ done)))))\n          (vla-EndUndoMark doc)\n          (princ (strcat \"\\n\" (itoa done) \" points replaced by blocks.\"))\n          (if (> skipped 0) (princ (strcat \"\\n\" (itoa skipped) \" points had no BLOCK value and were left alone.\")))\n          (if missing (progn (princ \"\\nNo block or DWG found for: \") (princ (reverse missing)) (princ \" - those points were left alone.\")))))))\n  (princ))\n\n;; \"r,g,b\" -> (r g b), or nil\n(defun aip:rgb (s / p1 p2)\n  (if (and s (setq p1 (vl-string-search \",\" s)) (setq p2 (vl-string-search \",\" s (1+ p1))))\n    (list (atoi (substr s 1 p1)) (atoi (substr s (+ p1 2) (- p2 p1 1))) (atoi (substr s (+ p2 2))))))\n\n;; 0,0,0 means \"black on the chart\": use colour 7 so it shows white on a dark background\n(defun aip:setrgb (obj rgb / tc)\n  (if (equal rgb '(0 0 0))\n    (vla-put-Color obj 7)\n    (progn\n      (setq tc (vla-get-TrueColor obj))\n      (vla-SetRGB tc (car rgb) (cadr rgb) (caddr rgb))\n      (vla-put-TrueColor obj tc))))\n\n(defun c:AIPCOLOURS (/ doc mode ss i e obj rgb lay layers seen n)\n  (if (null ade_odgettables)\n    (princ \"\\nThis command needs AutoCAD Map 3D (object data functions were not found).\")\n    (progn\n      (initget \"Layers Objects\")\n      (setq mode (getkword \"\\nApply the KML colours to [Layers/Objects] <Layers>: \"))\n      (if (null mode) (setq mode \"Layers\"))\n      (setq ss (ssget \"_X\" '((0 . \"LWPOLYLINE,POLYLINE,LINE,MPOLYGON\") (410 . \"Model\"))) i 0 n 0 seen '())\n      (if (null ss)\n        (princ \"\\nNo polylines found in model space.\")\n        (progn\n          (setq doc (vla-get-ActiveDocument (vlax-get-acad-object)) layers (vla-get-Layers doc))\n          (vla-StartUndoMark doc)\n          (while (< i (sslength ss))\n            (setq e (ssname ss i) i (1+ i) rgb (aip:rgb (aip:odfield e \"COLOR\")))\n            (if rgb\n              (progn\n                (setq obj (vlax-ename->vla-object e) n (1+ n))\n                (if (= mode \"Objects\")\n                  (aip:setrgb obj rgb)\n                  (progn\n                    (setq lay (cdr (assoc 8 (entget e))))\n                    (if (not (member lay seen))\n                      (progn (aip:setrgb (vla-Item layers lay) rgb) (setq seen (cons lay seen))))\n                    (vla-put-Color obj 256))))))\n          (vla-EndUndoMark doc)\n          (vla-Regen doc acActiveViewport)\n          (if (= mode \"Objects\")\n            (princ (strcat \"\\n\" (itoa n) \" objects coloured.\"))\n            (princ (strcat \"\\n\" (itoa (length seen)) \" layers coloured (\" (itoa n) \" objects set ByLayer).\")))))))\n  (princ))\n\n;; ---- airspace labels ----------------------------------------------------------------------------------\n\n;; polyline vertices as a list of (x y)\n(defun aip:pts (e / obj co st out)\n  (setq obj (vlax-ename->vla-object e)\n        co  (vlax-get obj 'Coordinates)\n        st  (if (= (vla-get-ObjectName obj) \"AcDbPolyline\") 2 3))\n  (while co\n    (setq out (cons (list (car co) (cadr co)) out))\n    (repeat st (setq co (cdr co))))\n  (reverse out))\n\n;; label point and the free width there: (x y width). Uses the area centroid when it falls inside the\n;; outline; otherwise the middle of the widest stretch of the outline at the centroid's height.\n(defun aip:labelpoint (pts / ring p q a cr sx sy cx cy n xs x pairs w best bw inside)\n  (setq ring (if (equal (car pts) (last pts) 1e-9) pts (append pts (list (car pts))))\n        a 0.0 sx 0.0 sy 0.0 p (car ring))\n  (foreach q (cdr ring)\n    (setq cr (- (* (car p) (cadr q)) (* (car q) (cadr p)))\n          a  (+ a cr)\n          sx (+ sx (* (+ (car p) (car q)) cr))\n          sy (+ sy (* (+ (cadr p) (cadr q)) cr))\n          p  q))\n  (if (< (abs a) 1e-9)\n    (progn\n      (setq n (float (length pts))\n            cx (/ (apply '+ (mapcar 'car pts)) n)\n            cy (/ (apply '+ (mapcar 'cadr pts)) n))\n      (list cx cy 0.0))\n    (progn\n      (setq cx (/ sx (* 3.0 a)) cy (/ sy (* 3.0 a)) xs '() p (car ring))\n      (foreach q (cdr ring)\n        (if (/= (> (cadr p) cy) (> (cadr q) cy))\n          (setq xs (cons (+ (car p) (/ (* (- cy (cadr p)) (- (car q) (car p))) (- (cadr q) (cadr p)))) xs)))\n        (setq p q))\n      (setq xs (vl-sort xs '<) bw -1.0)\n      (while (cdr xs)\n        (setq w (- (cadr xs) (car xs)))\n        (if (and (<= (car xs) cx) (<= cx (cadr xs))) (setq inside (list cx cy w)))\n        (if (> w bw) (setq bw w best (list (/ (+ (car xs) (cadr xs)) 2.0) cy w)))\n        (setq xs (cddr xs)))\n      (cond (inside inside) (best best) (T (list cx cy 0.0))))))\n\n(defun c:AIPLABELS (/ doc layers old ht s ss i e ed name cls up lo lines maxlen lp h lay tl seen n)\n  (if (null ade_odgettables)\n    (princ \"\\nThis command needs AutoCAD Map 3D (object data functions were not found).\")\n    (progn\n      (setq ht (atof (cond ((getenv \"AIPLabelHt\")) (\"1000\"))))\n      (if (<= ht 0.0) (setq ht 1000.0))\n      (if (setq s (getreal (strcat \"\\nLabel text height in drawing units <\" (rtos ht 2 1) \">: \"))) (setq ht s))\n      (if (<= ht 0.0) (setq ht 1000.0))\n      (setenv \"AIPLabelHt\" (rtos ht 2 3))\n      (regapp \"AIPLABEL\")\n      (setq doc (vla-get-ActiveDocument (vlax-get-acad-object)) layers (vla-get-Layers doc) n 0 seen '())\n      (vla-StartUndoMark doc)\n      (if (setq old (ssget \"_X\" '((0 . \"MTEXT\") (-3 (\"AIPLABEL\")))))\n        (progn (setq i 0) (while (< i (sslength old)) (entdel (ssname old i)) (setq i (1+ i)))\n               (princ (strcat \"\\n\" (itoa (sslength old)) \" earlier labels removed.\"))))\n      (setq ss (ssget \"_X\" '((0 . \"LWPOLYLINE,POLYLINE\") (410 . \"Model\"))) i 0)\n      (while (and ss (< i (sslength ss)))\n        (setq e (ssname ss i) i (1+ i) name (aip:odfield e \"NAME\") up (aip:odfield e \"UPPER\"))\n        (if (and name (/= name \"\") up)\n          (progn\n            (setq ed (entget e) lay (cdr (assoc 8 ed)) cls (aip:odfield e \"CLASS\") lo (aip:odfield e \"LOWER\")\n                  lines (list name))\n            (if (and cls (/= cls \"\")) (setq lines (append lines (list (strcat \"Class \" cls)))))\n            (setq lines (append lines (list up (if lo lo \"\")))\n                  maxlen (apply 'max (mapcar 'strlen lines))\n                  lp (aip:labelpoint (aip:pts e))\n                  h ht)\n            (if (and (> (caddr lp) 0.0) (> (* maxlen h 0.75) (caddr lp)))\n              (setq h (max (/ (caddr lp) (* maxlen 0.75)) (* 0.25 ht))))\n            (setq tl (strcat lay \"-TXT\"))\n            (if (not (member tl seen))\n              (progn\n                (if (null (tblsearch \"LAYER\" tl))\n                  (vla-put-TrueColor (vla-Add layers tl) (vla-get-TrueColor (vla-Item layers lay))))\n                (setq seen (cons tl seen))))\n            (setq s (strcat name\n                            (if (and cls (/= cls \"\")) (strcat \"\\\\PClass \" cls) \"\")\n                            \"\\\\P\\\\L\" up \"\\\\l\"\n                            (if (and lo (/= lo \"\")) (strcat \"\\\\P\" lo) \"\")))\n            (if (entmake (list '(0 . \"MTEXT\") '(100 . \"AcDbEntity\") (cons 8 tl) '(100 . \"AcDbMText\")\n                               (list 10 (car lp) (cadr lp) 0.0) (cons 40 h) '(41 . 0.0) '(71 . 5)\n                               (cons 1 s)\n                               (list -3 (list \"AIPLABEL\" (cons 1000 \"airspace label\")))))\n              (setq n (1+ n))))))\n      (vla-EndUndoMark doc)\n      (princ (strcat \"\\n\" (itoa n) \" airspace labels added on \" (itoa (length seen)) \" -TXT layers.\"))))\n  (princ))\n\n(princ \"\\nAIP tools loaded: AIPBLOCKS, AIPCOLOURS, AIPLABELS, AIPLOADBLOCKS, AIPBLOCKDIR.\")\n(princ)\n";
+const PRJ='GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
+
+/* ---------- export: DXF (R12, layers only) ---------- */
+function writeDxf(feats){
+  const aci={'--c-ctl':5,'--c-tmz':6,'--c-sua':1,'--c-oth':30,'--c-rte':3,'--c-pt':7,'--c-ad':200};const layers=new Map();const aciCg={CLASS_A:5,CLASS_C:6,CLASS_D:3,CLASS_E:4,CLASS_G:8,TMZ:221,DANGER:1,FBZ:1,RESTRICTED:202,PROHIBITED:2,MTA:32,AARA:174,HIRTA:140,GAS:6,LASER:94,SMALLARMS:7,OTHER:8,ROUTE:7,RUNWAY:7};for(const f of feats)layers.set(layerOf(f),f.cg?(aciCg[f.cg]||8):(aci[colorVar(f)]||7));
+  let bb=[Infinity,Infinity,-Infinity,-Infinity];for(const f of feats){bb=[Math.min(bb[0],f.bb[0]),Math.min(bb[1],f.bb[1]),Math.max(bb[2],f.bb[2]),Math.max(bb[3],f.bb[3])];}
+  const o=[];const w=(...a)=>{for(let i=0;i<a.length;i+=2)o.push(a[i],a[i+1]);};const n=v=>(+v).toFixed(9);const ascii=s=>String(s).replace(/[^\x20-\x7e]/g,'?');
+  w(0,'SECTION',2,'HEADER',9,'$ACADVER',1,'AC1009',9,'$EXTMIN',10,n(bb[0]),20,n(bb[1]),9,'$EXTMAX',10,n(bb[2]),20,n(bb[3]),9,'$PDMODE',70,34,9,'$PDSIZE',40,'0.01',0,'ENDSEC');
+  w(0,'SECTION',2,'TABLES',0,'TABLE',2,'LTYPE',70,1,0,'LTYPE',2,'CONTINUOUS',70,64,3,'Solid line',72,65,73,0,40,'0.0',0,'ENDTAB',0,'TABLE',2,'LAYER',70,layers.size);
+  for(const [l,c] of layers)w(0,'LAYER',2,l,70,0,62,c,6,'CONTINUOUS');w(0,'ENDTAB',0,'ENDSEC');
+  const useBlocks=$('dxfpts').value==='block';const bs=Math.max(1e-6,+$('bscale').value||0.01);
+  if(useBlocks){w(0,'SECTION',2,'BLOCKS');for(const b of uniq(feats.map(f=>f.blockKey&&blockName(f.blockKey)))){ // placeholder symbol, 1 unit across
+      w(0,'BLOCK',8,'0',2,b,70,0,10,'0.0',20,'0.0',30,'0.0',3,b,0,'CIRCLE',8,'0',10,'0.0',20,'0.0',30,'0.0',40,'0.5',0,'LINE',8,'0',10,'-0.5',20,'0.0',30,'0.0',11,'0.5',21,'0.0',31,'0.0',0,'LINE',8,'0',10,'0.0',20,'-0.5',30,'0.0',11,'0.0',21,'0.5',31,'0.0',0,'ENDBLK',8,'0');}
+    w(0,'ENDSEC');}
+  w(0,'SECTION',2,'ENTITIES');
+  for(const f of feats){const L=layerOf(f);
+    if(f.kind==='point'){if(useBlocks)w(0,'INSERT',8,L,2,blockName(f.blockKey),10,n(f.coords[0][0]),20,n(f.coords[0][1]),30,'0.0',41,n(bs),42,n(bs),43,n(bs));else w(0,'POINT',8,L,10,n(f.coords[0][0]),20,n(f.coords[0][1]),30,'0.0');w(0,'TEXT',8,L,10,n(f.coords[0][0]+0.008),20,n(f.coords[0][1]+0.004),30,'0.0',40,'0.012',1,ascii(f.desig||f.title));}
+    else{let c=f.coords;const closed=f.kind==='area';if(closed)c=c.slice(0,-1);w(0,'POLYLINE',8,L,66,1,10,'0.0',20,'0.0',30,'0.0',70,closed?1:0);for(const p of c)w(0,'VERTEX',8,L,10,n(p[0]),20,n(p[1]),30,'0.0');w(0,'SEQEND',8,L);}}
+  w(0,'ENDSEC',0,'EOF');return o.join('\r\n')+'\r\n';
+}
+/* ---------- export: CSV + GeoJSON ---------- */
+function writeCsv(feats,schemaKey){const cols=schemaFor(schemaKey).map(s=>s[0]);const extra=schemaKey==='Aerodromes'?uniq(feats.flatMap(f=>Object.keys(f.extra||{}))):[];
+  const q=v=>{v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  return '\ufeff'+[cols.concat(extra).map(q).join(',')].concat(feats.map(f=>cols.map(c=>q(valueOf(f,c))).concat(extra.map(k=>q((f.extra||{})[k]))).join(','))).join('\r\n')+'\r\n';}
+function writeGeoJson(feats,asPoly){return JSON.stringify({type:'FeatureCollection',name:'UK_AIP_'+(S.meta.effective||''),features:feats.map(f=>{const props={};for(const [c] of schemaFor(f.fileKey)){const v=valueOf(f,c);if(v!=='')props[c]=v;}
+  const g=f.kind==='point'?{type:'Point',coordinates:f.coords[0]}:(f.kind==='area'&&asPoly)?{type:'Polygon',coordinates:[f.coords]}:{type:'LineString',coordinates:f.coords};return {type:'Feature',properties:props,geometry:g};})});}
+
+function readme(files,asPoly){return `UK AIP dataset export for AutoCAD Map 3D
+Source: NATS UK AIP dataset (KML), effective ${S.meta.effective||'unknown'}. ${S.meta.note||''}
+Exported ${new Date().toISOString().slice(0,16).replace('T',' ')} UTC, ${S.filtered.length} features.
+
+Geometry is 2D, WGS84 longitude/latitude in decimal degrees (Map 3D code LL84, EPSG:4326).
+Airspace volumes are flattened to their outline (${asPoly?'polygons':'closed polylines'}); route segments to centrelines.
+Vertical limits are attributes: LOWER / UPPER as published text, LOWER_FT / UPPER_FT as numbers
+(FL x 100, SFC = 0, UNL = 99999; AGL and AMSL values are not distinguished in the numeric columns).
+
+Importing the shapefiles with the structure kept
+ 1. In the drawing, assign a coordinate system first (MAPCSASSIGN), e.g. BritishNatGrid / OSGB36.
+    Map 3D then reprojects from LL84 to the drawing's system on import.
+ 2. MAPIMPORT > file type ESRI Shapefile > select all the .shp files together.
+ 3. For each row in the Import dialog:
+    - Drawing Layer: click the cell > "Use data field for layer names" > choose LAYER.
+      This recreates the dataset's folder structure as drawing layers (${[...new Set(S.filtered.map(layerOf))].slice(0,2).join(', ')} ...).
+    - Object Data: click the cell > "Create object data" so every attribute column is attached to the object.
+    - Input Coordinate System: LL84. It is normally picked up from the .prj; set it by hand if the cell is empty.
+ 4. Points as your own symbols: load AIP_Blocks.lsp (APPLOAD, or drag it into the drawing) and run AIPBLOCKS.
+    The first time, it asks you to pick any DWG in your symbol folder; the folder is then remembered.
+    Every imported point with a BLOCK value (${uniq(S.filtered.map(f=>f.blockKey&&blockName(f.blockKey))).join(', ')||'none in this export'}) is replaced by
+    that block on the same layer, with its object data copied over. Each name must match a DWG file name in the folder.
+    AIPCOLOURS then colours the outlines and lines from the COLOR column (red,green,blue), by layer or per object. The defaults
+    follow the UK AIP charts: airspace by class (A navy, C magenta, D green, E cyan, G grey), danger red, restricted purple,
+    prohibited yellow, TMZ pink, MTA brown, AARA navy, HIRTA blue, gas venting magenta, lasers green. 0,0,0 is applied as colour 7.
+    AIPLABELS adds a centred label in each airspace (NAME / Class X / UPPER underlined / LOWER) on "<layer>-TXT" layers.
+    It asks for a text height in drawing units and shrinks labels that would not fit; run it again to replace them.
+    Alternative: run AIPLOADBLOCKS before MAPIMPORT, then in the import dialog click the Points cell and have it
+    create blocks with the name taken from the BLOCK field.
+ 5. ${asPoly?'Tick "Import polygons as closed polylines" if you want polylines rather than MPolygons.':'Airspace outlines arrive as closed polylines.'}
+
+Notes
+ - Shapefile text columns hold at most 254 characters, so long REMARKS / BOUNDARY / RTE_RMK values are cut.
+   The CSV files carry the full text; join them on ID if needed.
+ - The DXF is in the same degrees and has layers and point labels but no attributes. Use it where Map import is not available.
+   Its points are block inserts using the same block names, with simple placeholder symbols (circle and cross, 1 unit across, scaled by the
+   factor chosen at export). INSERT the DXF into a drawing that already contains your blocks and your definitions are used instead.
+${S.anchor&&+$('rad').value>0?' - Radius filter used: within '+(+$('rad').value)+' NM of '+S.anchor.title+' ('+(S.anchor.desig||'')+').\n':''}
+
+Files
+${files.map(f=>' - '+f).join('\n')}
+`;}
+
+async function saveFile(filename,blob){
+  let d=null;try{if(window.claude&&typeof window.claude.use==='function')d=await window.claude.use('downloads');}catch(e){}
+  if(d){await d.save({filename,data:blob});return;}
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),20000);
+}
+async function doExport(){
+  const xs=$('xstatus');const want={shp:$('fshp').checked,dxf:$('fdxf').checked,csv:$('fcsv').checked,geo:$('fgeo').checked};
+  if(!want.shp&&!want.dxf&&!want.csv&&!want.geo){xs.textContent='Tick at least one format.';return;}
+  if(typeof JSZip==='undefined'){xs.textContent='The zip library did not load, so the export cannot be packaged. Check the internet connection and reload.';return;}
+  const btn=$('export');btn.disabled=true;xs.textContent='Building files…';await new Promise(r=>setTimeout(r,30));
+  try{
+    const asPoly=$('asarea').value==='poly';const byLayer=$('split').value==='layer';const zip=new JSZip();const files=[];const pre=prefix();
+    const sets=new Map();for(const f of S.filtered){const k=byLayer?layerOf(f):pre+($('dfile').checked&&eff()?'_'+eff():'')+'_'+f.fileKey;const kk=k+'|'+f.kind;if(!sets.has(kk))sets.set(kk,{name:k,kind:f.kind,schema:f.fileKey,feats:[]});sets.get(kk).feats.push(f);}
+    const names=new Map();for(const s of sets.values()){names.set(s.name,(names.get(s.name)||0)+1);}
+    for(const s of sets.values()){const base=(names.get(s.name)>1?s.name+'_'+s.kind:s.name).replace(/[^A-Za-z0-9_\-]/g,'_');
+      if(want.shp){const t=s.kind==='point'?1:(s.kind==='area'&&asPoly)?5:3;const r=writeShapefile(s.feats,t,s.schema);
+        zip.file('shapefiles/'+base+'.shp',r.shp);zip.file('shapefiles/'+base+'.shx',r.shx);zip.file('shapefiles/'+base+'.dbf',r.dbf);zip.file('shapefiles/'+base+'.prj',PRJ);zip.file('shapefiles/'+base+'.cpg','UTF-8');
+        files.push('shapefiles/'+base+'.shp  ('+s.feats.length+' '+(t===1?'points':t===3?'polylines':'polygons')+')');}
+      if(want.csv){zip.file('attributes/'+base+'.csv',writeCsv(s.feats,s.schema));files.push('attributes/'+base+'.csv');}}
+    if(want.dxf){zip.file(pre+'_'+(S.meta.effective||'export')+'.dxf',writeDxf(S.filtered));files.push(pre+'_'+(S.meta.effective||'export')+'.dxf');}
+    if(want.geo){zip.file(pre+'_'+(S.meta.effective||'export')+'.geojson',writeGeoJson(S.filtered,asPoly));files.push(pre+'_'+(S.meta.effective||'export')+'.geojson');}
+    const bn=uniq(S.filtered.map(f=>f.blockKey&&blockName(f.blockKey)));
+    if(want.shp&&bn.length){zip.file('AIP_Blocks.lsp',LISP.replace('__NAMES__',bn.join(', ')).replace('__LIST__',bn.map(n=>'"'+n+'"').join(' ')).replace(/\r?\n/g,'\r\n'));files.push('AIP_Blocks.lsp');}
+    zip.file('README.txt',readme(files,asPoly));
+    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE'});
+    const fname='UK_AIP_'+(S.meta.effective||'export').replace(/-/g,'')+'_Map3D.zip';xs.textContent='Waiting for you to confirm the save…';
+    await saveFile(fname,blob);xs.textContent='Exported '+fname+' ('+(blob.size/1048576).toFixed(1)+' MB). Import steps are in README.txt inside it.';
+  }catch(e){const c=e&&e.code;xs.textContent=c==='declined'?'Export cancelled. Nothing was saved.':c==='rate_limited'?'A save prompt is already open. Answer it, then try again.':'Export failed: '+(e&&e.message||c||e);}
+  btn.disabled=false;
+}
+
+/* ---------- wiring ---------- */
+async function load(file){
+  const st=$('status');st.className='';st.textContent='Reading '+file.name+'…';await new Promise(r=>setTimeout(r,30));
+  try{const text=await readFile(file);st.textContent='Interpreting '+(text.length/1048576).toFixed(0)+' MB of KML…';await new Promise(r=>setTimeout(r,30));
+    const t0=performance.now();const r=parseKml(text);S.features=r.feats;S.meta=r.meta;S.sel=null;for(const f of S.features)prep(f);
+    S.anchor=null;S.radCache=null;updateAnchorUi();buildGroups();renderBlocks();renderColours();$('empty').style.display='none';
+    const by=k=>S.features.filter(f=>f.kind===k).length;
+    st.textContent='Loaded '+S.features.length.toLocaleString()+' features in '+((performance.now()-t0)/1000).toFixed(1)+' s: '+by('area').toLocaleString()+' airspace outlines, '+by('line').toLocaleString()+' route and runway lines, '+by('point').toLocaleString()+' points.'+(S.meta.merged?' '+S.meta.merged+' VORs were merged with their co-located DME into VOR/DME.':'')+(r.skipped?' '+r.skipped+' placemarks had no usable geometry.':'');
+    $('dsinfo').textContent='Effective '+(S.meta.effective||'date unknown')+', '+file.name;
+    select(null);applyFilters();fitAll();
+  }catch(e){st.className='err';st.textContent=e.message||String(e);}
+}
+const drop=$('drop'),fi=$('file');
+drop.onclick=()=>fi.click();drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fi.click();}};
+fi.onchange=()=>{if(fi.files[0])load(fi.files[0]);fi.value='';};
+for(const ev of ['dragenter','dragover'])document.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');});
+for(const ev of ['dragleave','drop'])document.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');});
+document.addEventListener('drop',e=>{const f=e.dataTransfer&&e.dataTransfer.files[0];if(f)load(f);});
+$('all').onclick=()=>{S.features.forEach(f=>S.checked.add(f.gk));renderTree();applyFilters();};
+$('none').onclick=()=>{S.checked.clear();renderTree();applyFilters();};
+$('clearanchor').onclick=()=>{const was=S.sel;setAnchor(null);if(was)select(was);};
+for(const id of ['q','lmin','lmax','rad'])$(id).addEventListener('input',()=>{clearTimeout(filterTimer);filterTimer=setTimeout(applyFilters,180);});
+$('inview').onchange=applyFilters;$('rad').addEventListener('change',()=>{if(S.sel)select(S.sel);});$('prefix').addEventListener('input',()=>{renderTable();if(S.sel)select(S.sel);});
+$('dlayer').onchange=()=>{renderTable();if(S.sel)select(S.sel);};
+$('export').onclick=doExport;
+buildCoast();resize();fitBox([-12,49,4,61.5]);
+window.__aip={S,parseKml,load}; // handy for scripted use from the console
+</script>
+</body>
+</html>
