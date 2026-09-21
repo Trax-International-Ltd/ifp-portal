@@ -1,78 +1,57 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#002039">
 <title>Terrain Points</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-
-/* ---- IFP house theme (mirrors the shared stylesheet of the Surface Filtering Tool / Surface List Generator) ---- */
 :root{
-  --ifp-bg:#f5f7f9; --ifp-surface:#ffffff; --ifp-surface-2:#f7f9fb; --ifp-field:#ffffff;
-  --ifp-text:#1b2733; --ifp-navy:#002039;
-  --ifp-n400:#5b6b7a; --ifp-n500:#6f7f8d; --ifp-n600:#8a98a5; --ifp-n800:#e2e8ee; --ifp-n900:#eef2f5;
-  --ifp-line:#cfd8e0;
-  --ifp-accent:#0982C1; --ifp-accent-300:#0982C1; --ifp-accent-400:#076ca1; --ifp-accent-600:#0982C1; --ifp-accent-700:#0982C1; --ifp-accent-800:#e6f2f9; --ifp-accent-900:#eaf1f6;
-  --ifp-orange:#0982C1;
-  --ifp-ok:#1d7a46; --ifp-ok-bg:#e7f3ec; --ifp-warn:#9a6700; --ifp-warn-bg:#fbf3dc; --ifp-err:#b3261e; --ifp-err-bg:#fbe9e7;
-  --ifp-divider:rgba(27,39,51,.12);
-  --ifp-card:0 0 0 1px #e2e8ee,0 1px 2px rgba(0,32,57,.06),0 4px 16px rgba(0,32,57,.05);
-  --ifp-card-hover:0 0 0 1px #0982C1,0 2px 4px rgba(0,32,57,.08),0 10px 28px rgba(0,32,57,.10);
-  --ifp-bar-bg:#002039; --ifp-bar-text:#ffffff; --ifp-bar-muted:#a8bccb; --ifp-bar-line:rgba(255,255,255,.14);
-  --ifp-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  --ifp-mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+  --ground:#F4F6F5; --panel:#FFFFFF; --ink:#1B2430; --muted:#5B6773; --line:#D5DCE1; --line-strong:#AAB5BE;
+  --accent:#0E5A73; --accent-ink:#FFFFFF; --accent-soft:#E1EEF2;
+  --ok:#2C7A3F; --warn:#9A6A00; --bad:#B23A2F;
+  --map-bg:#EEF1EF; --map-grid:#DDE3E0; --ring:#0E5A73; --poly:#7A3E9D; --arp:#B23A2F;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
 }
-.ifp-bar{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 auto;padding:0 18px;
-  background:var(--ifp-bar-bg);color:var(--ifp-bar-text);font-family:var(--ifp-font);font-size:13px;line-height:1;position:relative;z-index:30}
-.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-bar-text);text-decoration:none;font-weight:600;font-size:15px}
-.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:#5fb6e6}
-.ifp-bar a.ifp-home:hover{color:#8fd0f3}
-.ifp-bar .ifp-sep{color:var(--ifp-bar-muted)}
-.ifp-bar .ifp-here{color:var(--ifp-bar-muted)}
-.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-bar-muted)}
-:focus-visible{outline:2px solid var(--ifp-accent);outline-offset:2px}
-
-
-:root{
-  --ground:var(--ifp-bg); --panel:var(--ifp-surface); --ink:var(--ifp-text); --muted:var(--ifp-n400); --line:var(--ifp-n800); --line-strong:var(--ifp-line);
-  --accent:var(--ifp-accent); --accent-ink:#ffffff; --accent-soft:var(--ifp-accent-800);
-  --ok:var(--ifp-ok); --warn:var(--ifp-warn); --bad:var(--ifp-err);
-  --map-bg:#eef1ef; --map-grid:#dde3e0; --ring:var(--ifp-accent); --poly:#7A3E9D; --arp:#B23A2F;
-  --mono:var(--ifp-mono);
-  --sans:var(--ifp-font);
-  --cond:var(--ifp-font);
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#12181D; --panel:#1A2128; --ink:#E4EAEE; --muted:#93A1AC; --line:#2C363F; --line-strong:#465361;
+  --accent:#5FB3CC; --accent-ink:#0B1A20; --accent-soft:#17303A;
+  --ok:#6CC282; --warn:#E0B65A; --bad:#E5776C;
+  --map-bg:#0E1418; --map-grid:#1D262D; --ring:#5FB3CC; --poly:#C48DE0; --arp:#E5776C;
+}}
+:root[data-theme="dark"]{
+  --ground:#12181D; --panel:#1A2128; --ink:#E4EAEE; --muted:#93A1AC; --line:#2C363F; --line-strong:#465361;
+  --accent:#5FB3CC; --accent-ink:#0B1A20; --accent-soft:#17303A;
+  --ok:#6CC282; --warn:#E0B65A; --bad:#E5776C;
+  --map-bg:#0E1418; --map-grid:#1D262D; --ring:#5FB3CC; --poly:#C48DE0; --arp:#E5776C;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.45 var(--sans);padding-block:0 24px;padding-inline:16px}
-h1,h2,h3{font-family:var(--sans);margin:0;text-wrap:balance}
+h1,h2,h3{font-family:var(--cond);margin:0;text-wrap:balance}
 header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 20px;padding-block:18px 14px;border-bottom:1px solid var(--line);margin-bottom:16px}
-header.top h1{font-size:22px;font-weight:600;letter-spacing:-.01em;color:var(--ifp-navy)}
+header.top h1{font-size:24px;font-weight:600;letter-spacing:.01em}
 header.top p{margin:0;color:var(--muted);max-width:70ch}
-header.top #adminLink{font:500 13px var(--sans)!important;color:var(--accent)!important;border:1px solid var(--line-strong)!important;border-radius:8px!important;padding:5px 12px!important}
-header.top #adminLink:hover{background:rgba(27,39,51,.05)}
 .layout{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:16px;align-items:start}
 @media (max-width:820px){.layout{grid-template-columns:1fr}}
 .stack{display:flex;flex-direction:column;gap:14px}
-section.card{background:var(--panel);border:0;box-shadow:var(--ifp-card);border-radius:8px;padding:14px 16px}
-section.card h2{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-n500);margin-bottom:10px;display:flex;align-items:center;gap:8px}
-section.card h2 .step{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:600 11px var(--sans);letter-spacing:0}
+section.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+section.card h2{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+section.card h2 .step{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:600 11px var(--cond)}
 label{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
-input[type=text],input[type=number],select{width:100%;font:13px var(--mono);color:var(--ink);background:var(--ifp-field);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
-input[type=text]:hover,input[type=number]:hover,select:hover{border-color:var(--line-strong)}
+input[type=text],input[type=number],select{width:100%;font:13px var(--mono);color:var(--ink);background:var(--ground);border:1px solid var(--line-strong);border-radius:4px;padding:6px 8px}
 input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 input[type=file]{display:none}
-input[type=checkbox]{accent-color:var(--accent)}
-.filebtn{display:inline-flex;align-items:center;gap:8px;cursor:pointer;border:1px dashed var(--line-strong);border-radius:8px;padding:8px 10px;font-size:13px;width:100%;background:var(--ground);transition:border-color .15s,background .15s}
-.filebtn:hover{border-color:var(--accent);background:var(--accent-soft)}
-.filebtn .k{font-family:var(--sans);font-weight:600;color:var(--accent);white-space:nowrap;flex:none}
+.filebtn{display:inline-flex;align-items:center;gap:8px;cursor:pointer;border:1px dashed var(--line-strong);border-radius:4px;padding:8px 10px;font-size:13px;width:100%;background:var(--ground)}
+.filebtn:hover{border-color:var(--accent)}
+.filebtn .k{font-family:var(--cond);font-weight:600;color:var(--accent)}
 .fileinfo{font:12px/1.4 var(--mono);color:var(--muted);margin-top:6px;word-break:break-word}
 .fileinfo b{color:var(--ink);font-weight:500}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font:12px/1.5 var(--mono);margin-top:6px}
 .kv span:nth-child(odd){color:var(--muted)}
-button{font:500 13px var(--sans);border:1px solid var(--line-strong);background:var(--panel);color:var(--ifp-navy);border-radius:8px;padding:6px 12px;cursor:pointer;transition:border-color .15s,color .15s}
-button:hover{border-color:var(--accent);color:var(--accent)}
-button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-family:var(--sans);font-weight:600;font-size:14px;padding:9px 14px;width:100%}
-button.primary:hover{background:var(--ifp-accent-400);border-color:var(--ifp-accent-400);color:#fff}
+button{font:500 13px var(--sans);border:1px solid var(--line-strong);background:var(--panel);color:var(--ink);border-radius:4px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-family:var(--cond);font-weight:600;font-size:15px;padding:9px 14px;width:100%}
 button.primary:disabled{opacity:.45;cursor:not-allowed}
-button.small{font-size:12px;padding:3px 9px}
+button.small{font-size:12px;padding:3px 8px}
 button.icon{padding:3px 7px;font-family:var(--mono);line-height:1}
 table.zones{width:100%;border-collapse:collapse;font:13px var(--mono);margin-top:4px}
 table.zones th{font:600 11px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;padding:2px 4px;font-weight:600}
@@ -89,7 +68,7 @@ table.zones td.ro{color:var(--muted)}
 .polyrow .nm{font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .polyrow .nm small{color:var(--muted)}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
-.mapwrap{background:var(--panel);border:0;box-shadow:var(--ifp-card);border-radius:8px;overflow:hidden}
+.mapwrap{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .maphead{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
 .maphead .legend{display:flex;gap:12px;flex-wrap:wrap}
 .maphead .ramp{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px}
@@ -100,34 +79,27 @@ canvas#map:active{cursor:grabbing}
 .status{display:flex;align-items:center;gap:10px;font:12px var(--mono);color:var(--muted);min-height:20px;flex-wrap:wrap}
 .bar{flex:1 1 120px;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
 .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
-.msg{border-left:3px solid var(--warn);padding:6px 10px;font-size:12.5px;background:var(--ifp-warn-bg);border-radius:0 6px 6px 0;margin-top:8px}
-.msg.bad{border-left-color:var(--bad);background:var(--ifp-err-bg)}
-.msg.ok{border-left-color:var(--ok);background:var(--ifp-ok-bg)}
+.msg{border-left:3px solid var(--warn);padding:6px 10px;font-size:12.5px;background:var(--accent-soft);border-radius:0 4px 4px 0;margin-top:8px}
+.msg.bad{border-left-color:var(--bad)}
+.msg.ok{border-left-color:var(--ok)}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:6px}
-.stat{padding:8px 10px;border:1px solid var(--line);border-radius:8px}
-.stat b{display:block;font:600 20px var(--sans);color:var(--ifp-navy);font-variant-numeric:tabular-nums}
+.stat{padding:8px 10px;border:1px solid var(--line);border-radius:4px}
+.stat b{display:block;font:500 20px var(--cond);font-variant-numeric:tabular-nums}
 .stat span{font-size:11px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
 table.ztab{width:100%;border-collapse:collapse;font:12px var(--mono);margin-top:10px;font-variant-numeric:tabular-nums}
 table.ztab th{font:600 11px var(--sans);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:right;padding:3px 6px;border-bottom:1px solid var(--line)}
 table.ztab th:first-child,table.ztab td:first-child{text-align:left}
 table.ztab td{text-align:right;padding:3px 6px;border-bottom:1px solid var(--line)}
 .files{display:flex;flex-direction:column;gap:6px;margin-top:10px}
-.filerow{display:flex;justify-content:space-between;align-items:center;gap:10px;font:12px var(--mono);padding:6px 8px;border:1px solid var(--line);border-radius:8px}
+.filerow{display:flex;justify-content:space-between;align-items:center;gap:10px;font:12px var(--mono);padding:6px 8px;border:1px solid var(--line);border-radius:4px}
 .filerow span small{color:var(--muted)}
-.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ifp-navy);color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;box-shadow:0 6px 18px rgba(0,32,57,.25)}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--ground);padding:8px 14px;border-radius:4px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
 .toast.show{opacity:1}
 details.about{font-size:12.5px;color:var(--muted)}
-details.about summary{cursor:pointer;font-family:var(--sans);font-weight:600;color:var(--ifp-navy);font-size:13px}
+details.about summary{cursor:pointer;font-family:var(--cond);font-weight:600;color:var(--ink);font-size:13px}
 details.about p{margin:6px 0 0;max-width:72ch}
 @media (prefers-reduced-motion: reduce){.bar i,.toast{transition:none}}
 </style></head><body>
-<div class="ifp-bar" style="margin-inline:-16px">
-  <a class="ifp-home" href="https://trax-international-ltd.github.io/ifp-portal/"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,120v96a8,8,0,0,1-8,8H160a8,8,0,0,1-8-8V164a4,4,0,0,0-4-4H108a4,4,0,0,0-4,4v52a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V120a16,16,0,0,1,4.69-11.31l80-80a16,16,0,0,1,22.62,0l80,80A16,16,0,0,1,224,120Z"/></svg>IFP Portal</a>
-  <span class="ifp-sep">/</span>
-  <span class="ifp-here">Terrain Points</span>
-  <span class="ifp-kind">Utility</span>
-</div>
-
 
 <header class="top">
   <h1>Terrain Points</h1>
@@ -205,7 +177,8 @@ details.about p{margin:6px 0 0;max-width:72ch}
       </div>
     </div>
     <div class="row" style="margin-top:10px">
-      <div><label for="rowsPer">Rows per import file</label><input type="number" id="rowsPer" value="50000" min="100" step="1000"></div>
+      <div><label for="outFmt">Output format</label><select id="outFmt"><option value="pds">PDToolkit script (.pds)</option><option value="csv">PDToolkit CSV import</option><option value="both">Both</option></select></div>
+      <div><label for="rowsPer">Obstacles per file</label><input type="number" id="rowsPer" value="50000" min="100" step="1000"></div>
       <div><label for="prefix">File name prefix</label><input type="text" id="prefix" value="PDT IMPORT"></div>
     </div>
     <div style="margin-top:14px"><button class="primary" id="runBtn" disabled>Generate terrain points</button></div>
@@ -672,7 +645,48 @@ lerc/LercDecode.js:
     return files;
   }
 
-  return { NM, FT, parseDms, parseSurvey, utmZone, utmProjString, projFromEpsg, zoneCentres, makeDem, tileFromGeoTiffImage, parseAsc, osGridBounds, osRefFor, zonesExtentIn, run, toCsvRows, splitCsv, circleIntersectsPolygon, hexLattice };
+  // ---------- PDToolkit script (.pds) output ----------
+  // Matches PDToolkit's own export: tab-separated commands, CRLF, sign on every DMS component for S/W.
+  function pdsDms(v) {
+    const neg = v < 0; const a = Math.abs(v);
+    let d = Math.floor(a), m = Math.floor((a - d) * 60), s = ((a - d) * 60 - m) * 60;
+    s = Math.round(s * 10000) / 10000;
+    if (s >= 60) { s -= 60; m += 1; } if (m >= 60) { m -= 60; d += 1; }
+    const sg = neg ? '-' : '';
+    return sg + d + ':' + sg + m + ':' + sg + s.toFixed(4);
+  }
+  function guid() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return '{' + crypto.randomUUID() + '}';
+    const h = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).slice(1);
+    return '{' + h() + h() + '-' + h() + '-4' + h().slice(1) + '-' + ((8 + Math.floor(Math.random() * 4)).toString(16)) + h().slice(1) + '-' + h() + h() + h() + '}';
+  }
+  function toPdsFiles(points, rowsPerFile, prefix, opts) {
+    opts = opts || {};
+    const idPrefix = (opts.idPrefix || 'TP').replace(/[\t\r\n]/g, '');
+    const date = opts.date || new Date();
+    const dateStr = String(date.getMonth() + 1).padStart(2, '0') + '/' + String(date.getDate()).padStart(2, '0') + '/' + date.getFullYear();
+    const header = ['pdtPANSOPS', 'pdtInputObstacle\tPosition Error (radius)\t20m', 'pdtInputObstacle\tElevation Tolerance\t0', 'pdtWaypointsFixes\tElevation (MSL)\t0', 'pdtInputObstacle\tObstacle Type\tCylinder'].join('\r\n') + '\r\n';
+    const n = Math.max(1, Math.ceil(points.length / rowsPerFile));
+    const files = [];
+    for (let i = 0; i < n; i++) {
+      const parts = [header];
+      for (const p of points.slice(i * rowsPerFile, (i + 1) * rowsPerFile)) {
+        parts.push('pdtInputObstacle\tObstacle ID\t' + idPrefix + String(p.id).padStart(6, '0') + '\r\n' +
+          'pdtInputObstacle\tUnique ID\t' + guid() + '\r\n' +
+          'pdtInputObstacle\tDescription\tTERRAIN POINT\r\n' +
+          'pdtInputObstacle\tElevation\t' + (+p.elev).toFixed(2) + 'm\r\n' +
+          'pdtInputObstacle\tPosition\t' + pdsDms(p.lat) + ', ' + pdsDms(p.lon) + '\r\n' +
+          'pdtInputObstacle\tPosition Error (radius)\t' + p.radius + 'm\r\n' +
+          'pdtInputObstacle\tVegetation\tNo\r\n' +
+          'pdtInputObstacle\tSurvey Date\t' + dateStr + '\r\n' +
+          'draw\r\n');
+      }
+      files.push({ name: prefix + '_' + (i + 1) + '.pds', text: parts.join('') });
+    }
+    return files;
+  }
+
+  return { NM, FT, parseDms, pdsDms, toPdsFiles, parseSurvey, utmZone, utmProjString, projFromEpsg, zoneCentres, makeDem, tileFromGeoTiffImage, parseAsc, osGridBounds, osRefFor, zonesExtentIn, run, toCsvRows, splitCsv, circleIntersectsPolygon, hexLattice };
 });
 </script>
 <script>
@@ -1109,7 +1123,10 @@ $('runBtn').addEventListener('click', async () => {
     for (const p of out.points) { const q = view.proj.forward([p.lon, p.lat]); p.x = q[0]; p.y = q[1]; }
     state.result = out;
     const rows = Math.max(100, parseInt($('rowsPer').value) || 50000), prefix = ($('prefix').value.trim() || 'PDT IMPORT');
-    state.files = core.splitCsv(out.points, rows, prefix);
+    const fmtSel = $('outFmt').value;
+    state.files = [];
+    if (fmtSel !== 'csv') state.files.push(...core.toPdsFiles(out.points, rows, prefix, { idPrefix: (state.ident || 'TP').replace(/\s+/g, '') + '_TP' }));
+    if (fmtSel !== 'pds') state.files.push(...core.splitCsv(out.points, rows, prefix));
     showResults(out, zones, minM, (performance.now() - t0) / 1000);
     state.doneMsg = 'Done in ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s – ' + fmt(out.points.length) + ' obstacles.';
   } catch (err) {
@@ -1130,7 +1147,7 @@ function showResults(out, zones, minM, secs) {
   $('zoneStats').innerHTML = out.stats.zones.map(z => '<tr><td>' + z.label + '</td><td>' + z.radius + '</td><td>' + fmt(z.candidates) + '</td><td>' + fmt(z.kept) + '</td></tr>').join('');
   const fl = $('fileList'); fl.innerHTML = '';
   state.files.forEach(f => {
-    const rows = f.text.split('\r\n').length - 2;
+    const rows = /\.pds$/.test(f.name) ? (f.text.match(/^draw\r\n/gm) || []).length : f.text.split('\r\n').length - 2;
     const d = document.createElement('div'); d.className = 'filerow';
     d.innerHTML = '<span>' + f.name + ' <small>' + fmt(rows) + ' rows · ' + (f.text.length / 1048576).toFixed(1) + ' MB</small></span><button class="small">Download</button>';
     d.querySelector('button').addEventListener('click', () => saveFile(f.name, f.text));
@@ -1178,7 +1195,8 @@ async function saveFile(name, text) {
     } catch (e) { msg($('dlMsg'), 'Could not save ' + name + ' to the folder: ' + (e && e.message || e), 'bad'); return false; }
   }
   if (downloadsNs) {
-    try { await downloadsNs.save({ filename: name, data: text }); toast('Saved ' + name); return true; }
+    const dlName = /\.pds$/i.test(name) ? name.replace(/\.pds$/i, '.pds.txt') : name;
+    try { await downloadsNs.save({ filename: dlName, data: text }); toast('Saved ' + dlName + (dlName !== name ? ' – rename to .pds for PDToolkit' : '')); return true; }
     catch (e) { if (e && e.code === 'declined') return false; msg($('dlMsg'), 'Could not save ' + name + ': ' + (e && e.message || e), 'bad'); return false; }
   }
   try {
