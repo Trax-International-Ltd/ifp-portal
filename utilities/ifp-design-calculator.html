@@ -640,37 +640,39 @@ function compute(){
   if(!S.loaded) return null;
   const pts=S.points.map(p=>{
     const ci=codeInfo(p.code);
-    return {...p, include:ci.include, llz:ci.llz, known:ci.known,
-            inclFt:(ci.include==="Y"&&p.elevFt!=null)?p.elevFt:null};
+    const gM=p.elevM??(p.elevFt!=null?p.elevFt*FT_M:null);   // governing SURVEYED METRES (field 17; ft fallback only if m absent)
+    return {...p, include:ci.include, llz:ci.llz, known:ci.known, gM,
+            inclM:(ci.include==="Y"&&gM!=null)?gM:null};
   });
-  const aepRow=pts.find(p=>codeInfo(p.code).canon==="AEP"&&p.elevFt!=null);
-  const aepFile=aepRow?aepRow.elevFt:null;
+  const aepRow=pts.find(p=>codeInfo(p.code).canon==="AEP"&&p.gM!=null);
+  const aepFile=aepRow?aepRow.gM:null;                       // metres
   const manual=safeNum(S.manualAEP);
   const effective=manual!=null?manual:aepFile;
 
   let maxP=null;
-  for(const p of pts) if(p.inclFt!=null&&(maxP===null||p.inclFt>maxP.inclFt)) maxP=p;
-  const included=pts.filter(p=>p.inclFt!=null).length;
+  for(const p of pts) if(p.inclM!=null&&(maxP===null||p.inclM>maxP.inclM)) maxP=p;
+  const included=pts.filter(p=>p.inclM!=null).length;
 
   const unk=new Map();
   for(const p of pts) if(!p.known&&!(p.code in S.codeOverrides)) unk.set(p.code,(unk.get(p.code)||0)+1);
 
   let diff=null,status="—",statusClass="warn";
   if(effective!=null&&maxP){
-    diff=maxP.inclFt-effective;
+    diff=maxP.inclM-effective;
     if(Math.abs(diff)<=S.tolMatch){status="MATCH";statusClass="ok";}
     else{
-      status=`DIFFERS: computed value ${diff>0?"HIGHER":"LOWER"} by ${Math.abs(diff).toFixed(2)} ft `+
-             `(${(Math.abs(diff)*0.3048).toFixed(2)} m) via ${maxP.code} ${maxP.assoc||"—"}`;
+      status=`DIFFERS: computed value ${diff>0?"HIGHER":"LOWER"} by ${Math.abs(diff).toFixed(3)} m `+
+             `(${(Math.abs(diff)/FT_M).toFixed(2)} ft) via ${maxP.code} ${maxP.assoc||"—"}`;
       statusClass="diff";
     }
   }else if(!maxP){status="no included points — check the survey codes";}
   else{status="AEP not in file — enter the surveyor's report value";}
 
-  // operative value: the MOST CONSERVATIVE (higher) of the surveyor's AEP and
-  // our computed value — this is what feeds every calculation
+  // operative value (METRES): the MOST CONSERVATIVE (higher) of the surveyor's
+  // AEP and our computed value — this is what feeds every calculation.
+  // We work in metres; published ft are derived ÷ 0.3048 (Annex 5).
   let operative=null, operativeSrc="—";
-  const compMax=maxP?maxP.inclFt:null;
+  const compMax=maxP?maxP.inclM:null;
   if(effective!=null&&compMax!=null){
     if(compMax>=effective){operative=compMax;operativeSrc=compMax===effective?"both equal":"computed from survey";}
     else{operative=effective;operativeSrc="surveyor's AEP";}
@@ -687,6 +689,8 @@ function compute(){
     const llzE=llz?llz.e:(man?safeNum(man.e):null);
     const llzN=llz?llz.n:(man?safeNum(man.n):null);
     const dist=(llzE!=null&&llzN!=null&&p.e!=null&&p.n!=null)?Math.hypot(llzE-p.e,llzN-p.n):null;
+    const thrM=p.gM;                                  // surveyed metres — the working value
+    const thrFt=thrM!=null?thrM/FT_M:null;            // published ft, derived (Annex 5)
     const cfg=getCfg(key,!!llz);
     const procsOn=PROC_TYPES.filter(([id])=>cfg.procs[id]).map(([id])=>id);
     const catsOn=CATS.filter(c=>cfg.cats[c]);
@@ -714,17 +718,17 @@ function compute(){
       else vpaCheck="ok";
     }
     const faf=safeNum(ic.faf);
-    const finalCalc=ilsOn?ilsFinalCalc(p.elevFt,rdhOperative,vpa,faf):null;
+    const finalCalc=ilsOn?ilsFinalCalc(thrFt,rdhOperative,vpa,faf):null;
     let rMax=null;
-    for(const q of pts) if(q.inclFt!=null&&assocMatches(q.assoc,key))
-      if(rMax===null||q.inclFt>rMax.inclFt) rMax=q;
+    for(const q of pts) if(q.inclM!=null&&assocMatches(q.assoc,key))
+      if(rMax===null||q.inclM>rMax.inclM) rMax=q;
     /* SID datum: position = TODA_END; elevation = the HIGHER of TODA_END / TORA_END.
        Manual fallback lives in cfg.sidCommon when the survey lacks the records. */
     const toda=pts.find(q=>codeInfo(q.code).canon==="TODA_END"&&assocMatches(q.assoc,key))||null;
     const tora=pts.find(q=>codeInfo(q.code).canon==="TORA_END"&&assocMatches(q.assoc,key))||null;
     const sc=cfg.sidCommon||{};
     let sidElev=null,sidElevSrc="—";
-    const te=toda?toda.elevFt:null, re=tora?tora.elevFt:null;
+    const te=toda?toda.gM:null, re=tora?tora.gM:null;   // surveyed metres
     if(te!=null&&re!=null){
       sidElev=Math.max(te,re);
       sidElevSrc=te===re?"TODA_END = TORA_END":(te>re?"TODA_END (higher)":"TORA_END (higher)");
@@ -733,8 +737,9 @@ function compute(){
     else if(safeNum(sc.manElev)!=null){sidElev=safeNum(sc.manElev);sidElevSrc="manual entry";}
     const sid={toda,tora,
       e:toda?toda.e:safeNum(sc.manE), n:toda?toda.n:safeNum(sc.manN),
-      elevFt:sidElev, elevSrc:sidElevSrc, fromSurvey:!!(toda||tora)};
-    runways.push({key,thr:p,llzFromSurvey:!!llz,llzId,llzE,llzN,dist,ils,llzCheck,
+      elevM:sidElev, elevFt:sidElev!=null?sidElev/FT_M:null,   // m governs; ft derived for published altitudes
+      elevSrc:sidElevSrc, fromSurvey:!!(toda||tora)};
+    runways.push({key,thr:p,thrM,thrFt,llzFromSurvey:!!llz,llzId,llzE,llzN,dist,ils,llzCheck,
                   cfg,ic,procsOn,catsOn,ilsOn,locOn,needLlz,
                   rdhCharted,rdhCal,rdhSource,rdhOperative,rdhDiff,rdhCheck,vpa,vpaCheck,faf,finalCalc,
                   sid,rwyMax:rMax,ref:`${S.icao} rec ${p.id} | surveyed ${p.sdate}`});
@@ -763,9 +768,9 @@ function buildChecks(d){
   }
   // aerodrome elevation
   if(d.statusClass==="ok")
-    list.push({sev:"ok",msg:`Aerodrome elevation: MATCH — surveyor ${f3(d.effective)} ft vs computed ${f3(d.maxP.inclFt)} ft (tolerance ${S.tolMatch} ft)`,go:"elev"});
+    list.push({sev:"ok",msg:`Aerodrome elevation: MATCH — surveyor ${f3(d.effective)} m vs computed ${f3(d.maxP.inclM)} m (tolerance ${S.tolMatch} m)`,go:"elev"});
   else if(d.statusClass==="diff")
-    list.push({sev:"warn",msg:`Aerodrome elevation: ${d.status} — the more conservative value ${f3(d.operative)} ft (${d.operativeSrc}) is carried forward`,go:"elev"});
+    list.push({sev:"warn",msg:`Aerodrome elevation: ${d.status} — the more conservative value ${f3(d.operative)} m (${d.operativeSrc}) is carried forward`,go:"elev"});
   else
     list.push({sev:"warn",msg:`Aerodrome elevation: ${d.status}`,go:"elev"});
   // unknown codes
@@ -952,11 +957,11 @@ function viewHub(d){
     <button class="rwy-card" data-rwy="${esc(r.key)}">
       <div class="id">${esc(r.key)}</div>
       <div class="stats">
-        <div class="r"><span class="l">THR elev</span><span class="v">${f3(r.thr.elevFt)} ft</span></div>
-        <div class="r"><span class="l"></span><span class="v">${f3(r.thr.elevM)} m</span></div>
+        <div class="r"><span class="l">THR elev</span><span class="v">${f3(r.thrM)} m</span></div>
+        <div class="r"><span class="l">published</span><span class="v">${f3(r.thrFt)} ft</span></div>
         <div class="r"><span class="l">Categories</span><span class="v">${r.catsOn.length?r.catsOn.join(" "):"—"}</span></div>
         <div class="r"><span class="l">Procedures</span><span class="v">${r.procsOn.length?esc(r.procsOn.join(", ")):"—"}</span></div>
-        <div class="r"><span class="l">Runway max</span><span class="v">${r.rwyMax?f3(r.rwyMax.inclFt)+" ft":"—"}</span></div>
+        <div class="r"><span class="l">Runway max</span><span class="v">${r.rwyMax?f3(r.rwyMax.inclM)+" m":"—"}</span></div>
       </div>
       ${warn?`<div class="foot bad">${esc(r.llzCheck)}</div>`:""}
     </button>`;}).join("");
@@ -993,11 +998,12 @@ function viewHub(d){
       <div class="hd">Aerodrome elevation<span class="right">${esc(d.status)}</span></div>
       <div class="bd">
         <div class="meta">
-          <div class="cell"><div class="k">Surveyor (effective)</div><div class="v">${d.effective!=null?f3(d.effective)+" ft":"—"}</div></div>
-          <div class="cell"><div class="k">Computed from survey</div><div class="v">${d.maxP?f3(d.maxP.inclFt)+" ft":"—"}</div></div>
-          <div class="cell"><div class="k">Operative (conservative)</div><div class="v big" style="font-size:16px">${d.operative!=null?f3(d.operative)+" ft":"—"}</div></div>
+          <div class="cell"><div class="k">Surveyor (effective)</div><div class="v">${d.effective!=null?f3(d.effective)+" m":"—"}</div></div>
+          <div class="cell"><div class="k">Computed from survey</div><div class="v">${d.maxP?f3(d.maxP.inclM)+" m":"—"}</div></div>
+          <div class="cell"><div class="k">Operative (conservative)</div><div class="v big" style="font-size:16px">${d.operative!=null?f3(d.operative)+" m":"—"}</div></div>
+          <div class="cell"><div class="k">Published</div><div class="v">${d.operative!=null?f3(d.operative/FT_M)+" ft":"—"}</div></div>
           <div class="cell"><div class="k">Source</div><div class="v">${esc(d.operativeSrc)}</div></div>
-          <div class="cell"><div class="k">Difference</div><div class="v">${d.diff!=null?d.diff.toFixed(2)+" ft":"—"}</div></div>
+          <div class="cell"><div class="k">Difference</div><div class="v">${d.diff!=null?d.diff.toFixed(3)+" m":"—"}</div></div>
         </div>
         <div class="btnrow" style="margin-bottom:0">
           <button class="ghost" data-go="elev">Full comparison & per-runway breakdown</button>
@@ -1039,7 +1045,7 @@ function viewElev(d){
   const drv=d.maxP;
   const rw=d.runways.map(r=>`
       <tr><td>${esc(r.key)}</td>
-          <td class="num auto">${r.rwyMax?f3(r.rwyMax.inclFt):"—"}</td>
+          <td class="num auto">${r.rwyMax?f3(r.rwyMax.inclM):"—"}</td>
           <td class="auto">${r.rwyMax?esc(r.rwyMax.code):"—"}</td>
           <td class="auto">${r.rwyMax?esc(r.rwyMax.id):"—"}</td></tr>`).join("");
   return `
@@ -1047,22 +1053,22 @@ function viewElev(d){
   <p class="note">Doc 8168: <i>the elevation of the highest point of the landing area</i>. Our check computes the highest
     point on any part of the runway from the included survey points and compares it with the surveyor's AEP —
     the <b>more conservative (higher) value</b> is carried forward into every calculation. The AEP itself is excluded
-    from the computed max (Include = N) so the comparison stays independent. All values in surveyed feet — CAP1732
-    field 18, the official point of truth.</p>
+    from the computed max (Include = N) so the comparison stays independent. All values in surveyed <b>metres</b> — CAP1732
+    field 17: we work in metres and publish in feet (÷ 0.3048, Annex 5 exact).</p>
   <div class="kv">
     <div class="row"><div class="hd2">A · Surveyor's declared value</div></div>
-    <div class="row"><div class="k">AEP from survey file (ft)</div>
+    <div class="row"><div class="k">AEP from survey file (m)</div>
       <div class="v auto">${d.aepFile!=null?f3(d.aepFile):"not in file"}</div>
       <div class="c">Auto-read from the AEP row. 3 of the 9 reference files (EGHI, EGPA, EGPU) have no AEP row — hence the manual fallback.</div></div>
-    <div class="row"><div class="k">From surveyor's report (ft) — manual</div>
+    <div class="row"><div class="k">From surveyor's report (m) — manual</div>
       <div class="v in"><input type="number" step="0.001" id="in-aep" value="${esc(S.manualAEP)}"></div>
-      <div class="c">If typed from a printed report the value is rounded — raise the tolerance to match its precision (1 dp → 0.05 ft).</div></div>
-    <div class="row"><div class="k">Surveyor's value — EFFECTIVE (ft)</div>
+      <div class="c">In metres. If typed from a printed report the value is rounded — raise the tolerance to match its precision (1 dp → 0.05 m).</div></div>
+    <div class="row"><div class="k">Surveyor's value — EFFECTIVE (m)</div>
       <div class="v auto"><b>${d.effective!=null?f3(d.effective):"—"}</b></div>
       <div class="c">Manual entry if present, else the file AEP.</div></div>
     <div class="row"><div class="hd2">B · Computed from survey — highest point on any part of the runway</div></div>
-    <div class="row"><div class="k">Max elevation, included points (ft)</div>
-      <div class="v auto"><b>${drv?f3(drv.inclFt):"—"}</b></div>
+    <div class="row"><div class="k">Max elevation, included points (m)</div>
+      <div class="v auto"><b>${drv?f3(drv.inclM):"—"}</b></div>
       <div class="c">AEP and ARP excluded (Include = N) so the comparison stays independent.</div></div>
     <div class="row"><div class="k">Driving point — ID / code / runway</div>
       <div class="v auto">${drv?`${esc(drv.id)} · ${esc(drv.code)} · ${esc(drv.assoc||"—")}`:"—"}</div><div class="c"></div></div>
@@ -1072,11 +1078,11 @@ function viewElev(d){
       <div class="v auto ${d.unk.size?"chk-bad":""}">${d.unk.size}</div>
       <div class="c">${d.unk.size?`Decide Y/N on the survey codes page: ${esc([...d.unk.keys()].join(", "))}`:""}</div></div>
     <div class="row"><div class="hd2">C · Comparison</div></div>
-    <div class="row"><div class="k">Difference computed − surveyor (ft)</div>
-      <div class="v auto">${d.diff!=null?d.diff.toFixed(2):"—"}</div><div class="c"></div></div>
-    <div class="row"><div class="k">Match tolerance (ft)</div>
+    <div class="row"><div class="k">Difference computed − surveyor (m)</div>
+      <div class="v auto">${d.diff!=null?d.diff.toFixed(3):"—"}</div><div class="c"></div></div>
+    <div class="row"><div class="k">Match tolerance (m)</div>
       <div class="v in"><input type="number" step="0.001" id="in-tolmatch" value="${S.tolMatch}"></div>
-      <div class="c">Auto-read AEP: keep at float-noise level (0.005) — a few mm of difference is real. Manual 1 dp entry → 0.05.</div></div>
+      <div class="c">In metres. Auto-read AEP: keep tight (0.005 m = 5 mm) — a few mm of difference is real. Manual 1 dp entry → 0.05.</div></div>
   </div>
   <div class="verdict ${d.statusClass==="ok"?"ok":"warn"}">
     <div class="word">${esc(d.status.split(":")[0])}</div>
@@ -1085,19 +1091,22 @@ function viewElev(d){
   </div>
   <div class="kv">
     <div class="row"><div class="hd2">D · Operative aerodrome elevation — the most conservative value (feeds all calculators)</div></div>
-    <div class="row"><div class="k">OPERATIVE AERODROME ELEVATION (ft)</div>
+    <div class="row"><div class="k">OPERATIVE AERODROME ELEVATION (m)</div>
       <div class="v auto"><b>${d.operative!=null?f3(d.operative):"—"}</b></div>
-      <div class="c">The higher of the surveyor's AEP and our computed value.</div></div>
+      <div class="c">The higher of the surveyor's AEP and our computed value — the working value, in metres.</div></div>
     <div class="row"><div class="k">Source</div>
       <div class="v auto">${esc(d.operativeSrc)}</div><div class="c"></div></div>
-    <div class="row"><div class="k">Driving point surveyed metres</div>
-      <div class="v auto">${drv?f3(drv.elevM):"—"}</div><div class="c">The computed max point's field-17 value, as surveyed — not a conversion.</div></div>
+    <div class="row"><div class="k">Published (ft) — ÷ 0.3048</div>
+      <div class="v auto">${d.operative!=null?f3(d.operative/FT_M):"—"}</div>
+      <div class="c">Derived for publication only (Annex 5 exact) — never fed back into a calculation.</div></div>
+    <div class="row"><div class="k">Driving point — field-18 ft, as surveyed</div>
+      <div class="v auto">${drv?f3(drv.elevFt):"—"}</div><div class="c">Cross-check: the surveyor's own ft value against the published conversion above.</div></div>
   </div>
   <h2>E · Per-runway breakdown (included points only)</h2>
   <p class="note">ASSOC differs by code: direction codes use "07"; profile points use the pair "07/25"; ARP has none.
     Matching handles all three — pair points count toward both runways.</p>
   <div class="tbl-wrap auto-h" style="display:inline-block">
-  <table><thead><tr><th>Runway</th><th>Max elev (ft)</th><th>Driving code</th><th>Point ID</th></tr></thead>
+  <table><thead><tr><th>Runway</th><th>Max elev (m)</th><th>Driving code</th><th>Point ID</th></tr></thead>
   <tbody>${rw}</tbody></table></div>`;
 }
 function wireElev(){
@@ -1124,8 +1133,8 @@ function viewRunway(d,key){
     if(id==="SIDC"||id==="SIDPBN"){
       const c=sidCommonCalc(r,d);
       const n=((r.cfg.proc&&r.cfg.proc[id]&&r.cfg.proc[id].sids)||[]).length;
-      if(c.need||r.sid.elevFt==null) return "set the SID datum";
-      return `DER ${f2(r.sid.elevFt)} ft · TNA ${c.tna.toFixed(2)} ft · first turn ${c.distM.toFixed(2)} m · ${n} SID${n===1?"":"s"}`;
+      if(c.need||r.sid.elevM==null) return "set the SID datum";
+      return `DER ${f2(r.sid.elevM)} m · TNA ${c.tna.toFixed(2)} ft · first turn ${c.distM.toFixed(2)} m · ${n} SID${n===1?"":"s"}`;
     }
     return "configuration to follow";
   };
@@ -1150,12 +1159,12 @@ function viewRunway(d,key){
     <div class="hd">Threshold — as surveyed</div>
     <div class="bd">
       <div class="meta">
-        <div class="cell"><div class="k">THR elev (ft) · field 18</div><div class="v big">${f3(r.thr.elevFt)}</div></div>
-        <div class="cell"><div class="k">THR elev (m) · field 17</div><div class="v">${f3(r.thr.elevM)}</div></div>
+        <div class="cell"><div class="k">THR elev (m) · field 17 — working value</div><div class="v big">${f3(r.thrM)}</div></div>
+        <div class="cell"><div class="k">Published ft · ÷ 0.3048</div><div class="v">${f3(r.thrFt)}</div></div>
         <div class="cell"><div class="k">Easting</div><div class="v">${f3(r.thr.e)}</div></div>
         <div class="cell"><div class="k">Northing</div><div class="v">${f3(r.thr.n)}</div></div>
         <div class="cell"><div class="k">Surveyed</div><div class="v">${esc(r.thr.sdate)}</div></div>
-        <div class="cell"><div class="k">Runway max (incl. points)</div><div class="v">${r.rwyMax?f3(r.rwyMax.inclFt)+" ft":"—"}</div></div>
+        <div class="cell"><div class="k">Runway max (incl. points)</div><div class="v">${r.rwyMax?f3(r.rwyMax.inclM)+" m":"—"}</div></div>
       </div>
     </div>
   </div>
@@ -1280,7 +1289,7 @@ function viewProc(d,key,procId,seg){
         const c=r.finalCalc;
         if(!c){
           const missing=[];
-          if(r.thr.elevFt==null) missing.push("THR elevation");
+          if(r.thrM==null) missing.push("THR elevation");
           if(r.rdhOperative==null) missing.push("RDH");
           if(r.vpa==null||!(r.vpa>0)) missing.push("glide path angle");
           if(r.faf==null) missing.push("FAF procedure altitude");
@@ -1376,8 +1385,8 @@ function viewIlsMA(r){
   if(!cats.length) return `<div class="card"><div class="bd"><p class="note" style="margin:0">
     Select the aircraft categories on the runway page first — the missed approach is calculated per category.</p></div></div>`;
 
-  const calc={C1:tnaCalc(r.thr.elevFt,r.vpa,ma,"C1",cats),
-              C2:tnaCalc(r.thr.elevFt,r.vpa,ma,"C2",cats)};
+  const calc={C1:tnaCalc(r.thrFt,r.vpa,ma,"C1",cats),
+              C2:tnaCalc(r.thrFt,r.vpa,ma,"C2",cats)};
   // governing values per gradient — the SINGLE most conservative value across ALL
   // categories and both designs (one construction protects every category):
   // lowest SOC altitude · earliest SOC from THR · greatest THR→turn distance
@@ -1525,8 +1534,9 @@ function viewIlsMA(r){
         <div class="row"><div class="k">VPA (°) — from Final approach</div>
           <div class="v auto">${r.vpa!=null?r.vpa:"— enter on Final approach tab"}</div>
           <div class="c">Used for the SOC position on the nominal glide path.</div></div>
-        <div class="row"><div class="k">THR elevation (ft) — surveyed</div>
-          <div class="v auto">${f3(r.thr.elevFt)}</div><div class="c"></div></div>
+        <div class="row"><div class="k">THR elevation — surveyed (m)</div>
+          <div class="v auto">${f3(r.thrM)} <span class="mono" style="color:var(--muted);font-size:11px">· ${f3(r.thrFt)} ft published</span></div>
+          <div class="c">Working value in metres; the OCA − THR terms use the derived ft (÷ 0.3048).</div></div>
       </div></div>
     </div>
     ${designCard("C1","CAT I")}
@@ -1582,7 +1592,7 @@ function advCalc(r,ma){
   if(!r.finalCalc) return {need:"FAF procedure altitude (Final approach tab)"};
   const tan=Math.tan(r.vpa*Math.PI/180);
   const rdhM=r.rdhOperative*FT_M;
-  const thr=Math.round(r.thr.elevFt);          // worksheet uses the rounded value
+  const thr=Math.round(r.thrFt);               // published ft from surveyed metres, rounded to 1 ft as the worksheet does
   const start=Math.ceil(r.finalCalc.fafNM-1e-9);
   // OCA floor: highest 2.5% CAT I OCA across categories (one advisory column serves all)
   let autoFloor=null;
@@ -1624,8 +1634,8 @@ function viewIlsAdv(r,d){
         ${row("Gradient as published (°)",shown.map(()=>`<td class="num auto">${r.vpa}</td>`).join(""),"From the Final approach tab.")}
         ${row("Gradient (%)",shown.map(()=>`<td class="num auto">${c.tan.toFixed(6)}</td>`).join(""),"tan(VPA).")}
         ${row("RDH (ft)",shown.map(()=>`<td class="num auto">${f2(r.rdhOperative)}</td>`).join(""),"Operative RDH from the Final approach tab.")}
-        ${row("Threshold elevation (ft)",shown.map(()=>`<td class="num auto">${c.thr}</td>`).join(""),"Surveyed, rounded to 1 ft as the worksheet does.")}
-        ${row("Aerodrome elevation (ft)",shown.map(()=>`<td class="num auto">${d.operative!=null?Math.round(d.operative):"—"}</td>`).join(""),"Operative value — reference only.")}
+        ${row("Threshold elevation (ft)",shown.map(()=>`<td class="num auto">${c.thr}</td>`).join(""),"Surveyed metres ÷ 0.3048, rounded to 1 ft for the published table.")}
+        ${row("Aerodrome elevation (ft)",shown.map(()=>`<td class="num auto">${d.operative!=null?Math.round(d.operative/FT_M):"—"}</td>`).join(""),"Operative value (surveyed m ÷ 0.3048) — reference only.")}
         ${row("Altitude above MSL (ft) — exact",shown.map(col=>`<td class="num auto">${col.exact}(${col.exactH})</td>`).join(""),"Rounded UP to 1 ft; height above THR in brackets.")}
         ${row("Altitude (ft) — for publication",shown.map(col=>belowFloor(col)
             ?`<td class="num auto chk-bad">below OCA</td>`
@@ -1684,14 +1694,15 @@ function wireIlsAdv(key){
    at 3.3% until reaching the TNA. Common to every SID on the runway end.     */
 function sidCommonCalc(r,d){
   const sc=r.cfg.sidCommon||{};
-  const tnaDefault=d.operative!=null?d.operative+crit("tnaAbove"):null;
+  const tnaDefault=d.operative!=null?d.operative/FT_M+crit("tnaAbove"):null;   // aerodrome m → published ft, + increment
   const tna=safeNum(sc.tna)??tnaDefault;
-  if(r.sid.elevFt==null) return {need:"DER elevation (no TODA_END / TORA_END in the survey — enter it manually)",tna,tnaDefault};
+  if(r.sid.elevM==null) return {need:"DER elevation (no TODA_END / TORA_END in the survey — enter it manually)",tna,tnaDefault};
   if(tna==null) return {need:"minimum turn altitude (no aerodrome elevation yet — enter the TNA manually)",tna,tnaDefault};
-  const originFt=r.sid.elevFt+crit("sidDerH")*M_FT;   // climb origin above the DER, in ft (Annex 5)
-  if(!(tna>originFt)) return {need:"a TNA above the climb origin",tna,tnaDefault,originFt};
-  const distM=(tna-originFt)*FT_M/(crit("sidPdg")/100);
-  return {tna,tnaDefault,originFt,distM,distNM:distM/NM_M};
+  const originM=r.sid.elevM+crit("sidDerH");          // climb origin, METRES — surveyed DER + 5 m, no conversion
+  const originFt=originM/FT_M;                        // published ft (Annex 5)
+  if(!(tna*FT_M>originM)) return {need:"a TNA above the climb origin",tna,tnaDefault,originM,originFt};
+  const distM=(tna*FT_M-originM)/(crit("sidPdg")/100);   // all in metres: (TNA m − origin m) ÷ gradient
+  return {tna,tnaDefault,originM,originFt,distM,distNM:distM/NM_M};
 }
 /* Individual SIDs: sequential turns climbing at the SID's gradient from the
    climb origin (DER + 5 m). Each turn: entered distance (from the previous
@@ -1699,10 +1710,10 @@ function sidCommonCalc(r,d){
    LOWER; later turns climb on from the ACTUAL (capped) altitude.
    Value C = 6 s of flight at TAS(IAS, actual altitude, ISA+15) + 30 kt wind. */
 function sidCalc(r,sid,minDistM){
-  if(r.sid.elevFt==null) return {need:"DER elevation"};
+  if(r.sid.elevM==null) return {need:"DER elevation"};
   const g=safeNum(sid.pdg)??crit("sidPdg");
   if(!(g>0)) return {need:"a valid climb gradient"};
-  const origin=r.sid.elevFt+crit("sidDerH")*M_FT;
+  const origin=(r.sid.elevM+crit("sidDerH"))/FT_M;   // (surveyed m + 5 m) → ft, since published altitudes are ft
   const sidCats=CATS.filter(cat=>(sid.cats?sid.cats[cat]:r.cfg.cats[cat]));
   const ts=sid.turns||[];
   const rtype=t=>t.rtype||(String(t.restrict??"").trim()?"le":"none");  // older saves: a bare value meant at-or-below
@@ -1764,32 +1775,32 @@ function viewSidCommon(r,d){
         <div class="c">No TODA_END / TORA_END records in the survey for ${esc(r.key)} — enter the departure end manually.</div></div>
       <div class="row"><div class="k">DER Northing</div>
         <div class="v in"><input type="number" step="0.001" class="sid-in" data-f="manN" value="${esc(sc.manN??"")}"></div><div class="c"></div></div>
-      <div class="row"><div class="k">DER elevation (ft)</div>
+      <div class="row"><div class="k">DER elevation (m)</div>
         <div class="v in"><input type="number" step="0.001" class="sid-in" data-f="manElev" value="${esc(sc.manElev??"")}"></div>
-        <div class="c">Use the higher of the TODA end and TORA end elevations.</div></div>`
+        <div class="c">In metres. Use the higher of the TODA end and TORA end elevations.</div></div>`
     :`
       <div class="row"><div class="k">TODA_END</div>
-        <div class="v auto">${r.sid.toda?`${f3(r.sid.toda.elevFt)} ft · E ${f3(r.sid.toda.e)} · N ${f3(r.sid.toda.n)}`:"not in survey"}</div>
+        <div class="v auto">${r.sid.toda?`${f3(r.sid.toda.gM)} m · E ${f3(r.sid.toda.e)} · N ${f3(r.sid.toda.n)}`:"not in survey"}</div>
         <div class="c">The SID datum position — where every SID starts.</div></div>
       <div class="row"><div class="k">TORA_END</div>
-        <div class="v auto">${r.sid.tora?`${f3(r.sid.tora.elevFt)} ft`:"not in survey"}</div>
+        <div class="v auto">${r.sid.tora?`${f3(r.sid.tora.gM)} m`:"not in survey"}</div>
         <div class="c">Elevation comparator only.</div></div>
-      <div class="row"><div class="k">DER elevation — operative (ft)</div>
-        <div class="v auto"><b>${f3(r.sid.elevFt)}</b> <span class="mono" style="color:var(--muted);font-size:11px">${esc(r.sid.elevSrc)}</span></div>
-        <div class="c">The HIGHER of the two — the conservative datum elevation.</div></div>`;
+      <div class="row"><div class="k">DER elevation — operative (m)</div>
+        <div class="v auto"><b>${f3(r.sid.elevM)}</b> <span class="mono" style="color:var(--muted);font-size:11px">${esc(r.sid.elevSrc)}</span></div>
+        <div class="c">The HIGHER of the two — the conservative datum elevation, in surveyed metres (${f3(r.sid.elevFt)} ft published).</div></div>`;
   const calcRows=c.need?`
       <div class="row"><div class="k">Minimum first-turn distance</div>
         <div class="v auto">waiting for ${esc(c.need)}</div><div class="c"></div></div>`
     :`
-      <div class="row"><div class="k">Climb origin (ft)</div>
-        <div class="v auto">${c.originFt.toFixed(2)}</div>
-        <div class="c">DER elevation + ${crit("sidDerH")} m (÷ 0.3048, Annex 5).</div></div>
+      <div class="row"><div class="k">Climb origin (m)</div>
+        <div class="v auto">${c.originM.toFixed(2)}</div>
+        <div class="c">DER elevation + ${crit("sidDerH")} m — all in metres; ${c.originFt.toFixed(2)} ft published (÷ 0.3048).</div></div>
       <div class="row"><div class="k">PDG (%)</div>
         <div class="v auto">${crit("sidPdg").toFixed(2)}</div>
         <div class="c">Standard procedure design gradient for the minimum-distance calculation.</div></div>
       <div class="row"><div class="k">Minimum distance to first turn (m)</div>
         <div class="v auto"><b>${c.distM.toFixed(2)}</b></div>
-        <div class="c">(TNA − climb origin) × 0.3048 ÷ ${(crit("sidPdg")/100).toFixed(2)} — measured from the DER.</div></div>
+        <div class="c">(TNA × 0.3048 − climb origin m) ÷ ${(crit("sidPdg")/100).toFixed(3)} — all metres, measured from the DER.</div></div>
       <div class="row"><div class="k">Minimum distance to first turn (NM)</div>
         <div class="v auto"><b>${c.distNM.toFixed(2)}</b></div><div class="c"></div></div>`;
   return `
@@ -1808,9 +1819,9 @@ function viewSidCommon(r,d){
     <div class="card">
       <div class="hd">Minimum turn altitude & first turn</div>
       <div class="bd"><div class="kv compact" style="margin-bottom:0">
-        <div class="row"><div class="k">Aerodrome elevation (ft)</div>
+        <div class="row"><div class="k">Aerodrome elevation (m)</div>
           <div class="v auto">${d.operative!=null?f3(d.operative):"—"}</div>
-          <div class="c">Operative value from the Aerodrome elevation page.</div></div>
+          <div class="c">Operative value from the Aerodrome elevation page — surveyed metres (${d.operative!=null?f3(d.operative/FT_M):"—"} ft published).</div></div>
         <div class="row"><div class="k">Minimum turn altitude — TNA (ft)</div>
           <div class="v in"><input type="number" step="1" class="sid-in" data-f="tna" value="${esc(sc.tna??"")}" placeholder="${c.tnaDefault!=null?c.tnaDefault.toFixed(2):""}"></div>
           <div class="c">Usually aerodrome elevation + 500 ft${c.tnaDefault!=null?` = <b>${c.tnaDefault.toFixed(2)}</b> (used when blank)`:""} — overtype to set a different value.</div></div>
@@ -1831,7 +1842,7 @@ function wireSidCommon(key){
    Results render only after Calculate — the constraint logic reads the whole
    SID (later at-or-below/at restrictions ceiling earlier turns), so partial
    input would show misleading caps. A hash of the inputs marks staleness. */
-function sidHash(r,sid){ return JSON.stringify([sid.pdg,sid.turns,sid.cats??r.cfg.cats??null,r.sid.elevFt,(r.cfg.sidCommon||{}).tna??"",S.criteria||{}]); }
+function sidHash(r,sid){ return JSON.stringify([sid.pdg,sid.turns,sid.cats??r.cfg.cats??null,r.sid.elevM,(r.cfg.sidCommon||{}).tna??"",S.criteria||{}]); }
 const SID_RTYPES=[["none","—"],["ge","≥ at or above"],["le","≤ at or below"],["eq","= at"]];
 function viewSidPage(r,d,procId){
   const pcfg=(r.cfg.proc&&r.cfg.proc[procId])||{};
@@ -1883,8 +1894,8 @@ function viewSidPage(r,d,procId){
             <div class="v in"><input type="number" step="0.1" class="sidp-pdg" data-si="${si}" value="${esc(sid.pdg??"")}" placeholder="${crit('sidPdg')}"></div>
             <div class="c">The specified climb rate for this SID — blank uses the standard ${crit("sidPdg")}%.</div></div>
           <div class="row"><div class="k">Climb origin (ft)</div>
-            <div class="v auto">${r.sid.elevFt!=null?(r.sid.elevFt+crit("sidDerH")*M_FT).toFixed(2):"—"}</div>
-            <div class="c">DER elevation + ${crit("sidDerH")} m — shared datum.</div></div>
+            <div class="v auto">${r.sid.elevM!=null?((r.sid.elevM+crit("sidDerH"))/FT_M).toFixed(2):"—"}</div>
+            <div class="c">Surveyed DER ${r.sid.elevM!=null?f3(r.sid.elevM):"—"} m + ${crit("sidDerH")} m, published as ft (÷ 0.3048) — the turn altitudes are ft.</div></div>
         </div>
         <div class="tbl-wrap auto-h"><table>
           <thead><tr><th>Turn</th><th>Dist from previous (m)</th><th>Cum from DER (m)</th><th>Speed limit (kt IAS max)</th>
@@ -2096,7 +2107,7 @@ function exportCsv(){
 }
 /* --- project payload (shared by Save, Open and autosave) --- */
 function projectPayload(){
-  return {tool:"IFP Design Calculator project", version:1, saved:new Date().toISOString(),
+  return {tool:"IFP Design Calculator project", version:2, saved:new Date().toISOString(),
     icao:S.icao, fileName:S.fileName, company:S.company, procDate:S.procDate,
     vertRef:S.vertRef, points:S.points,
     decisions:{tolMatch:S.tolMatch, manualAEP:S.manualAEP,
@@ -2121,6 +2132,15 @@ function applyProject(p){
   if(!dcs.rwyCfg && dcs.ilsDecl){        // migrate older project files
     for(const [k,v] of Object.entries(dcs.ilsDecl)) if(v==="YES")
       S.rwyCfg[k]={cats:{},procs:{ILS:true},proc:{}};
+  }
+  if((p.version||1)<2){   // v1 stored surveyed manual entries in FEET — the tool now works in metres
+    const mA=safeNum(S.manualAEP);
+    if(mA!=null) S.manualAEP=String(+(mA*FT_M).toFixed(4));
+    if(S.tolMatch!=null&&S.tolMatch!==0.005) S.tolMatch=+(S.tolMatch*FT_M).toFixed(6);
+    for(const cfg of Object.values(S.rwyCfg)){
+      const mv=cfg&&cfg.sidCommon?safeNum(cfg.sidCommon.manElev):null;
+      if(mv!=null) cfg.sidCommon.manElev=String(+(mv*FT_M).toFixed(4));
+    }
   }
 }
 function saveProject(){
@@ -2193,13 +2213,14 @@ async function exportCaaWorkbook(){
       ["Vertical reference",S.vertRef||"—"],
       ["Source file",S.fileName],
       ["Survey points (total / included)",`${d.total} / ${d.included}`],
-      ["Aerodrome elevation — surveyor effective (ft)",d.effective],
-      ["Aerodrome elevation — computed from survey (ft)",d.maxP?d.maxP.inclFt:null],
+      ["Aerodrome elevation — surveyor effective (m)",d.effective],
+      ["Aerodrome elevation — computed from survey (m)",d.maxP?d.maxP.inclM:null],
       ["Driving point",d.maxP?`${d.maxP.id} · ${d.maxP.code} · ${d.maxP.assoc||"—"}`:"—"],
-      ["Difference computed − surveyor (ft)",d.diff],
-      ["Match tolerance (ft)",S.tolMatch],
+      ["Difference computed − surveyor (m)",d.diff],
+      ["Match tolerance (m)",S.tolMatch],
       ["STATUS",d.status],
-      ["OPERATIVE AERODROME ELEVATION (ft) — most conservative",d.operative],
+      ["OPERATIVE AERODROME ELEVATION (m) — most conservative",d.operative],
+      ["OPERATIVE — published (ft, ÷ 0.3048)",d.operative!=null?d.operative/FT_M:null],
       ["Operative value source",d.operativeSrc],
     ];
     let r=4;
@@ -2225,31 +2246,32 @@ async function exportCaaWorkbook(){
     sectionCell(ws,"A4","A · SURVEYOR'S DECLARED VALUE");
     const put=(r,k,v,kind,fmt)=>{const ck=ws.getCell(r,1),cv=ws.getCell(r,2);
       ck.value=k;dataCell(ck,null);cv.value=v;dataCell(cv,kind,fmt);return cv;};
-    put(5,"AEP from survey file (ft)",d.aepFile,"auto","0.000");
-    put(6,"From surveyor's report (ft) — manual entry",d.manual,"in","0.000");
-    put(7,"Surveyor's value — EFFECTIVE (ft)",d.effective,"auto","0.000").font={bold:true,size:9,name:"Arial"};
+    put(5,"AEP from survey file (m)",d.aepFile,"auto","0.000");
+    put(6,"From surveyor's report (m) — manual entry",d.manual,"in","0.000");
+    put(7,"Surveyor's value — EFFECTIVE (m)",d.effective,"auto","0.000").font={bold:true,size:9,name:"Arial"};
     sectionCell(ws,"A9","B · COMPUTED FROM SURVEY (highest point on any part of the runway)");
-    put(10,"Max elevation, included points (ft)",d.maxP?d.maxP.inclFt:null,"auto","0.000").font={bold:true,size:9,name:"Arial"};
+    put(10,"Max elevation, included points (m)",d.maxP?d.maxP.inclM:null,"auto","0.000").font={bold:true,size:9,name:"Arial"};
     put(11,"Driving point — ID",d.maxP?d.maxP.id:"—","auto");
     put(12,"Driving point — code",d.maxP?d.maxP.code:"—","auto");
     put(13,"Driving point — runway",d.maxP?(d.maxP.assoc||"—"):"—","auto");
     put(14,"Points included / total",`${d.included} / ${d.total}`,"auto");
     put(15,"Unrecognised codes",d.unk.size,"auto");
     sectionCell(ws,"A17","C · COMPARISON");
-    put(18,"Difference computed − surveyor (ft)",d.diff,"auto","0.000");
-    put(19,"Match tolerance (ft)",S.tolMatch,"in","0.000");
+    put(18,"Difference computed − surveyor (m)",d.diff,"auto","0.000");
+    put(19,"Match tolerance (m)",S.tolMatch,"in","0.000");
     const st=put(20,"STATUS",d.status,"auto");
     st.font={bold:true,size:9,name:"Arial",color:{argb:d.statusClass==="ok"?XC.GREEN:XC.AMBER}};
     sectionCell(ws,"A22","D · OPERATIVE AERODROME ELEVATION — MOST CONSERVATIVE VALUE");
-    put(23,"OPERATIVE AERODROME ELEVATION (ft)",d.operative,"auto","0.000").font={bold:true,size:9,name:"Arial"};
+    put(23,"OPERATIVE AERODROME ELEVATION (m)",d.operative,"auto","0.000").font={bold:true,size:9,name:"Arial"};
     put(24,"Source",d.operativeSrc,"auto");
-    put(25,"Driving point surveyed metres (field 17)",d.maxP?d.maxP.elevM:null,"auto","0.000");
+    put(25,"Published (ft) — ÷ 0.3048, Annex 5",d.operative!=null?d.operative/FT_M:null,"auto","0.000");
+    put(26,"Driving point — field-18 ft as surveyed (cross-check)",d.maxP?d.maxP.elevFt:null,"auto","0.000");
     sectionCell(ws,"A27","E · PER-RUNWAY BREAKDOWN (included points only)");
-    const hd=ws.getRow(28); hd.values=["Runway","Max elev (ft)","Driving code","Point ID"];
+    const hd=ws.getRow(28); hd.values=["Runway","Max elev (m)","Driving code","Point ID"];
     styleHeaderRow(hd);
     let r=29;
     for(const rw of d.runways){
-      const vals=[rw.key, rw.rwyMax?rw.rwyMax.inclFt:null, rw.rwyMax?rw.rwyMax.code:"—", rw.rwyMax?rw.rwyMax.id:"—"];
+      const vals=[rw.key, rw.rwyMax?rw.rwyMax.inclM:null, rw.rwyMax?rw.rwyMax.code:"—", rw.rwyMax?rw.rwyMax.id:"—"];
       vals.forEach((v,i)=>{const c=ws.getCell(r,i+1);c.value=v;dataCell(c,"auto",i===1?"0.000":null);});
       r++;
     }
@@ -2259,7 +2281,7 @@ async function exportCaaWorkbook(){
   {
     const ws=wb.addWorksheet("Runways");
     titleCell(ws,"A1","RUNWAYS — PER-RUNWAY MASTER (SURVEY-DERIVED)");
-    ws.getCell("A2").value="Elevations as surveyed (CAP1732 fields 17 & 18). ILS? is the designer's declaration. Only the localizer ANTENNA is used for THR→LLZ; monitor kit excluded.";
+    ws.getCell("A2").value="Elevations as surveyed (CAP1732 fields 17 & 18) — the metre value (field 17) is the working value; ft are published ÷ 0.3048 (Annex 5). ILS? is the designer's declaration. Only the localizer ANTENNA is used for THR→LLZ; monitor kit excluded.";
     ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
     const cols=["Runway_ID","THR_Elev_m","THR_Elev_ft","THR_Easting","THR_Northing",
                 "Categories","Procedures","LLZ_ident","LLZ_Easting","LLZ_Northing","THR_LLZ_m","LLZ_check","Survey_Ref"];
@@ -2320,7 +2342,7 @@ async function exportCaaWorkbook(){
     let r2=5;
     for(const rw of d.runways.filter(x=>x.finalCalc)){
       const c=rw.finalCalc;
-      const vals=[rw.key,rw.thr.elevFt,rw.rdhOperative,rw.vpa,rw.faf,
+      const vals=[rw.key,rw.thrFt,rw.rdhOperative,rw.vpa,rw.faf,
                   c.hgt,c.fafM,c.fafNM,c.fafChart,c.Dnm,c.Dft,c.dD,c.fapFt,c.fapM,c.fapNM];
       const kinds=["in","in","in","in","in","auto","auto","auto","auto","auto","auto","auto","auto","auto","auto"];
       const fmts=[null,"0.000","0.00","0.00","0","0.000","0.000","0.0000","0.0","0.000000","0.00","0.000","0.00","0.000","0.0000"];
@@ -2338,12 +2360,12 @@ async function exportCaaWorkbook(){
     ws.getCell("A2").value=`Imported: ${S.icao} | ${S.company||"—"} | processed ${S.procDate||"—"} | vertical ref: ${S.vertRef||"—"} | ${d.total} points | ORTHOMETRIC (AMSL) elevations, as surveyed`;
     ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
     const cols=["Point_ID","Code","Runway_ID","Easting/X","Northing/Y","Elev_m","Elev_ft",
-                "Include?","Elev_ft_incl","Ident","Survey_Date","LLZ_role"];
+                "Include?","Elev_m_incl","Ident","Survey_Date","LLZ_role"];
     ws.columns=cols.map((c,i)=>({width:i===9?30:12}));
     const hd=ws.getRow(4); hd.values=cols; styleHeaderRow(hd);
     let r=5;
     for(const p of d.pts){
-      const vals=[p.id,p.code,p.assoc,p.e,p.n,p.elevM,p.elevFt,p.include,p.inclFt,p.ident,p.sdate,p.llz||""];
+      const vals=[p.id,p.code,p.assoc,p.e,p.n,p.elevM,p.elevFt,p.include,p.inclM,p.ident,p.sdate,p.llz||""];
       const kinds=["in","in","in","in","in","in","in","auto","auto",null,"in","auto"];
       const fmts=[null,null,null,"0.000","0.000","0.000","0.000",null,"0.000",null,null,null];
       vals.forEach((v,i)=>{const c=ws.getCell(r,i+1);c.value=v;dataCell(c,kinds[i],fmts[i]);
