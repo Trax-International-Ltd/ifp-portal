@@ -1741,7 +1741,7 @@ function sidCalc(r,sid,minDistM){
   const turns=ts.map((t,i)=>{
     const dist=safeNum(t.dist), restrict=safeNum(t.restrict);
     const ty=rtype(t);
-    let computed=null, actual=null, capped=false, capBy=null, belowMin=false;
+    let computed=null, actual=null, capped=false, capBy=null, belowMin=false, reqGrad=null;
     let beforeMin=false, shortBy=null;
     if(i===0&&dist!=null&&minDistM!=null&&dist<minDistM-1e-9){beforeMin=true;shortBy=minDistM-dist;}
     if(dist!=null&&dist>=0){
@@ -1752,8 +1752,14 @@ function sidCalc(r,sid,minDistM){
         actual=ceil[i]; capped=true;
         capBy=(restrict!=null&&(ty==="le"||ty==="eq")&&restrict===ceil[i])?"own":"later";
       }
-      // at-or-above / at: the design gradient must actually get there
-      if(restrict!=null&&(ty==="ge"||ty==="eq")&&computed<restrict-1e-9) belowMin=true;
+      // at-or-above / at that the design gradient cannot reach: the RESTRICTION
+      // governs — the turn is taken AT it, the gradient actually required over
+      // the segment is reported, and later turns climb on from the restriction.
+      if(restrict!=null&&(ty==="ge"||ty==="eq")&&computed<restrict-1e-9){
+        belowMin=true;
+        reqGrad=dist>0?((restrict-prevAlt)*FT_M/dist)*100:null;
+        actual=restrict; capped=false; capBy=null;
+      }
       prevAlt=actual;
     }
     /* speeds: per declared category. Default = final MA IAS × departure factor;
@@ -1785,7 +1791,7 @@ function sidCalc(r,sid,minDistM){
       return {cat,def,minAllow,ias,limited,belowSpeed,tas,cM:tas/3600*crit("sidCSec")*NM_M};
     }):[];
     return {n:i+1,name:t.name||"",dist,cum:dist!=null?cum:null,limit,restrict,rtype:ty,
-            computed,actual,capped,capBy,belowMin,beforeMin,shortBy,
+            computed,actual,capped,capBy,belowMin,reqGrad,beforeMin,shortBy,
             poAob,cpAob,cpSpd,cpLimited,perCat};
   });
   return {g,origin,turns,minDistM:minDistM??null,cats:sidCats};
@@ -1901,8 +1907,9 @@ function viewSidPage(r,d,procId){
           <input type="number" step="1" class="sidp-turn cell-in" data-si="${si}" data-ti="${ti}" data-f="restrict" value="${esc(tt.restrict??"")}" placeholder="—" style="width:72px">
         </td>
         ${res(ti,"computed",t=>`<td class="num auto">${t.computed!=null?t.computed.toFixed(2):"—"}</td>`)}
-        ${res(ti,"actual",t=>`<td class="num auto ${t.capped?"gov":""} ${t.belowMin?"chk-bad":""}">${
-            t.actual!=null?`<b>${t.actual.toFixed(2)}</b>${t.capped?(t.capBy==="later"?" (capped by later constraint)":" (capped)"):""}${t.belowMin?" — gradient cannot meet the ≥ restriction":""}`:"—"}</td>`)}
+        ${res(ti,"actual",t=>`<td class="num auto ${t.capped||t.belowMin?"gov":""}">${
+            t.actual!=null?`<b>${t.actual.toFixed(2)}</b>${t.capped?(t.capBy==="later"?" (capped by later constraint)":" (capped)"):""}${
+            t.belowMin?`<div class="mono" style="font-size:10.5px">restriction governs — requires <b>${t.reqGrad!=null?t.reqGrad.toFixed(2):"—"}%</b> vs the ${c.g}% design gradient</div>`:""}`:"—"}</td>`)}
         ${res(ti,"po",t=>{const hi=t.perCat[t.perCat.length-1];   // highest selected category — the nominal track is built on the larger values
           return `<td class="num auto">${t.poAob!=null?`<b>${t.poAob}°</b><div class="mono" style="font-size:10.5px">${hi?`CAT ${hi.cat} ${hi.ias.toFixed(2)} kt${hi.limited?" (limited)":""}`:"tabled"}</div>`:"—"}</td>`;})}
         ${res(ti,"cp",t=>`<td class="num auto">${t.cpAob!=null?`<b>${t.cpAob}°</b><div class="mono" style="font-size:10.5px">${t.cpSpd.toFixed(2)} kt${t.cpLimited?" (limited)":""}</div>`:"—"}</td>`)}
@@ -1933,18 +1940,15 @@ function viewSidPage(r,d,procId){
             <th>PANS-OPS — AOB · IAS</th><th>CAP778 — AOB · IAS</th><th>C (m)</th><th></th></tr></thead>
           <tbody>${rows}</tbody></table></div>
         ${c&&c.cats&&c.cats.length?`
-        ${(()=>{const lim=c.turns.filter(t=>t.limit!=null&&t.perCat.some(p=>p.limited));
-          const bad=c.turns.filter(t=>t.perCat.some(p=>p.belowSpeed));
-          let out="";
-          if(bad.length) out+=`<p class="note" style="color:#B91C1C;font-weight:700;margin:6px 0 0">⚠ ${bad.map(t=>`TP${t.n}: the ${t.limit} kt limit is below the minimum allowable turn speed for ${t.perCat.filter(p=>p.belowSpeed).map(p=>"CAT "+p.cat+" ("+p.minAllow.toFixed(2)+" kt)").join(", ")}`).join(" · ")} — minimum = intermediate MA IAS × ${crit("sidMassF")}.</p>`;
-          if(lim.length) out+=`<p class="note" style="color:#B45309;margin:6px 0 0">Annotate the procedure: ${lim.map(t=>`“Departure turn limited to ${t.limit} kt IAS maximum” (TP${t.n})`).join(" · ")}.</p>`;
-          return out;})()}`:""}
+        ${(()=>{const bad=c.turns.filter(t=>t.perCat.some(p=>p.belowSpeed));
+          if(!bad.length) return "";
+          return `<p class="note" style="color:#B91C1C;font-weight:700;margin:6px 0 0">⚠ ${bad.map(t=>`TP${t.n}: the ${t.limit} kt limit is below the minimum allowable turn speed for ${t.perCat.filter(p=>p.belowSpeed).map(p=>"CAT "+p.cat+" ("+p.minAllow.toFixed(2)+" kt)").join(", ")}`).join(" · ")} — minimum = intermediate MA IAS × ${crit("sidMassF")}.</p>`;})()}`:""}
         ${c&&c.turns[0]&&c.turns[0].beforeMin?`
         <p class="note" style="color:#B91C1C;font-weight:700;margin:6px 0 0">⚠ Turn 1 is ${c.turns[0].shortBy.toFixed(2)} m BEFORE the minimum
           first-turn distance — entered ${c.turns[0].dist.toFixed(2)} m vs minimum ${c.minDistM.toFixed(2)} m
           (climb to TNA ${minc&&minc.tna!=null?minc.tna.toFixed(2)+" ft":""} at ${crit("sidPdg")}%).</p>`:""}
         <button class="ghost sidp-addturn" data-si="${si}" style="padding:5px 14px;margin-top:8px">+ Add a turn</button>
-        <p class="note" style="margin:8px 0 0">Restrictions: <b>≥</b> at or above (the climb may exceed it — flagged if the gradient cannot reach it) ·
+        <p class="note" style="margin:8px 0 0">Restrictions: <b>≥</b> at or above (the climb may exceed it; where the design gradient cannot reach it, the restriction GOVERNS the turn and the required gradient is shown) ·
           <b>≤</b> at or below · <b>=</b> at. A SID cannot descend, so a later ≤/= constraint also ceilings every earlier turn.
           Computed altitude climbs at the SID gradient over each segment (m → ft ÷ 0.3048); later turns climb on from the ACTUAL (capped) altitude.
           Turn speed defaults to the final MA IAS × ${crit("sidMassF")} per category (Table I-4-1-2 increased for departure mass); a per-turn limit reduces it but never below the intermediate MA IAS × ${crit("sidMassF")}. C = ${crit("sidCSec")} s at TAS(IAS, actual altitude, ISA+${crit("isaDev")}) + ${crit("sidWind")} kt wind.
