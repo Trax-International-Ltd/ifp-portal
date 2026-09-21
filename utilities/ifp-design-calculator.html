@@ -385,6 +385,17 @@ const CRIT_DEFS=[
  {k:"sidCSec", g:"SIDs",               label:"Value C duration (s)",           def:6,   note:"Seconds of flight in the C calculation."},
  {k:"sidWind", g:"SIDs",               label:"Wind (kt)",                       def:30,  note:"Added to TAS in the value C calculation."},
  {k:"sidMassF",g:"SIDs",               label:"Departure speed factor",          def:1.1, note:"PANS-OPS: MA speeds increased by 10% for departure mass — applied to both the default turn speed and the minimum."},
+ {k:"poBand1", g:"SID turns — AOB & speed", label:"PANS-OPS band 1 top (ft AMSL)", def:1000, note:"Nominal track only: 15° AOB up to here."},
+ {k:"poBand2", g:"SID turns — AOB & speed", label:"PANS-OPS band 2 top (ft AMSL)", def:3000, note:"20° AOB between the bands; 25° above."},
+ {k:"poAob1",  g:"SID turns — AOB & speed", label:"PANS-OPS AOB — band 1 (°)",         def:15,  note:""},
+ {k:"poAob2",  g:"SID turns — AOB & speed", label:"PANS-OPS AOB — band 2 (°)",         def:20,  note:""},
+ {k:"poAob3",  g:"SID turns — AOB & speed", label:"PANS-OPS AOB — above band 2 (°)",   def:25,  note:""},
+ {k:"cpAobBand",g:"SID turns — AOB & speed",label:"CAP778 AOB band (ft AMSL)",     def:2000, note:"20° AOB below this height, 25° thereafter."},
+ {k:"cpAob1",  g:"SID turns — AOB & speed", label:"CAP778 AOB — below band (°)",       def:20,  note:""},
+ {k:"cpAob2",  g:"SID turns — AOB & speed", label:"CAP778 AOB — at/above band (°)",    def:25,  note:""},
+ {k:"cpSpdBand",g:"SID turns — AOB & speed",label:"CAP778 speed band (ft AMSL)",   def:3000, note:"210 kt IAS up to this height, 250 kt thereafter — unless a per-turn limit restricts it."},
+ {k:"cpSpd1",  g:"SID turns — AOB & speed", label:"CAP778 IAS — up to band (kt)",      def:210, note:""},
+ {k:"cpSpd2",  g:"SID turns — AOB & speed", label:"CAP778 IAS — above band (kt)",      def:250, note:""},
 ];
 function crit(k){
   const d=CRIT_DEFS.find(x=>x.k===k);
@@ -1749,6 +1760,19 @@ function sidCalc(r,sid,minDistM){
        an entered per-turn limit reduces it, but must not fall below
        intermediate MA IAS × the same factor — flagged where it does. */
     const limit=safeNum(t.limit??t.ias);   // older saves stored a single ias — read as the limit
+    /* AOB & assessment speed, banded on the turn's ACTUAL ALTITUDE (AMSL):
+       PANS-OPS (nominal track only): 15° to 1000 ft · 20° to 3000 ft · 25° above,
+       speed per the tabled category values (the perCat block below).
+       CAP778: 20° AOB below 2000 ft, 25° thereafter; 210 kt IAS to 3000 ft,
+       250 kt thereafter — unless a lower per-turn limit restricts it. */
+    let poAob=null,cpAob=null,cpSpd=null,cpLimited=false;
+    if(actual!=null){
+      const eps=1e-6;   // float guard at exact band edges
+      poAob=actual<=crit("poBand1")+eps?crit("poAob1"):actual<=crit("poBand2")+eps?crit("poAob2"):crit("poAob3");
+      cpAob=actual<crit("cpAobBand")-eps?crit("cpAob1"):crit("cpAob2");
+      cpSpd=actual<=crit("cpSpdBand")+eps?crit("cpSpd1"):crit("cpSpd2");
+      if(limit!=null&&limit<cpSpd){cpSpd=limit;cpLimited=true;}
+    }
     const perCat=(actual!=null)?sidCats.map(cat=>{
       const f=crit("sidMassF");
       const def=crit("ias_"+cat)*f, minAllow=crit("iasInt_"+cat)*f;
@@ -1761,7 +1785,8 @@ function sidCalc(r,sid,minDistM){
       return {cat,def,minAllow,ias,limited,belowSpeed,tas,cM:tas/3600*crit("sidCSec")*NM_M};
     }):[];
     return {n:i+1,name:t.name||"",dist,cum:dist!=null?cum:null,limit,restrict,rtype:ty,
-            computed,actual,capped,capBy,belowMin,beforeMin,shortBy,perCat};
+            computed,actual,capped,capBy,belowMin,beforeMin,shortBy,
+            poAob,cpAob,cpSpd,cpLimited,perCat};
   });
   return {g,origin,turns,minDistM:minDistM??null,cats:sidCats};
 }
@@ -1842,14 +1867,14 @@ function wireSidCommon(key){
    Results render only after Calculate — the constraint logic reads the whole
    SID (later at-or-below/at restrictions ceiling earlier turns), so partial
    input would show misleading caps. A hash of the inputs marks staleness. */
-function sidHash(r,sid){ return JSON.stringify([sid.pdg,sid.turns,sid.cats??r.cfg.cats??null,r.sid.elevM,(r.cfg.sidCommon||{}).tna??"",S.criteria||{}]); }
+function sidHash(r,sid,aeroOp){ return JSON.stringify([sid.pdg,sid.turns,sid.cats??r.cfg.cats??null,r.sid.elevM,(r.cfg.sidCommon||{}).tna??"",aeroOp??null,S.criteria||{}]); }
 const SID_RTYPES=[["none","—"],["ge","≥ at or above"],["le","≤ at or below"],["eq","= at"]];
 function viewSidPage(r,d,procId){
   const pcfg=(r.cfg.proc&&r.cfg.proc[procId])||{};
   const sids=pcfg.sids||[];
   const typeLabel=procId==="SIDC"?"Conventional":"PBN";
   const sidCards=sids.map((sid,si)=>{
-    const calced=sid.calcHash===sidHash(r,sid);
+    const calced=sid.calcHash===sidHash(r,sid,d.operative);
     const minc=sidCommonCalc(r,d);
     const c=calced?sidCalc(r,sid,minc&&!minc.need?minc.distM:null):null;
     const head=`<div class="hd">
@@ -1878,6 +1903,8 @@ function viewSidPage(r,d,procId){
         ${res(ti,"computed",t=>`<td class="num auto">${t.computed!=null?t.computed.toFixed(2):"—"}</td>`)}
         ${res(ti,"actual",t=>`<td class="num auto ${t.capped?"gov":""} ${t.belowMin?"chk-bad":""}">${
             t.actual!=null?`<b>${t.actual.toFixed(2)}</b>${t.capped?(t.capBy==="later"?" (capped by later constraint)":" (capped)"):""}${t.belowMin?" — gradient cannot meet the ≥ restriction":""}`:"—"}</td>`)}
+        ${res(ti,"po",t=>`<td class="num auto">${t.poAob!=null?`<b>${t.poAob}°</b><div class="mono" style="font-size:10.5px">${t.perCat.map(p=>p.cat+" "+p.ias.toFixed(2)).join(" · ")||"tabled"}</div>`:"—"}</td>`)}
+        ${res(ti,"cp",t=>`<td class="num auto">${t.cpAob!=null?`<b>${t.cpAob}°</b><div class="mono" style="font-size:10.5px">${t.cpSpd.toFixed(2)} kt${t.cpLimited?" (limited)":""}</div>`:"—"}</td>`)}
         <td class="t">${(sid.turns||[]).length>1?`<a href="#" class="sidp-delturn" data-si="${si}" data-ti="${ti}">remove</a>`:""}</td>
       </tr>`;}).join("");
     return `<div class="card full">${head}
@@ -1893,13 +1920,14 @@ function viewSidPage(r,d,procId){
           <div class="row"><div class="k">Climb gradient (%)</div>
             <div class="v in"><input type="number" step="0.1" class="sidp-pdg" data-si="${si}" value="${esc(sid.pdg??"")}" placeholder="${crit('sidPdg')}"></div>
             <div class="c">The specified climb rate for this SID — blank uses the standard ${crit("sidPdg")}%.</div></div>
-          <div class="row"><div class="k">Climb origin (ft)</div>
-            <div class="v auto">${r.sid.elevM!=null?((r.sid.elevM+crit("sidDerH"))/FT_M).toFixed(2):"—"}</div>
-            <div class="c">Surveyed DER ${r.sid.elevM!=null?f3(r.sid.elevM):"—"} m + ${crit("sidDerH")} m, published as ft (÷ 0.3048) — the turn altitudes are ft.</div></div>
+          <div class="row"><div class="k">Climb origin (m)</div>
+            <div class="v auto">${r.sid.elevM!=null?(r.sid.elevM+crit("sidDerH")).toFixed(2):"—"}</div>
+            <div class="c">Surveyed DER ${r.sid.elevM!=null?f3(r.sid.elevM):"—"} m + ${crit("sidDerH")} m — ${r.sid.elevM!=null?((r.sid.elevM+crit("sidDerH"))/FT_M).toFixed(2):"—"} ft published (÷ 0.3048), since the turn altitudes are ft.</div></div>
         </div>
         <div class="tbl-wrap auto-h"><table>
           <thead><tr><th>Turn</th><th>Dist from previous (m)</th><th>Cum from DER (m)</th><th>Speed limit (kt IAS max)</th>
-            <th>Alt restriction (ft)</th><th>Computed alt (ft)</th><th>Actual alt (ft)</th><th></th></tr></thead>
+            <th>Alt restriction (ft)</th><th>Computed alt (ft)</th><th>Actual alt (ft)</th>
+            <th>PANS-OPS — AOB · IAS</th><th>CAP778 — AOB · IAS</th><th></th></tr></thead>
           <tbody>${rows}</tbody></table></div>
         ${c&&c.cats&&c.cats.length?`
         <div class="cfg-k" style="margin-top:12px">Speeds & value C — per category</div>
@@ -1925,7 +1953,9 @@ function viewSidPage(r,d,procId){
         <p class="note" style="margin:8px 0 0">Restrictions: <b>≥</b> at or above (the climb may exceed it — flagged if the gradient cannot reach it) ·
           <b>≤</b> at or below · <b>=</b> at. A SID cannot descend, so a later ≤/= constraint also ceilings every earlier turn.
           Computed altitude climbs at the SID gradient over each segment (m → ft ÷ 0.3048); later turns climb on from the ACTUAL (capped) altitude.
-          Turn speed defaults to the final MA IAS × ${crit("sidMassF")} per category (Table I-4-1-2 increased for departure mass); a per-turn limit reduces it but never below the intermediate MA IAS × ${crit("sidMassF")}. C = ${crit("sidCSec")} s at TAS(IAS, actual altitude, ISA+${crit("isaDev")}) + ${crit("sidWind")} kt wind.</p>
+          Turn speed defaults to the final MA IAS × ${crit("sidMassF")} per category (Table I-4-1-2 increased for departure mass); a per-turn limit reduces it but never below the intermediate MA IAS × ${crit("sidMassF")}. C = ${crit("sidCSec")} s at TAS(IAS, actual altitude, ISA+${crit("isaDev")}) + ${crit("sidWind")} kt wind.
+          AOB &amp; speed bands use the turn's ACTUAL altitude (AMSL): <b>PANS-OPS</b> (nominal track only) ${crit("poAob1")}° to ${crit("poBand1")} ft · ${crit("poAob2")}° to ${crit("poBand2")} ft · ${crit("poAob3")}° above, speed per the tabled category values;
+          <b>CAP778</b> ${crit("cpAob1")}° below ${crit("cpAobBand")} ft, ${crit("cpAob2")}° thereafter · ${crit("cpSpd1")} kt to ${crit("cpSpdBand")} ft, ${crit("cpSpd2")} kt thereafter, unless restricted.</p>
       </div></div>`;}).join("");
   return `${viewSidCommon(r,d)}
   <div class="hub" style="margin-top:18px">
@@ -1954,7 +1984,7 @@ function wireSidPage(key,procId){
   const calc=document.getElementById("sidp-calc");
   if(calc) calc.addEventListener("click",()=>{
     const d2=compute(); const r2=d2.runways.find(x=>x.key===key);
-    getSids().forEach(s=>{s.calcHash=sidHash(r2,s);});
+    getSids().forEach(s=>{s.calcHash=sidHash(r2,s,d2.operative);});
     render();});
   document.querySelectorAll(".sidp-del").forEach(a=>a.addEventListener("click",e=>{
     e.preventDefault(); getSids().splice(+e.target.dataset.si,1); render();}));
