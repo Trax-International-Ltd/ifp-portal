@@ -350,13 +350,55 @@ function segsFor(procId){
   if(!APPROACH_IDS.includes(procId)) return [["config","Configuration"]];
   return procId==="ILS" ? SEGMENTS.filter(([s])=>s!=="sdf") : SEGMENTS;
 }
-const RDH_STD = 50;             // ft — standard reference datum height
-const VPA_MIN=2.5, VPA_OPT=3.0, VPA_MAX=3.5;   // degrees
+/* ================== DESIGN CRITERIA (editable in-tool) ==================
+   Every value here is a criteria default, NOT hardcoded into the calculations:
+   the Design criteria page (dashboard) lets the user override any of them, and
+   overrides persist in the project. crit(key) resolves override-or-default.  */
+const CRIT_DEFS=[
+ {k:"isaDev",  g:"Atmosphere",        label:"ISA deviation (°C)",              def:15,  note:"VAR in the PANS-OPS TAS formula — missed approach TAS and SID value C."},
+ {k:"rdhStd",  g:"ILS final approach", label:"Standard RDH (ft)",              def:50,  note:"h in the App C FAP formula and the RDH comparison."},
+ {k:"vpaMin",  g:"ILS final approach", label:"Glide path — minimum (°)",       def:2.5, note:""},
+ {k:"vpaOpt",  g:"ILS final approach", label:"Glide path — optimum (°)",       def:3.0, note:""},
+ {k:"vpaMax",  g:"ILS final approach", label:"Glide path — maximum (°)",       def:3.5, note:""},
+ {k:"macgBase",g:"Missed approach",    label:"Base MACG (%) — always designed",def:2.5, note:""},
+ {k:"socOffset",g:"Missed approach",   label:"SOC offset (m)",                 def:-900,note:"The −900 m term in the SOC-from-THR construction."},
+ {k:"maWind",  g:"Missed approach",   label:"Tail wind (kt)",                  def:30,  note:"Added to the MA TAS — a per-procedure override lives on the Missed approach tab."},
+ {k:"hl_C1_A", g:"Missed approach",    label:"Height loss CAT I — A (m)",      def:40,  note:"Doc 8168 Table I-4-5-2, pressure altimeter."},
+ {k:"hl_C1_B", g:"Missed approach",    label:"Height loss CAT I — B (m)",      def:43,  note:""},
+ {k:"hl_C1_C", g:"Missed approach",    label:"Height loss CAT I — C (m)",      def:46,  note:""},
+ {k:"hl_C1_D", g:"Missed approach",    label:"Height loss CAT I — D (m)",      def:49,  note:""},
+ {k:"hl_C2_A", g:"Missed approach",    label:"Height loss CAT II — A (m)",     def:13,  note:"Doc 8168 Table I-4-5-2, radio altimeter."},
+ {k:"hl_C2_B", g:"Missed approach",    label:"Height loss CAT II — B (m)",     def:18,  note:""},
+ {k:"hl_C2_C", g:"Missed approach",    label:"Height loss CAT II — C (m)",     def:22,  note:""},
+ {k:"hl_C2_D", g:"Missed approach",    label:"Height loss CAT II — D (m)",     def:26,  note:""},
+ {k:"ias_A",   g:"Missed approach",    label:"Final MA IAS — CAT A (kt)",      def:110, note:"Table I-4-1-2; per-procedure override on the MA tab. ×1.1 = the SID departure turn default."},
+ {k:"ias_B",   g:"Missed approach",    label:"Final MA IAS — CAT B (kt)",      def:150, note:""},
+ {k:"ias_C",   g:"Missed approach",    label:"Final MA IAS — CAT C (kt)",      def:240, note:""},
+ {k:"ias_D",   g:"Missed approach",    label:"Final MA IAS — CAT D (kt)",      def:265, note:""},
+ {k:"iasInt_A",g:"Missed approach",    label:"Intermediate MA IAS — CAT A (kt)",def:100, note:"Table I-4-1-2; ×1.1 = the minimum allowable SID turn speed."},
+ {k:"iasInt_B",g:"Missed approach",    label:"Intermediate MA IAS — CAT B (kt)",def:130, note:""},
+ {k:"iasInt_C",g:"Missed approach",    label:"Intermediate MA IAS — CAT C (kt)",def:160, note:""},
+ {k:"iasInt_D",g:"Missed approach",    label:"Intermediate MA IAS — CAT D (kt)",def:185, note:""},
+ {k:"sidPdg",  g:"SIDs",               label:"Standard PDG (%)",               def:3.3, note:"Used when a SID's gradient is left blank, and for the minimum first-turn distance."},
+ {k:"sidDerH", g:"SIDs",               label:"Climb origin above DER (m)",     def:5,   note:""},
+ {k:"tnaAbove",g:"SIDs",               label:"TNA above aerodrome elevation (ft)",def:500,note:"Default minimum turn altitude increment."},
+ {k:"sidCSec", g:"SIDs",               label:"Value C duration (s)",           def:6,   note:"Seconds of flight in the C calculation."},
+ {k:"sidWind", g:"SIDs",               label:"Wind (kt)",                       def:30,  note:"Added to TAS in the value C calculation."},
+ {k:"sidMassF",g:"SIDs",               label:"Departure speed factor",          def:1.1, note:"PANS-OPS: MA speeds increased by 10% for departure mass — applied to both the default turn speed and the minimum."},
+];
+function crit(k){
+  const d=CRIT_DEFS.find(x=>x.k===k);
+  const v=safeNum((S.criteria||{})[k]);
+  return v??(d?d.def:null);
+}
+function critCustomCount(){ return CRIT_DEFS.filter(x=>safeNum((S.criteria||{})[x.k])!=null&&safeNum(S.criteria[x.k])!==x.def).length; }
 /* PANS-OPS Pt II S1 Ch1 App C constants (non-SI form of the formula) */
 const OAS_CURV_K=0.8833;        // H = h + 6076·D·tanθ + 0.8833·D²
 const OAS_FTNM=6076;            // formula literal — NOT the Annex 5 conversion
 const RDH_ADJ_K=1.514e-4;       // ΔD constant
 const FT_M=0.3048, NM_M=1852;   // ICAO Annex 5 — exact
+/* ---- SIDs: common departure datum ---- */
+
 const ILS_DEFAULTS={rdhCharted:"",rdhCal:"",calRef:"",rdhSource:"Charted",vpa:"",faf:""};
 
 /* ILS final approach: FAF track length and FAP distance (earth curvature).
@@ -370,18 +412,18 @@ function ilsFinalCalc(thrFt,rdhOp,vpaDeg,fafAlt){
   const fafFt=hgt*cot, fafM=fafFt*FT_M, fafNM=fafM/NM_M;
   const fafChart=Math.ceil(fafNM*10-1e-9)/10;   // rounded UP to 0.1 NM (App C para 3 says nearest)
   // E · FAP — H = h + 6076·D·tanθ + 0.8833·D², solved for D with h = 50 ft
-  const x=OAS_CURV_K, y=OAS_FTNM*t, z=RDH_STD-(fafAlt-thrFt);
+  const x=OAS_CURV_K, y=OAS_FTNM*t, z=crit("rdhStd")-(fafAlt-thrFt);
   const disc=y*y-4*x*z;
   if(disc<0) return null;
   const Dnm=(-y+Math.sqrt(disc))/(2*x), Dft=Dnm*OAS_FTNM;
-  const dD=RDH_ADJ_K*OAS_FTNM*(RDH_STD-rdhOp)*cot;  // RDH adjustment (ft)
+  const dD=RDH_ADJ_K*OAS_FTNM*(crit("rdhStd")-rdhOp)*cot;  // RDH adjustment (ft)
   const fapFt=Dft+dD, fapM=fapFt*FT_M, fapNM=fapM/NM_M;   // final NM via Annex 5, not the App C literal
   return {tanTh:t,hgt,fafFt,fafM,fafNM,fafChart,x,y,z,Dnm,Dft,dD,fapFt,fapM,fapNM};
 }
 
 /* ============ ILS missed approach — Turn at Altitude (TNA) ============ */
 /* Ported from the ILS_MA worksheet, formula for formula:
-   SOC alt (ft)      = OCA − HL(m) × 3.2808            (HL always in metres)
+   SOC alt (ft)      = OCA − HL(m) ÷ 0.3048            (HL always in metres; Annex 5 exact)
    SOC from THR (m)  = −900 + (((OCA − THR elev)×0.3048) − HL) / tan(VPA)
    dist SOC→turn (m) = (turn alt − SOC alt) × 0.3048 / MACG
    dist THR→turn (m) = dist + |SOC| when SOC is before THR, else dist − SOC
@@ -390,23 +432,18 @@ function ilsFinalCalc(thrFt,rdhOp,vpaDeg,fafAlt){
    The OCA is entered PER GRADIENT — a steeper MACG changes the OAS, so each
    designed gradient has its own OCA set.                                        */
 const K_TAS=171233, T0_K=288, LAPSE=1.98e-3, TAS_EXP=2.628;
-const MA_M_FT=3.2808;                       // the worksheet's ft-per-metre literal
-const MACG_BASE=2.5, MACG_OPTS=["3.0","3.5","4.0","4.5","5.0"];
-/* PANS-OPS Table I-4-1-1 final missed-approach IAS (kt) — the defaults.
-   Override per category in the tab (e.g. CAT D limited to 250). */
-const MA_FINAL_IAS={A:110,B:160,C:240,D:265};
-const HL_DEFAULT={C1:{A:40,B:43,C:46,D:49},            // metres — pressure altimeter
-                  C2:{A:13,B:18,C:22,D:26}};           // metres — radio altimeter (CAT II)
+const M_FT=1/FT_M;                          // metres → feet, Annex 5 exact (÷ 0.3048)
+const MACG_OPTS=["3.0","3.5","4.0","4.5","5.0"];   // additional design gradients
 const DEFAULT_MA={type:"TNA",
   designs:{C1:{on:true,oca:{},hl:{}},C2:{on:false,oca:{},hl:{}}},
-  macgs:{},turns:[{alt:""}],temp:"15",tailwind:"30",speeds:{}};
+  macgs:{},turns:[{alt:""}],temp:"",tailwind:"",speeds:{}};
 
-function maGrads(ma){ return [MACG_BASE,...MACG_OPTS.filter(g=>ma.macgs[g]).map(Number)].sort((a,b)=>a-b); }
+function maGrads(ma){ return [crit("macgBase"),...MACG_OPTS.filter(g=>ma.macgs[g]).map(Number)].sort((a,b)=>a-b); }
 function gradKey(g){ return g.toFixed(1).replace(".","_"); }
 /* older saves held one OCA set (implicitly 2.5%) — lift it under the 2.5% key */
 function migrateOca(dz){
   if(dz&&dz.oca&&["A","B","C","D"].some(c=>typeof dz.oca[c]==="string"||typeof dz.oca[c]==="number")){
-    dz.oca={[gradKey(MACG_BASE)]:dz.oca};
+    dz.oca={[gradKey(crit("macgBase"))]:dz.oca};
   }
 }
 function maTas(iasKt,altFt,temp,tailwind){
@@ -421,16 +458,16 @@ function tnaCalc(thrFt,vpa,ma,designKey,cats){
   migrateOca(dz);
   const grads=maGrads(ma);
   const t1=safeNum(ma.turns[0]&&ma.turns[0].alt);
-  const temp=safeNum(ma.temp)??15, tw=safeNum(ma.tailwind)??30;
+  const temp=safeNum(ma.temp)??crit("isaDev"), tw=safeNum(ma.tailwind)??crit("maWind");
   const tanV=Math.tan(vpa*Math.PI/180);
   const byGrad=grads.map(g=>{
     const gk=gradKey(g);
     const perCat=cats.map(cat=>{
       const oca=safeNum(dz.oca?.[gk]?.[cat]);
-      const hl=HL_DEFAULT[designKey][cat];       // fixed Doc 8168 values — never edited
+      const hl=crit("hl_"+designKey+"_"+cat);    // Doc 8168 values via criteria — never edited per-procedure
       if(oca==null||hl==null) return {cat,missing:true};
-      const socAlt=oca-hl*MA_M_FT;
-      const socThr=-900+(((oca-thrFt)*FT_M)-hl)/tanV;
+      const socAlt=oca-hl*M_FT;
+      const socThr=crit("socOffset")+(((oca-thrFt)*FT_M)-hl)/tanV;
       let dSoc=null,dThr=null;
       if(t1!=null&&t1>socAlt){
         dSoc=(t1-socAlt)*FT_M/(g/100);
@@ -441,18 +478,18 @@ function tnaCalc(thrFt,vpa,ma,designKey,cats){
     return {g,gk,perCat};
   });
   const catParams=cats.map(cat=>{
-    const ias=safeNum(ma.speeds[cat])??MA_FINAL_IAS[cat];
+    const ias=safeNum(ma.speeds[cat])??crit("ias_"+cat);
     const tas=t1!=null?maTas(ias,t1,temp,tw):null;
     const c3=tas!=null?(tas/3600)*3*NM_M:null;
     return {cat,ias,tas,c3,cTot:c3!=null?2*c3:null};
   });
-  const hlByCat=cats.map(cat=>HL_DEFAULT[designKey][cat]);
+  const hlByCat=cats.map(cat=>crit("hl_"+designKey+"_"+cat));
   return {grads,byGrad,catParams,hlByCat,t1,temp,tw};
 }
 /* Turns after the first: category-independent climb distances, plus TAS & c at each */
 function tnaContinuation(ma,cats){
   const grads=maGrads(ma);
-  const temp=safeNum(ma.temp)??15, tw=safeNum(ma.tailwind)??30;
+  const temp=safeNum(ma.temp)??crit("isaDev"), tw=safeNum(ma.tailwind)??crit("maWind");
   const alts=ma.turns.map(t=>safeNum(t.alt));
   const segs=[];
   for(let i=1;i<alts.length;i++){
@@ -460,7 +497,7 @@ function tnaContinuation(ma,cats){
     segs.push({n:i+1,from:alts[i-1],to:alts[i],ok,
       perGrad:grads.map(g=>({g,d:ok?(alts[i]-alts[i-1])*FT_M/(g/100):null})),
       params:cats.map(cat=>{
-        const ias=safeNum(ma.speeds[cat])??MA_FINAL_IAS[cat];
+        const ias=safeNum(ma.speeds[cat])??crit("ias_"+cat);
         const tas=alts[i]!=null?maTas(ias,alts[i],temp,tw):null;
         const c3=tas!=null?(tas/3600)*3*NM_M:null;
         return {cat,ias,tas,c3,cTot:c3!=null?2*c3:null};
@@ -501,6 +538,7 @@ const S = {
   codeOverrides:{},             // code -> "Y"/"N"
   rwyCfg:{},                    // runway -> {cats:{A..D}, procs:{ILS,LOC,...}, ils:{rdh...}} — preserved across reloads
   manualLlz:{},                 // runway -> {ident,e,n}
+  criteria:{},                  // design-criteria overrides (blank = defaults)
   view:{name:"hub", rwy:null},
 };
 
@@ -622,8 +660,8 @@ function compute(){
     diff=maxP.inclFt-effective;
     if(Math.abs(diff)<=S.tolMatch){status="MATCH";statusClass="ok";}
     else{
-      status=`DIFFERS: computed value ${diff>0?"HIGHER":"LOWER"} by ${Math.abs(diff).toFixed(3)} ft `+
-             `(${(Math.abs(diff)*0.3048).toFixed(3)} m) via ${maxP.code} ${maxP.assoc||"—"}`;
+      status=`DIFFERS: computed value ${diff>0?"HIGHER":"LOWER"} by ${Math.abs(diff).toFixed(2)} ft `+
+             `(${(Math.abs(diff)*0.3048).toFixed(2)} m) via ${maxP.code} ${maxP.assoc||"—"}`;
       statusClass="diff";
     }
   }else if(!maxP){status="no included points — check the survey codes";}
@@ -670,9 +708,9 @@ function compute(){
     const vpa=safeNum(ic.vpa);
     let vpaCheck="";
     if(vpa!=null){
-      if(vpa<VPA_MIN) vpaCheck=`below minimum ${VPA_MIN}°`;
-      else if(vpa>VPA_MAX) vpaCheck=`above maximum ${VPA_MAX}°`;
-      else if(Math.abs(vpa-VPA_OPT)<1e-9) vpaCheck="optimum";
+      if(vpa<crit("vpaMin")) vpaCheck=`below minimum ${crit("vpaMin")}°`;
+      else if(vpa>crit("vpaMax")) vpaCheck=`above maximum ${crit("vpaMax")}°`;
+      else if(Math.abs(vpa-crit("vpaOpt"))<1e-9) vpaCheck="optimum";
       else vpaCheck="ok";
     }
     const faf=safeNum(ic.faf);
@@ -680,10 +718,26 @@ function compute(){
     let rMax=null;
     for(const q of pts) if(q.inclFt!=null&&assocMatches(q.assoc,key))
       if(rMax===null||q.inclFt>rMax.inclFt) rMax=q;
+    /* SID datum: position = TODA_END; elevation = the HIGHER of TODA_END / TORA_END.
+       Manual fallback lives in cfg.sidCommon when the survey lacks the records. */
+    const toda=pts.find(q=>codeInfo(q.code).canon==="TODA_END"&&assocMatches(q.assoc,key))||null;
+    const tora=pts.find(q=>codeInfo(q.code).canon==="TORA_END"&&assocMatches(q.assoc,key))||null;
+    const sc=cfg.sidCommon||{};
+    let sidElev=null,sidElevSrc="—";
+    const te=toda?toda.elevFt:null, re=tora?tora.elevFt:null;
+    if(te!=null&&re!=null){
+      sidElev=Math.max(te,re);
+      sidElevSrc=te===re?"TODA_END = TORA_END":(te>re?"TODA_END (higher)":"TORA_END (higher)");
+    }else if(te!=null){sidElev=te;sidElevSrc="TODA_END (no TORA_END in survey)";}
+    else if(re!=null){sidElev=re;sidElevSrc="TORA_END (no TODA_END in survey)";}
+    else if(safeNum(sc.manElev)!=null){sidElev=safeNum(sc.manElev);sidElevSrc="manual entry";}
+    const sid={toda,tora,
+      e:toda?toda.e:safeNum(sc.manE), n:toda?toda.n:safeNum(sc.manN),
+      elevFt:sidElev, elevSrc:sidElevSrc, fromSurvey:!!(toda||tora)};
     runways.push({key,thr:p,llzFromSurvey:!!llz,llzId,llzE,llzN,dist,ils,llzCheck,
                   cfg,ic,procsOn,catsOn,ilsOn,locOn,needLlz,
                   rdhCharted,rdhCal,rdhSource,rdhOperative,rdhDiff,rdhCheck,vpa,vpaCheck,faf,finalCalc,
-                  rwyMax:rMax,ref:`${S.icao} rec ${p.id} | surveyed ${p.sdate}`});
+                  sid,rwyMax:rMax,ref:`${S.icao} rec ${p.id} | surveyed ${p.sdate}`});
   }
   return {pts,aepFile,manual,effective,maxP,included,total:pts.length,
           unk,diff,status,statusClass,operative,operativeSrc,runways};
@@ -693,6 +747,20 @@ function compute(){
 function buildChecks(d){
   const list=[];
   if(!d) return list;
+  // SIDs whose first turn falls before the minimum first-turn distance
+  for(const r of d.runways){
+    const minc=sidCommonCalc(r,d);
+    if(!minc||minc.need) continue;
+    for(const pid of ["SIDC","SIDPBN"]){
+      const sids=(r.cfg.proc&&r.cfg.proc[pid]&&r.cfg.proc[pid].sids)||[];
+      sids.forEach(s=>{
+        const t1=safeNum(s.turns&&s.turns[0]&&s.turns[0].dist);
+        if(t1!=null&&t1<minc.distM-1e-9)
+          list.push({sev:"warn",msg:`SID ${s.name||"(unnamed)"} — ${r.key} ${pid==="SIDC"?"Conventional":"PBN"}: first turn ${t1.toFixed(2)} m is ${(minc.distM-t1).toFixed(2)} m BEFORE the minimum first-turn distance ${minc.distM.toFixed(2)} m`,
+                     go:`proc:${r.key}:${pid}`});
+      });
+    }
+  }
   // aerodrome elevation
   if(d.statusClass==="ok")
     list.push({sev:"ok",msg:`Aerodrome elevation: MATCH — surveyor ${f3(d.effective)} ft vs computed ${f3(d.maxP.inclFt)} ft (tolerance ${S.tolMatch} ft)`,go:"elev"});
@@ -726,7 +794,7 @@ function buildChecks(d){
 
 /* ============================ formatting ============================= */
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const f3=v=>v==null?"":v.toFixed(3);
+const f3=v=>v==null?"":v.toFixed(2);
 const f2=v=>v==null?"":v.toFixed(2);
 
 /* ============================ views ================================== */
@@ -737,7 +805,9 @@ function go(view,rwy,proc,seg){
 }
 function goCheck(target){
   if(!target) return;
-  if(target.startsWith("rwy:")) go("rwy",target.slice(4)); else go(target);
+  if(target.startsWith("proc:")){const [,rwy,pid]=target.split(":");go("proc",rwy,pid,"config");}
+  else if(target.startsWith("rwy:")) go("rwy",target.slice(4));
+  else go(target);
 }
 
 function render(){
@@ -751,6 +821,7 @@ function render(){
     case "elev":   m.innerHTML=viewElev(d);   wireElev(); break;
     case "points": m.innerHTML=viewPoints(d); wirePoints(); break;
     case "codes":  m.innerHTML=viewCodes(d);  wireCodes(); break;
+    case "crit":   m.innerHTML=viewCrit();     wireCrit(); break;
     case "rwy":    m.innerHTML=viewRunway(d,S.view.rwy); wireRunway(); break;
     case "proc":   m.innerHTML=viewProc(d,S.view.rwy,S.view.proc,S.view.seg); wireProc(); break;
     default:       m.innerHTML=viewHub(d);    wireHub(); break;
@@ -762,7 +833,7 @@ function renderNav(d){
   if(!d){ nav.innerHTML=""; return; }
   const items=[["hub","Dashboard"]];
   const procLabel=id=>PROC_TYPES.find(([p])=>p===id)?.[1]||id;
-  const pageNames={elev:"Aerodrome elevation",points:"Survey points",codes:"Survey codes"};
+  const pageNames={elev:"Aerodrome elevation",points:"Survey points",codes:"Survey codes",crit:"Design criteria"};
   let tail="";
   if(pageNames[S.view.name]) tail=`<a href="#" class="here">${pageNames[S.view.name]}</a>`;
   if(S.view.name==="rwy") tail=`<a href="#" class="here">RWY ${esc(S.view.rwy)}</a>`;
@@ -824,6 +895,51 @@ function wireImport(){
 }
 
 /* ---------- dashboard hub ---------- */
+/* ---------------- Design criteria page ---------------- */
+function viewCrit(){
+  const groups=[...new Set(CRIT_DEFS.map(x=>x.g))];
+  const body=groups.map(g=>`
+    <div class="card">
+      <div class="hd">${g}</div>
+      <div class="bd"><div class="kv compact" style="margin-bottom:0">
+        ${CRIT_DEFS.filter(x=>x.g===g).map(x=>{
+          const raw=(S.criteria||{})[x.k];
+          const ov=safeNum(raw);
+          const custom=ov!=null&&ov!==x.def;
+          return `
+        <div class="row"><div class="k">${x.label}</div>
+          <div class="v in"><input type="number" step="any" class="crit-in" data-k="${x.k}"
+            value="${raw!=null?esc(raw):""}" placeholder="${x.def}">
+            ${custom?`<div class="mono" style="color:#B45309;font-size:11px;margin-top:3px">custom — default ${x.def}</div>`:""}</div>
+          <div class="c">${x.note||`Default ${x.def}.`}</div></div>`;}).join("")}
+      </div></div>
+    </div>`).join("");
+  return `
+  <h2>Design criteria</h2>
+  <p class="note">These values drive every calculation in the tool. Leave a field blank to use the default (shown greyed in the box);
+    enter a value to override. Overrides save with the project and are marked <b>custom</b>. Changing a value marks calculated SIDs
+    stale until recalculated.</p>
+  <div style="margin-bottom:14px"><button class="ghost" id="crit-reset" style="padding:5px 14px">Reset all to defaults</button></div>
+  <div class="hub">${body}
+    <div class="card">
+      <div class="hd">Formula constants — fixed</div>
+      <div class="bd"><p class="note" style="margin:0">PANS-OPS / Annex 5 formula literals, not criteria — not editable:
+        TAS formula 171233 · T₀ 288 K · lapse 0.00198 K/ft · exponent 2.628 · App C curvature ${OAS_CURV_K} · App C ${OAS_FTNM} ft/NM ·
+        RDH adjustment ${RDH_ADJ_K} · ft↔m 0.3048 exact (Annex 5) · NM 1852 m exact.</p></div>
+    </div>
+  </div>`;
+}
+function wireCrit(){
+  document.querySelectorAll(".crit-in").forEach(inp=>inp.addEventListener("change",e=>{
+    S.criteria=S.criteria||{};
+    const v=e.target.value.trim();
+    if(v==="") delete S.criteria[e.target.dataset.k];
+    else S.criteria[e.target.dataset.k]=v;
+    render();
+  }));
+  const rst=document.getElementById("crit-reset");
+  if(rst) rst.addEventListener("click",()=>{ if(confirm("Reset every criteria value to its default?")){S.criteria={};render();} });
+}
 function viewHub(d){
   const checks=buildChecks(d);
   const fails=checks.filter(c=>c.sev==="fail").length, warns=checks.filter(c=>c.sev==="warn").length;
@@ -881,12 +997,20 @@ function viewHub(d){
           <div class="cell"><div class="k">Computed from survey</div><div class="v">${d.maxP?f3(d.maxP.inclFt)+" ft":"—"}</div></div>
           <div class="cell"><div class="k">Operative (conservative)</div><div class="v big" style="font-size:16px">${d.operative!=null?f3(d.operative)+" ft":"—"}</div></div>
           <div class="cell"><div class="k">Source</div><div class="v">${esc(d.operativeSrc)}</div></div>
-          <div class="cell"><div class="k">Difference</div><div class="v">${d.diff!=null?d.diff.toFixed(3)+" ft":"—"}</div></div>
+          <div class="cell"><div class="k">Difference</div><div class="v">${d.diff!=null?d.diff.toFixed(2)+" ft":"—"}</div></div>
         </div>
         <div class="btnrow" style="margin-bottom:0">
           <button class="ghost" data-go="elev">Full comparison & per-runway breakdown</button>
           <button class="ghost" data-go="codes">Survey codes — what counts as runway</button>
         </div>
+      </div>
+    </div>
+    <div class="card full">
+      <div class="hd">Design criteria<span class="right">${critCustomCount()?critCustomCount()+" customised":"all defaults"}</span></div>
+      <div class="bd" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <p class="note" style="margin:0;flex:1;min-width:260px">ISA deviation, wind, gradients, height losses, PANS-OPS speeds and the
+          other design values live here — edit once and every calculation follows. Nothing is hardcoded.</p>
+        <button class="act" id="open-crit" style="padding:6px 16px">Open</button>
       </div>
     </div>
     <div class="card full">
@@ -896,6 +1020,8 @@ function viewHub(d){
   </div>`;
 }
 function wireHub(){
+  const oc=document.getElementById("open-crit");
+  if(oc) oc.addEventListener("click",()=>go("crit"));
   document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>go(b.dataset.go)));
   document.querySelectorAll("[data-goc]").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();goCheck(a.dataset.goc);}));
   document.querySelectorAll(".rwy-card").forEach(b=>b.addEventListener("click",()=>go("rwy",b.dataset.rwy)));
@@ -947,7 +1073,7 @@ function viewElev(d){
       <div class="c">${d.unk.size?`Decide Y/N on the survey codes page: ${esc([...d.unk.keys()].join(", "))}`:""}</div></div>
     <div class="row"><div class="hd2">C · Comparison</div></div>
     <div class="row"><div class="k">Difference computed − surveyor (ft)</div>
-      <div class="v auto">${d.diff!=null?d.diff.toFixed(3):"—"}</div><div class="c"></div></div>
+      <div class="v auto">${d.diff!=null?d.diff.toFixed(2):"—"}</div><div class="c"></div></div>
     <div class="row"><div class="k">Match tolerance (ft)</div>
       <div class="v in"><input type="number" step="0.001" id="in-tolmatch" value="${S.tolMatch}"></div>
       <div class="c">Auto-read AEP: keep at float-noise level (0.005) — a few mm of difference is real. Manual 1 dp entry → 0.05.</div></div>
@@ -991,9 +1117,15 @@ function viewRunway(d,key){
       const bits=[];
       if(r.vpa!=null) bits.push(`GP ${r.vpa}°`);
       if(r.rdhOperative!=null) bits.push(`RDH ${f2(r.rdhOperative)} ft`);
-      if(r.finalCalc) bits.push(`FAF ${r.finalCalc.fafChart.toFixed(1)} NM · FAP ${r.finalCalc.fapNM.toFixed(3)} NM`);
+      if(r.finalCalc) bits.push(`FAF ${r.finalCalc.fafChart.toFixed(1)} NM · FAP ${r.finalCalc.fapNM.toFixed(2)} NM`);
       else if(r.faf!=null) bits.push(`FAF alt ${r.faf} ft`);
       return bits.length?bits.join(" · "):"not configured";
+    }
+    if(id==="SIDC"||id==="SIDPBN"){
+      const c=sidCommonCalc(r,d);
+      const n=((r.cfg.proc&&r.cfg.proc[id]&&r.cfg.proc[id].sids)||[]).length;
+      if(c.need||r.sid.elevFt==null) return "set the SID datum";
+      return `DER ${f2(r.sid.elevFt)} ft · TNA ${c.tna.toFixed(2)} ft · first turn ${c.distM.toFixed(2)} m · ${n} SID${n===1?"":"s"}`;
     }
     return "configuration to follow";
   };
@@ -1077,7 +1209,9 @@ function viewProc(d,key,procId,seg){
   const segLabel=segs.find(([s])=>s===seg)[1];
 
   let body="";
-  if(procId==="ILS" && seg==="missed"){
+  if(procId==="SIDC"||procId==="SIDPBN"){
+    body=viewSidPage(r,d,procId);
+  } else if(procId==="ILS" && seg==="missed"){
     body=viewIlsMA(r);
   } else if(procId==="ILS" && seg==="adv"){
     body=viewIlsAdv(r,d);
@@ -1107,8 +1241,8 @@ function viewProc(d,key,procId,seg){
             <div class="v auto"><b>${r.rdhOperative!=null?f2(r.rdhOperative):"—"}</b>${
               r.rdhCheck?` <span class="pill ${r.rdhCheck==="MATCH"?"ok":"warn"}">${r.rdhCheck==="MATCH"?"cal = charted":"cal ≠ charted by "+r.rdhDiff.toFixed(2)+" ft"}</span>`:""}</div>
             <div class="c">Falls back to whichever value exists if only one is entered.</div></div>
-          <div class="row"><div class="k">vs standard ${RDH_STD} ft</div>
-            <div class="v auto">${r.rdhOperative!=null?(r.rdhOperative-RDH_STD>=0?"+":"")+(r.rdhOperative-RDH_STD).toFixed(2):"—"}</div>
+          <div class="row"><div class="k">vs standard ${crit("rdhStd")} ft</div>
+            <div class="v auto">${r.rdhOperative!=null?(r.rdhOperative-crit("rdhStd")>=0?"+":"")+(r.rdhOperative-crit("rdhStd")).toFixed(2):"—"}</div>
             <div class="c"></div></div>
         </div></div>
       </div>
@@ -1117,7 +1251,7 @@ function viewProc(d,key,procId,seg){
         <div class="bd"><div class="kv compact" style="margin-bottom:0">
           <div class="row"><div class="k">Glide path angle (°)</div>
             <div class="v in"><input type="number" step="0.01" class="proc-in" data-f="vpa" value="${esc(ic.vpa)}"></div>
-            <div class="c">Minimum ${VPA_MIN}° · optimum ${VPA_OPT}° · maximum ${VPA_MAX}°.</div></div>
+            <div class="c">Minimum ${crit("vpaMin")}° · optimum ${crit("vpaOpt")}° · maximum ${crit("vpaMax")}°.</div></div>
           <div class="row"><div class="k">Angle check</div>
             <div class="v auto ${vpaCls}">${esc(r.vpaCheck||"—")}</div><div class="c"></div></div>
           <div class="row"><div class="k">FAF procedure altitude (ft)</div>
@@ -1159,13 +1293,13 @@ function viewProc(d,key,procId,seg){
         <div class="hd">FAF — track length from THR<span class="right">nominal descent from the RDH datum</span></div>
         <div class="bd"><div class="kv" style="margin-bottom:0">
           <div class="row"><div class="k">Height of FAF above RDH datum (ft)</div>
-            <div class="v auto">${c.hgt.toFixed(3)}</div>
+            <div class="v auto">${c.hgt.toFixed(2)}</div>
             <div class="c">FAF altitude − THR elevation − operative RDH.</div></div>
           <div class="row"><div class="k">FAF track length from THR (m)</div>
-            <div class="v auto">${c.fafM.toFixed(3)}</div>
+            <div class="v auto">${c.fafM.toFixed(2)}</div>
             <div class="c">Height above the RDH datum ÷ tan(glide path).</div></div>
           <div class="row"><div class="k">FAF track length (NM, unrounded)</div>
-            <div class="v auto">${c.fafNM.toFixed(4)}</div><div class="c"></div></div>
+            <div class="v auto">${c.fafNM.toFixed(2)}</div><div class="c"></div></div>
           <div class="row"><div class="k">FAF — rounded for chart (NM)</div>
             <div class="v auto"><b>${c.fafChart.toFixed(1)}</b></div>
             <div class="c">Rounded UP to 0.1 NM to match your worked example — NB PANS-OPS App C para 3 says distances are rounded TO the nearest 0.1 NM.</div></div>
@@ -1175,29 +1309,29 @@ function viewProc(d,key,procId,seg){
         <div class="hd">FAP — distance from THR<span class="right">H = h + ${OAS_FTNM}·D·tanθ + ${OAS_CURV_K}·D² (earth curvature)</span></div>
         <div class="bd"><div class="kv" style="margin-bottom:0">
           <div class="row"><div class="k">tan θ</div>
-            <div class="v auto">${c.tanTh.toFixed(9)}</div>
+            <div class="v auto">${c.tanTh.toFixed(6)}</div>
             <div class="c">At the actual glide path angle ${r.vpa}°.</div></div>
           <div class="row"><div class="k">x · earth curvature</div>
             <div class="v auto">${c.x}</div><div class="c">PANS-OPS Pt II S1 Ch1 App C constant.</div></div>
           <div class="row"><div class="k">y = ${OAS_FTNM} · tan θ</div>
-            <div class="v auto">${c.y.toFixed(4)}</div><div class="c"></div></div>
-          <div class="row"><div class="k">z = ${RDH_STD} − (FAF alt − THR elev)</div>
-            <div class="v auto">${c.z.toFixed(3)}</div>
-            <div class="c">h = ${RDH_STD} ft (standard RDH) in the App C formula.</div></div>
+            <div class="v auto">${c.y.toFixed(2)}</div><div class="c"></div></div>
+          <div class="row"><div class="k">z = ${crit("rdhStd")} − (FAF alt − THR elev)</div>
+            <div class="v auto">${c.z.toFixed(2)}</div>
+            <div class="c">h = ${crit("rdhStd")} ft (standard RDH) in the App C formula.</div></div>
           <div class="row"><div class="k">D (NM)</div>
-            <div class="v auto">${c.Dnm.toFixed(6)}</div>
+            <div class="v auto">${c.Dnm.toFixed(2)}</div>
             <div class="c">Positive root of x·D² + y·D + z = 0.</div></div>
           <div class="row"><div class="k">D (ft)</div>
             <div class="v auto">${c.Dft.toFixed(2)}</div><div class="c">× ${OAS_FTNM} (App C formula constant).</div></div>
           <div class="row"><div class="k">RDH adjustment ΔD (ft)</div>
-            <div class="v auto">${c.dD.toFixed(3)}</div>
-            <div class="c">${RDH_ADJ_K} × ${OAS_FTNM} × (${RDH_STD} − operative RDH) × cot θ — cot at the ACTUAL angle per App C.</div></div>
+            <div class="v auto">${c.dD.toFixed(2)}</div>
+            <div class="c">${RDH_ADJ_K} × ${OAS_FTNM} × (${crit("rdhStd")} − operative RDH) × cot θ — cot at the ACTUAL angle per App C.</div></div>
           <div class="row"><div class="k">FAP distance (ft)</div>
             <div class="v auto">${c.fapFt.toFixed(2)}</div><div class="c">D + ΔD.</div></div>
           <div class="row"><div class="k">FAP distance (m)</div>
-            <div class="v auto">${c.fapM.toFixed(3)}</div><div class="c"></div></div>
+            <div class="v auto">${c.fapM.toFixed(2)}</div><div class="c"></div></div>
           <div class="row"><div class="k">FAP distance (NM)</div>
-            <div class="v auto"><b>${c.fapNM.toFixed(4)}</b></div><div class="c"></div></div>
+            <div class="v auto"><b>${c.fapNM.toFixed(2)}</b></div><div class="c"></div></div>
         </div></div>
       </div>`;})()}
     </div>`;
@@ -1275,7 +1409,7 @@ function viewIlsMA(r){
       Enter the glide path angle on the <b>Final approach</b> tab first — the SOC position sits on the nominal glide path.</p></div></div>`;
     const th=cats.map(cat=>`<th>CAT ${cat}</th>`).join("");
     const hlRow=`<tr><td class="t">Height loss (m)</td>
-      ${cats.map(cat=>`<td class="num auto">${HL_DEFAULT[k][cat]}</td>`).join("")}
+      ${cats.map(cat=>`<td class="num auto">${crit("hl_"+k+"_"+cat)}</td>`).join("")}
       ${noteCell(k==="C1"?"Doc 8168 pressure-altimeter values — fixed.":"Doc 8168 radio-altimeter values (CAT II) — fixed.")}</tr>`;
     const gradBlocks=c.byGrad.map((bg,bi)=>{
       const missing=bg.perCat.some(pc=>pc.missing);
@@ -1286,16 +1420,16 @@ function viewIlsMA(r){
         ${noteCell(bi===0?"Per category and per gradient — a steeper MACG changes the OAS, so each gradient has its own OCA set.":"")}</tr>
       <tr><td class="t">SOC altitude (ft)</td>
         ${bg.perCat.map(pc=>`<td class="num auto ${isGov("soc",pc.cat,bg.gk,k,pc.missing?null:pc.socAlt)?"gov":""}">${pc.missing?"—":f2(pc.socAlt)}</td>`).join("")}
-        ${noteCell(bi===0?`OCA − HL × ${MA_M_FT}.`:"")}</tr>
+        ${noteCell(bi===0?"OCA − HL ÷ 0.3048 (Annex 5).":"")}</tr>
       <tr><td class="t">SOC from THR (m)</td>
         ${bg.perCat.map(pc=>`<td class="num auto ${isGov("socThr",pc.cat,bg.gk,k,pc.missing?null:pc.socThr)?"gov":""}">${pc.missing?"—":f2(pc.socThr)}</td>`).join("")}
         ${noteCell(bi===0?"−900 + (((OCA − THR)×0.3048) − HL) ÷ tan(VPA). Negative = beyond the threshold.":"")}</tr>
       <tr><td class="t">SOC → turn alt (m)</td>
-        ${bg.perCat.map(pc=>`<td class="num auto">${pc.dSoc!=null?pc.dSoc.toFixed(3):"—"}</td>`).join("")}
+        ${bg.perCat.map(pc=>`<td class="num auto">${pc.dSoc!=null?pc.dSoc.toFixed(2):"—"}</td>`).join("")}
         ${noteCell(bi===0?"(turn alt − SOC alt) × 0.3048 ÷ MACG.":"")}</tr>
       <tr><td class="t">THR → turn alt (m)</td>
         ${bg.perCat.map(pc=>
-          `<td class="num auto ${isGov("dist",pc.cat,bg.gk,k,pc.dThr)?"gov":""}">${pc.dThr!=null?`<b>${pc.dThr.toFixed(3)}</b>`:"—"}</td>`).join("")}
+          `<td class="num auto ${isGov("dist",pc.cat,bg.gk,k,pc.dThr)?"gov":""}">${pc.dThr!=null?`<b>${pc.dThr.toFixed(2)}</b>`:"—"}</td>`).join("")}
         ${noteCell(bi===0?"Orange = the single most conservative value across all categories and designs — lowest SOC altitude, earliest SOC, greatest distance. One construction protects every category.":"")}</tr>`;
     }).join("");
     return `<div class="card full">${head}
@@ -1310,17 +1444,17 @@ function viewIlsMA(r){
   const t1=safeNum(ma.turns[0]&&ma.turns[0].alt);
   const tasCard=(t1!=null&&anyCalc)?`
     <div class="card full">
-      <div class="hd">Speeds & c at the first turn (${t1} ft)<span class="right">temp ${esc(ma.temp)}° · tail wind ${esc(ma.tailwind)} kt</span></div>
+      <div class="hd">Speeds & c at the first turn (${t1} ft)<span class="right">temp ${safeNum(ma.temp)??crit("isaDev")}° · tail wind ${safeNum(ma.tailwind)??crit("maWind")} kt</span></div>
       <div class="bd"><div class="tbl-wrap auto-h"><table>
         <thead><tr><th></th>${cats.map(c2=>`<th>CAT ${c2}</th>`).join("")}<th>Notes</th></tr></thead>
         <tbody>
-          <tr><td class="t">IAS (kt) — override</td>${cats.map(cat=>`<td class="num in"><input type="number" step="1" class="cell-in ma-speedcell" data-cat="${cat}" value="${esc(ma.speeds[cat]??MA_FINAL_IAS[cat])}" style="width:70px"></td>`).join("")}
-              ${noteCell(`PANS-OPS Table I-4-1-1 defaults: A ${MA_FINAL_IAS.A} · B ${MA_FINAL_IAS.B} · C ${MA_FINAL_IAS.C} · D ${MA_FINAL_IAS.D}. Overtype to limit (e.g. CAT D restricted to 250).`)}</tr>
-          <tr><td class="t">TAS + tail wind (kt)</td>${anyCalc.catParams.map(pc=>`<td class="num auto">${pc.tas!=null?pc.tas.toFixed(3):"—"}</td>`).join("")}
+          <tr><td class="t">IAS (kt) — override</td>${cats.map(cat=>`<td class="num in"><input type="number" step="1" class="cell-in ma-speedcell" data-cat="${cat}" value="${esc(ma.speeds[cat]??crit("ias_"+cat))}" style="width:70px"></td>`).join("")}
+              ${noteCell(`PANS-OPS Table I-4-1-1 defaults: A ${crit("ias_A")} · B ${crit("ias_B")} · C ${crit("ias_C")} · D ${crit("ias_D")}. Overtype to limit (e.g. CAT D restricted to 250).`)}</tr>
+          <tr><td class="t">TAS + tail wind (kt)</td>${anyCalc.catParams.map(pc=>`<td class="num auto">${pc.tas!=null?pc.tas.toFixed(2):"—"}</td>`).join("")}
               ${noteCell("PANS-OPS TAS at the turn altitude, plus the tail wind.")}</tr>
-          <tr><td class="t">c — 3 s reaction (m)</td>${anyCalc.catParams.map(pc=>`<td class="num auto">${pc.c3!=null?pc.c3.toFixed(3):"—"}</td>`).join("")}<td></td></tr>
-          <tr><td class="t">c — 3 s transition (m)</td>${anyCalc.catParams.map(pc=>`<td class="num auto">${pc.c3!=null?pc.c3.toFixed(3):"—"}</td>`).join("")}<td></td></tr>
-          <tr><td class="t">c — total (m)</td>${anyCalc.catParams.map(pc=>`<td class="num auto"><b>${pc.cTot!=null?pc.cTot.toFixed(3):"—"}</b></td>`).join("")}<td></td></tr>
+          <tr><td class="t">c — 3 s reaction (m)</td>${anyCalc.catParams.map(pc=>`<td class="num auto">${pc.c3!=null?pc.c3.toFixed(2):"—"}</td>`).join("")}<td></td></tr>
+          <tr><td class="t">c — 3 s transition (m)</td>${anyCalc.catParams.map(pc=>`<td class="num auto">${pc.c3!=null?pc.c3.toFixed(2):"—"}</td>`).join("")}<td></td></tr>
+          <tr><td class="t">c — total (m)</td>${anyCalc.catParams.map(pc=>`<td class="num auto"><b>${pc.cTot!=null?pc.cTot.toFixed(2):"—"}</b></td>`).join("")}<td></td></tr>
         </tbody></table></div></div>
     </div>`:"";
 
@@ -1334,13 +1468,13 @@ function viewIlsMA(r){
           <thead><tr><th>Segment</th>${cont.grads.map(g=>`<th>${g.toFixed(1)}% — distance (m)</th>`).join("")}</tr></thead>
           <tbody>${cont.segs.map(s=>`
             <tr><td class="in">Turn ${s.n-1} (${s.from??"—"} ft) → Turn ${s.n} (${s.to??"—"} ft)</td>
-                ${s.perGrad.map(pg=>`<td class="num auto ${s.ok?"":"chk-bad"}">${pg.d!=null?pg.d.toFixed(3):"check alt"}</td>`).join("")}</tr>`).join("")}
+                ${s.perGrad.map(pg=>`<td class="num auto ${s.ok?"":"chk-bad"}">${pg.d!=null?pg.d.toFixed(2):"check alt"}</td>`).join("")}</tr>`).join("")}
           </tbody></table></div>
         <div class="tbl-wrap auto-h"><table>
           <thead><tr><th>At turn</th><th></th>${cats.map(c2=>`<th>CAT ${c2}</th>`).join("")}</tr></thead>
           <tbody>${cont.segs.flatMap(s=>[
-            `<tr><td class="in" rowspan="2">Turn ${s.n} @ ${s.to??"—"} ft</td><td class="t">TAS + tail wind (kt)</td>${s.params.map(p=>`<td class="num auto">${p.tas!=null?p.tas.toFixed(3):"—"}</td>`).join("")}</tr>`,
-            `<tr><td class="t">c — total (m)</td>${s.params.map(p=>`<td class="num auto">${p.cTot!=null?p.cTot.toFixed(3):"—"}</td>`).join("")}</tr>`]).join("")}
+            `<tr><td class="in" rowspan="2">Turn ${s.n} @ ${s.to??"—"} ft</td><td class="t">TAS + tail wind (kt)</td>${s.params.map(p=>`<td class="num auto">${p.tas!=null?p.tas.toFixed(2):"—"}</td>`).join("")}</tr>`,
+            `<tr><td class="t">c — total (m)</td>${s.params.map(p=>`<td class="num auto">${p.cTot!=null?p.cTot.toFixed(2):"—"}</td>`).join("")}</tr>`]).join("")}
           </tbody></table></div>
       </div>
     </div>`:"";
@@ -1356,7 +1490,7 @@ function viewIlsMA(r){
           <label class="chip" style="opacity:.45"><input type="radio" name="ma-type" disabled>Turn at Point — to follow</label>
         </div>
         <p class="note" style="margin-bottom:0">Per category: SOC altitude and position from the THR, then the climb distance to the
-          turn altitude at each design gradient. ${MACG_BASE}% is always designed; add gradients in 0.5% steps to 5% —
+          turn altitude at each design gradient. ${crit("macgBase")}% is always designed; add gradients in 0.5% steps to 5% —
           each gradient carries its own OCA set, since a steeper MACG changes the OAS.
           A single construction of the missed approach uses the most conservative values (CAT I or CAT II) — highlighted orange.</p>
       </div>
@@ -1366,7 +1500,7 @@ function viewIlsMA(r){
       <div class="bd">
         <div class="cfg-k">Missed approach climb gradients</div>
         <div class="chip-row">
-          <label class="chip on" style="cursor:default;opacity:.7"><input type="checkbox" checked disabled>${MACG_BASE}%</label>
+          <label class="chip on" style="cursor:default;opacity:.7"><input type="checkbox" checked disabled>${crit("macgBase")}%</label>
           ${MACG_OPTS.map(g=>`<label class="chip ${ma.macgs[g]?"on":""}"><input type="checkbox" class="ma-macg" data-g="${g}"${ma.macgs[g]?" checked":""}>${g}%</label>`).join("")}
         </div>
         <div class="cfg-k" style="margin-top:14px">Turn altitudes (ft AMSL, in sequence)</div>
@@ -1383,11 +1517,11 @@ function viewIlsMA(r){
       <div class="hd">Environment</div>
       <div class="bd"><div class="kv compact" style="margin-bottom:0">
         <div class="row"><div class="k">Temperature (Δ°C)</div>
-          <div class="v in"><input type="number" step="1" class="ma-env" data-path="temp" value="${esc(ma.temp)}"></div>
-          <div class="c">TAS formula VAR — worksheet uses 15.</div></div>
+          <div class="v in"><input type="number" step="1" class="ma-env" data-path="temp" value="${esc(ma.temp)}" placeholder="${crit('isaDev')}"></div>
+          <div class="c">TAS formula VAR — blank uses the criteria value (${crit("isaDev")}).</div></div>
         <div class="row"><div class="k">Tail wind (kt)</div>
-          <div class="v in"><input type="number" step="1" class="ma-env" data-path="tailwind" value="${esc(ma.tailwind)}"></div>
-          <div class="c">Added to TAS — worksheet uses 30 kt.</div></div>
+          <div class="v in"><input type="number" step="1" class="ma-env" data-path="tailwind" value="${esc(ma.tailwind)}" placeholder="${crit('maWind')}"></div>
+          <div class="c">Added to TAS — blank uses the criteria value (${crit("maWind")} kt).</div></div>
         <div class="row"><div class="k">VPA (°) — from Final approach</div>
           <div class="v auto">${r.vpa!=null?r.vpa:"— enter on Final approach tab"}</div>
           <div class="c">Used for the SOC position on the nominal glide path.</div></div>
@@ -1436,7 +1570,7 @@ function wireIlsMA(key){
 }
 /* ---------- ILS advisory altitudes ---------- */
 /* From the Advisory_Altitudes worksheet, formula for formula:
-   exact alt (ft)       = ROUNDUP( ((D×1852)×tanθ + RDH_m) × 3.2808 + THR_ft, 0 )   with height above THR in brackets
+   exact alt (ft)       = ROUNDUP( ((D×1852)×tanθ + RDH_m) ÷ 0.3048 + THR_ft, 0 )   with height above THR in brackets
    for publication (ft) = same, ROUND to the nearest 10 ft
    FPM                  = ROUND( (GS/60 × 6076) × tanθ, −1 )
    Columns run from ceil(FAF distance NM) down toward the THR; the advisory
@@ -1452,11 +1586,11 @@ function advCalc(r,ma){
   const start=Math.ceil(r.finalCalc.fafNM-1e-9);
   // OCA floor: highest 2.5% CAT I OCA across categories (one advisory column serves all)
   let autoFloor=null;
-  const oca25=ma?.designs?.C1?.oca?.[gradKey(MACG_BASE)]||{};
+  const oca25=ma?.designs?.C1?.oca?.[gradKey(crit("macgBase"))]||{};
   for(const v of Object.values(oca25)){const n=safeNum(v); if(n!=null&&(autoFloor==null||n>autoFloor)) autoFloor=n;}
   const cols=[];
   for(let D=start;D>=1;D--){
-    const raw=((D*NM_M)*tan+rdhM)*MA_M_FT+thr;
+    const raw=((D*NM_M)*tan+rdhM)*M_FT+thr;
     const exact=Math.ceil(raw-1e-9), pub=Math.round(raw/10)*10;
     cols.push({D,exact,exactH:exact-thr,pub,pubH:pub-thr});
   }
@@ -1543,6 +1677,293 @@ function wireIlsAdv(key){
   document.querySelectorAll(".adv-spd").forEach(inp=>inp.addEventListener("change",e=>{
     getAdv().speeds[+e.target.dataset.i]=e.target.value; render();}));
 }
+/* ---------- SIDs: common departure datum & minimum first turn ---------- */
+/* Datum position = TODA_END; datum elevation = higher of TODA_END / TORA_END.
+   Minimum turn altitude (TNA) defaults to aerodrome elevation + 500 ft.
+   Minimum distance to the first turn: climb from 5 m above the DER elevation
+   at 3.3% until reaching the TNA. Common to every SID on the runway end.     */
+function sidCommonCalc(r,d){
+  const sc=r.cfg.sidCommon||{};
+  const tnaDefault=d.operative!=null?d.operative+crit("tnaAbove"):null;
+  const tna=safeNum(sc.tna)??tnaDefault;
+  if(r.sid.elevFt==null) return {need:"DER elevation (no TODA_END / TORA_END in the survey — enter it manually)",tna,tnaDefault};
+  if(tna==null) return {need:"minimum turn altitude (no aerodrome elevation yet — enter the TNA manually)",tna,tnaDefault};
+  const originFt=r.sid.elevFt+crit("sidDerH")*M_FT;   // climb origin above the DER, in ft (Annex 5)
+  if(!(tna>originFt)) return {need:"a TNA above the climb origin",tna,tnaDefault,originFt};
+  const distM=(tna-originFt)*FT_M/(crit("sidPdg")/100);
+  return {tna,tnaDefault,originFt,distM,distNM:distM/NM_M};
+}
+/* Individual SIDs: sequential turns climbing at the SID's gradient from the
+   climb origin (DER + 5 m). Each turn: entered distance (from the previous
+   turn), computed altitude, capped at the altitude restriction if that is
+   LOWER; later turns climb on from the ACTUAL (capped) altitude.
+   Value C = 6 s of flight at TAS(IAS, actual altitude, ISA+15) + 30 kt wind. */
+function sidCalc(r,sid,minDistM){
+  if(r.sid.elevFt==null) return {need:"DER elevation"};
+  const g=safeNum(sid.pdg)??crit("sidPdg");
+  if(!(g>0)) return {need:"a valid climb gradient"};
+  const origin=r.sid.elevFt+crit("sidDerH")*M_FT;
+  const sidCats=CATS.filter(cat=>(sid.cats?sid.cats[cat]:r.cfg.cats[cat]));
+  const ts=sid.turns||[];
+  const rtype=t=>t.rtype||(String(t.restrict??"").trim()?"le":"none");  // older saves: a bare value meant at-or-below
+  /* A SID cannot descend, so every AT-OR-BELOW / AT constraint also ceilings
+     every EARLIER turn. ceil[i] = lowest such restriction at turn i or later. */
+  const ceil=new Array(ts.length).fill(null);
+  let run=null;
+  for(let i=ts.length-1;i>=0;i--){
+    const rr=safeNum(ts[i].restrict), ty=rtype(ts[i]);
+    if(rr!=null&&(ty==="le"||ty==="eq")) run=run==null?rr:Math.min(run,rr);
+    ceil[i]=run;
+  }
+  let prevAlt=origin, cum=0;
+  const turns=ts.map((t,i)=>{
+    const dist=safeNum(t.dist), restrict=safeNum(t.restrict);
+    const ty=rtype(t);
+    let computed=null, actual=null, capped=false, capBy=null, belowMin=false;
+    let beforeMin=false, shortBy=null;
+    if(i===0&&dist!=null&&minDistM!=null&&dist<minDistM-1e-9){beforeMin=true;shortBy=minDistM-dist;}
+    if(dist!=null&&dist>=0){
+      cum+=dist;
+      computed=prevAlt+dist*(g/100)*M_FT;      // climb over the segment, m → ft (Annex 5)
+      actual=computed;
+      if(ceil[i]!=null&&actual>ceil[i]){
+        actual=ceil[i]; capped=true;
+        capBy=(restrict!=null&&(ty==="le"||ty==="eq")&&restrict===ceil[i])?"own":"later";
+      }
+      // at-or-above / at: the design gradient must actually get there
+      if(restrict!=null&&(ty==="ge"||ty==="eq")&&computed<restrict-1e-9) belowMin=true;
+      prevAlt=actual;
+    }
+    /* speeds: per declared category. Default = final MA IAS × departure factor;
+       an entered per-turn limit reduces it, but must not fall below
+       intermediate MA IAS × the same factor — flagged where it does. */
+    const limit=safeNum(t.limit??t.ias);   // older saves stored a single ias — read as the limit
+    const perCat=(actual!=null)?sidCats.map(cat=>{
+      const f=crit("sidMassF");
+      const def=crit("ias_"+cat)*f, minAllow=crit("iasInt_"+cat)*f;
+      let ias=def, limited=false, belowSpeed=false;
+      if(limit!=null){
+        if(limit<def){ias=limit;limited=true;}
+        if(limit<minAllow-1e-9) belowSpeed=true;
+      }
+      const tas=maTas(ias,actual,crit("isaDev"),crit("sidWind"));
+      return {cat,def,minAllow,ias,limited,belowSpeed,tas,cM:tas/3600*crit("sidCSec")*NM_M};
+    }):[];
+    return {n:i+1,name:t.name||"",dist,cum:dist!=null?cum:null,limit,restrict,rtype:ty,
+            computed,actual,capped,capBy,belowMin,beforeMin,shortBy,perCat};
+  });
+  return {g,origin,turns,minDistM:minDistM??null,cats:sidCats};
+}
+function viewSidCommon(r,d){
+  const sc=r.cfg.sidCommon||{};
+  const c=sidCommonCalc(r,d);
+  const manual=!r.sid.fromSurvey;
+  const datumRows=manual?`
+      <div class="row"><div class="k">DER Easting</div>
+        <div class="v in"><input type="number" step="0.001" class="sid-in" data-f="manE" value="${esc(sc.manE??"")}"></div>
+        <div class="c">No TODA_END / TORA_END records in the survey for ${esc(r.key)} — enter the departure end manually.</div></div>
+      <div class="row"><div class="k">DER Northing</div>
+        <div class="v in"><input type="number" step="0.001" class="sid-in" data-f="manN" value="${esc(sc.manN??"")}"></div><div class="c"></div></div>
+      <div class="row"><div class="k">DER elevation (ft)</div>
+        <div class="v in"><input type="number" step="0.001" class="sid-in" data-f="manElev" value="${esc(sc.manElev??"")}"></div>
+        <div class="c">Use the higher of the TODA end and TORA end elevations.</div></div>`
+    :`
+      <div class="row"><div class="k">TODA_END</div>
+        <div class="v auto">${r.sid.toda?`${f3(r.sid.toda.elevFt)} ft · E ${f3(r.sid.toda.e)} · N ${f3(r.sid.toda.n)}`:"not in survey"}</div>
+        <div class="c">The SID datum position — where every SID starts.</div></div>
+      <div class="row"><div class="k">TORA_END</div>
+        <div class="v auto">${r.sid.tora?`${f3(r.sid.tora.elevFt)} ft`:"not in survey"}</div>
+        <div class="c">Elevation comparator only.</div></div>
+      <div class="row"><div class="k">DER elevation — operative (ft)</div>
+        <div class="v auto"><b>${f3(r.sid.elevFt)}</b> <span class="mono" style="color:var(--muted);font-size:11px">${esc(r.sid.elevSrc)}</span></div>
+        <div class="c">The HIGHER of the two — the conservative datum elevation.</div></div>`;
+  const calcRows=c.need?`
+      <div class="row"><div class="k">Minimum first-turn distance</div>
+        <div class="v auto">waiting for ${esc(c.need)}</div><div class="c"></div></div>`
+    :`
+      <div class="row"><div class="k">Climb origin (ft)</div>
+        <div class="v auto">${c.originFt.toFixed(2)}</div>
+        <div class="c">DER elevation + ${crit("sidDerH")} m (÷ 0.3048, Annex 5).</div></div>
+      <div class="row"><div class="k">PDG (%)</div>
+        <div class="v auto">${crit("sidPdg").toFixed(2)}</div>
+        <div class="c">Standard procedure design gradient for the minimum-distance calculation.</div></div>
+      <div class="row"><div class="k">Minimum distance to first turn (m)</div>
+        <div class="v auto"><b>${c.distM.toFixed(2)}</b></div>
+        <div class="c">(TNA − climb origin) × 0.3048 ÷ ${(crit("sidPdg")/100).toFixed(2)} — measured from the DER.</div></div>
+      <div class="row"><div class="k">Minimum distance to first turn (NM)</div>
+        <div class="v auto"><b>${c.distNM.toFixed(2)}</b></div><div class="c"></div></div>`;
+  return `
+  <div class="hub">
+    <div class="card full">
+      <div class="hd">Common — SID datum & minimum first turn
+        <span class="right">shared by every SID on ${esc(r.key)} (Conventional & PBN)</span></div>
+      <div class="bd"><p class="note" style="margin-top:0">The datum for all SIDs is the <b>TODA_END</b>; its operative
+        elevation is the higher of the TODA end and TORA end. The minimum turn altitude and the minimum distance to the
+        first turn below are common to every SID departing this runway end.</p></div>
+    </div>
+    <div class="card">
+      <div class="hd">SID datum (DER)</div>
+      <div class="bd"><div class="kv compact" style="margin-bottom:0">${datumRows}</div></div>
+    </div>
+    <div class="card">
+      <div class="hd">Minimum turn altitude & first turn</div>
+      <div class="bd"><div class="kv compact" style="margin-bottom:0">
+        <div class="row"><div class="k">Aerodrome elevation (ft)</div>
+          <div class="v auto">${d.operative!=null?f3(d.operative):"—"}</div>
+          <div class="c">Operative value from the Aerodrome elevation page.</div></div>
+        <div class="row"><div class="k">Minimum turn altitude — TNA (ft)</div>
+          <div class="v in"><input type="number" step="1" class="sid-in" data-f="tna" value="${esc(sc.tna??"")}" placeholder="${c.tnaDefault!=null?c.tnaDefault.toFixed(2):""}"></div>
+          <div class="c">Usually aerodrome elevation + 500 ft${c.tnaDefault!=null?` = <b>${c.tnaDefault.toFixed(2)}</b> (used when blank)`:""} — overtype to set a different value.</div></div>
+        ${calcRows}
+      </div></div>
+    </div>
+  </div>`;
+}
+function wireSidCommon(key){
+  document.querySelectorAll(".sid-in").forEach(inp=>inp.addEventListener("change",e=>{
+    const cfg=ensureCfg(key);
+    cfg.sidCommon=cfg.sidCommon||{};
+    cfg.sidCommon[e.target.dataset.f]=e.target.value;
+    render();
+  }));
+}
+/* The SID page: the common datum block, then this type's SIDs.
+   Results render only after Calculate — the constraint logic reads the whole
+   SID (later at-or-below/at restrictions ceiling earlier turns), so partial
+   input would show misleading caps. A hash of the inputs marks staleness. */
+function sidHash(r,sid){ return JSON.stringify([sid.pdg,sid.turns,sid.cats??r.cfg.cats??null,r.sid.elevFt,(r.cfg.sidCommon||{}).tna??"",S.criteria||{}]); }
+const SID_RTYPES=[["none","—"],["ge","≥ at or above"],["le","≤ at or below"],["eq","= at"]];
+function viewSidPage(r,d,procId){
+  const pcfg=(r.cfg.proc&&r.cfg.proc[procId])||{};
+  const sids=pcfg.sids||[];
+  const typeLabel=procId==="SIDC"?"Conventional":"PBN";
+  const sidCards=sids.map((sid,si)=>{
+    const calced=sid.calcHash===sidHash(r,sid);
+    const minc=sidCommonCalc(r,d);
+    const c=calced?sidCalc(r,sid,minc&&!minc.need?minc.distM:null):null;
+    const head=`<div class="hd">
+      <input type="text" class="sidp-name cell-in" data-si="${si}" value="${esc(sid.name??"")}" placeholder="SID designator (e.g. WIZAD 4M)"
+        style="width:240px;background:var(--input-y);font-weight:700">
+      <span class="right">${calced?"":`<span style="opacity:.85;margin-right:14px">${sid.calcHash?"inputs changed — recalculate":"not yet calculated"}</span>`}<a href="#" class="sidp-del" data-si="${si}" style="color:#fff;opacity:.8">remove SID</a></span></div>`;
+    if(c&&c.need) return `<div class="card full">${head}<div class="bd"><p class="note" style="margin:0">Waiting for: <b>${esc(c.need)}</b>.</p></div></div>`;
+    const res=(ti,f,fmt)=>{
+      if(!c) return `<td class="num auto" style="color:var(--muted)">—</td>`;
+      const t=c.turns[ti]; return fmt(t);
+    };
+    const rows=(sid.turns||[]).map((tt,ti)=>{
+      const rty=tt.rtype||(String(tt.restrict??"").trim()?"le":"none");
+      return `
+      <tr>
+        <td class="num in"><input type="text" class="sidp-turn cell-in" data-si="${si}" data-ti="${ti}" data-f="name" value="${esc(tt.name??"")}" placeholder="turn name / definition" style="width:140px"></td>
+        <td class="num in"><input type="number" step="1" class="sidp-turn cell-in" data-si="${si}" data-ti="${ti}" data-f="dist" value="${esc(tt.dist??"")}" style="width:85px${c&&c.turns[ti]&&c.turns[ti].beforeMin?";border:2px solid var(--red,#B91C1C);background:#FEE2E2":""}"></td>
+        ${res(ti,"cum",t=>`<td class="num auto">${t.cum!=null?t.cum.toFixed(2):"—"}</td>`)}
+        <td class="num in"><input type="number" step="1" class="sidp-turn cell-in" data-si="${si}" data-ti="${ti}" data-f="limit" value="${esc(tt.limit??tt.ias??"")}" placeholder="—" style="width:70px"></td>
+        <td class="num in" style="white-space:nowrap">
+          <select class="sidp-turn cell-in" data-si="${si}" data-ti="${ti}" data-f="rtype" style="width:64px;background:var(--input-y)">
+            ${SID_RTYPES.map(([v,l])=>`<option value="${v}"${rty===v?" selected":""}>${l.split(" ")[0]}</option>`).join("")}
+          </select>
+          <input type="number" step="1" class="sidp-turn cell-in" data-si="${si}" data-ti="${ti}" data-f="restrict" value="${esc(tt.restrict??"")}" placeholder="—" style="width:72px">
+        </td>
+        ${res(ti,"computed",t=>`<td class="num auto">${t.computed!=null?t.computed.toFixed(2):"—"}</td>`)}
+        ${res(ti,"actual",t=>`<td class="num auto ${t.capped?"gov":""} ${t.belowMin?"chk-bad":""}">${
+            t.actual!=null?`<b>${t.actual.toFixed(2)}</b>${t.capped?(t.capBy==="later"?" (capped by later constraint)":" (capped)"):""}${t.belowMin?" — gradient cannot meet the ≥ restriction":""}`:"—"}</td>`)}
+        <td class="t">${(sid.turns||[]).length>1?`<a href="#" class="sidp-delturn" data-si="${si}" data-ti="${ti}">remove</a>`:""}</td>
+      </tr>`;}).join("");
+    return `<div class="card full">${head}
+      <div class="bd">
+        <div class="cfg-k">Aircraft categories
+          ${sid.cats?`<span class="mono" style="font-weight:400;color:#B45309;font-size:11px;margin-left:8px">overridden — <a href="#" class="sidp-catreset" data-si="${si}">use runway default</a></span>`
+                    :`<span class="mono" style="font-weight:400;color:var(--muted);font-size:11px;margin-left:8px">runway default — tick to override for this SID</span>`}</div>
+        <div class="chip-row" style="margin-bottom:10px">
+          ${CATS.map(cat=>{const on=sid.cats?!!sid.cats[cat]:!!r.cfg.cats[cat];
+            return `<label class="chip ${on?"on":""}"><input type="checkbox" class="sidp-cat" data-si="${si}" data-cat="${cat}"${on?" checked":""}>${cat}</label>`;}).join("")}
+        </div>
+        <div class="kv compact" style="margin-bottom:10px">
+          <div class="row"><div class="k">Climb gradient (%)</div>
+            <div class="v in"><input type="number" step="0.1" class="sidp-pdg" data-si="${si}" value="${esc(sid.pdg??"")}" placeholder="${crit('sidPdg')}"></div>
+            <div class="c">The specified climb rate for this SID — blank uses the standard ${crit("sidPdg")}%.</div></div>
+          <div class="row"><div class="k">Climb origin (ft)</div>
+            <div class="v auto">${r.sid.elevFt!=null?(r.sid.elevFt+crit("sidDerH")*M_FT).toFixed(2):"—"}</div>
+            <div class="c">DER elevation + ${crit("sidDerH")} m — shared datum.</div></div>
+        </div>
+        <div class="tbl-wrap auto-h"><table>
+          <thead><tr><th>Turn</th><th>Dist from previous (m)</th><th>Cum from DER (m)</th><th>Speed limit (kt IAS max)</th>
+            <th>Alt restriction (ft)</th><th>Computed alt (ft)</th><th>Actual alt (ft)</th><th></th></tr></thead>
+          <tbody>${rows}</tbody></table></div>
+        ${c&&c.cats&&c.cats.length?`
+        <div class="cfg-k" style="margin-top:12px">Speeds & value C — per category</div>
+        <div class="tbl-wrap auto-h"><table>
+          <thead><tr><th>Turn</th><th></th>${c.cats.map(cat=>`<th>CAT ${cat}</th>`).join("")}</tr></thead>
+          <tbody>${c.turns.flatMap(t=>t.perCat.length?[
+            `<tr><td class="in" rowspan="3">TP${t.n}${t.actual!=null?" @ "+t.actual.toFixed(2)+" ft":""}${t.limit!=null?`<div class="mono" style="font-size:10.5px;color:#B45309">limit ${t.limit} kt</div>`:""}</td>
+                 <td class="t">IAS (kt)</td>${t.perCat.map(p=>`<td class="num auto ${p.belowSpeed?"chk-bad":""}">${p.ias.toFixed(2)}${p.limited?" (limited)":""}${p.belowSpeed?`<div style="font-size:10.5px">below min ${p.minAllow.toFixed(2)}</div>`:""}</td>`).join("")}</tr>`,
+            `<tr><td class="t">TAS + ${crit("sidWind")} kt</td>${t.perCat.map(p=>`<td class="num auto">${p.tas.toFixed(2)}</td>`).join("")}</tr>`,
+            `<tr><td class="t">C (m)</td>${t.perCat.map(p=>`<td class="num auto"><b>${p.cM.toFixed(2)}</b></td>`).join("")}</tr>`]:[]).join("")}
+          </tbody></table></div>
+        ${(()=>{const lim=c.turns.filter(t=>t.limit!=null&&t.perCat.some(p=>p.limited));
+          const bad=c.turns.filter(t=>t.perCat.some(p=>p.belowSpeed));
+          let out="";
+          if(bad.length) out+=`<p class="note" style="color:#B91C1C;font-weight:700;margin:6px 0 0">⚠ ${bad.map(t=>`TP${t.n}: the ${t.limit} kt limit is below the minimum allowable turn speed for ${t.perCat.filter(p=>p.belowSpeed).map(p=>"CAT "+p.cat+" ("+p.minAllow.toFixed(2)+" kt)").join(", ")}`).join(" · ")} — minimum = intermediate MA IAS × ${crit("sidMassF")}.</p>`;
+          if(lim.length) out+=`<p class="note" style="color:#B45309;margin:6px 0 0">Annotate the procedure: ${lim.map(t=>`“Departure turn limited to ${t.limit} kt IAS maximum” (TP${t.n})`).join(" · ")}.</p>`;
+          return out;})()}`:""}
+        ${c&&c.turns[0]&&c.turns[0].beforeMin?`
+        <p class="note" style="color:#B91C1C;font-weight:700;margin:6px 0 0">⚠ Turn 1 is ${c.turns[0].shortBy.toFixed(2)} m BEFORE the minimum
+          first-turn distance — entered ${c.turns[0].dist.toFixed(2)} m vs minimum ${c.minDistM.toFixed(2)} m
+          (climb to TNA ${minc&&minc.tna!=null?minc.tna.toFixed(2)+" ft":""} at ${crit("sidPdg")}%).</p>`:""}
+        <button class="ghost sidp-addturn" data-si="${si}" style="padding:5px 14px;margin-top:8px">+ Add a turn</button>
+        <p class="note" style="margin:8px 0 0">Restrictions: <b>≥</b> at or above (the climb may exceed it — flagged if the gradient cannot reach it) ·
+          <b>≤</b> at or below · <b>=</b> at. A SID cannot descend, so a later ≤/= constraint also ceilings every earlier turn.
+          Computed altitude climbs at the SID gradient over each segment (m → ft ÷ 0.3048); later turns climb on from the ACTUAL (capped) altitude.
+          Turn speed defaults to the final MA IAS × ${crit("sidMassF")} per category (Table I-4-1-2 increased for departure mass); a per-turn limit reduces it but never below the intermediate MA IAS × ${crit("sidMassF")}. C = ${crit("sidCSec")} s at TAS(IAS, actual altitude, ISA+${crit("isaDev")}) + ${crit("sidWind")} kt wind.</p>
+      </div></div>`;}).join("");
+  return `${viewSidCommon(r,d)}
+  <div class="hub" style="margin-top:18px">
+    <div class="card full">
+      <div class="hd">SIDs — ${typeLabel}<span class="right">${sids.length} defined</span></div>
+      <div class="bd">
+        ${sids.length?"":`<p class="note" style="margin-top:0">No ${typeLabel} SIDs defined yet for ${esc(r.key)}.</p>`}
+        <button class="act" id="sidp-add" style="padding:6px 16px">+ Add a SID</button>
+        ${sids.length?`<button class="act" id="sidp-calc" style="padding:6px 20px;margin-left:10px"><b>Calculate</b></button>
+        <span class="note" style="margin-left:10px">Enter the SID details, then Calculate — the constraint logic reads the whole SID.</span>`:""}
+      </div>
+    </div>
+    ${sidCards}
+  </div>`;
+}
+function wireSidPage(key,procId){
+  wireSidCommon(key);
+  const getSids=()=>{
+    const pc=ensureProcCfg(key,procId);
+    if(!pc.sids) pc.sids=[];
+    return pc.sids;
+  };
+  const add=document.getElementById("sidp-add");
+  if(add) add.addEventListener("click",()=>{
+    getSids().push({name:"",pdg:"",turns:[{name:"",dist:"",limit:"",rtype:"none",restrict:""}]}); render();});
+  const calc=document.getElementById("sidp-calc");
+  if(calc) calc.addEventListener("click",()=>{
+    const d2=compute(); const r2=d2.runways.find(x=>x.key===key);
+    getSids().forEach(s=>{s.calcHash=sidHash(r2,s);});
+    render();});
+  document.querySelectorAll(".sidp-del").forEach(a=>a.addEventListener("click",e=>{
+    e.preventDefault(); getSids().splice(+e.target.dataset.si,1); render();}));
+  document.querySelectorAll(".sidp-name").forEach(inp=>inp.addEventListener("change",e=>{
+    getSids()[+e.target.dataset.si].name=e.target.value; render();}));
+  document.querySelectorAll(".sidp-catreset").forEach(a=>a.addEventListener("click",e=>{
+    e.preventDefault(); delete getSids()[+e.target.dataset.si].cats; render();}));
+  document.querySelectorAll(".sidp-cat").forEach(cb=>cb.addEventListener("change",e=>{
+    const s=getSids()[+e.target.dataset.si];
+    if(!s.cats){const rc=(ensureCfg(key).cats)||{};s.cats={A:!!rc.A,B:!!rc.B,C:!!rc.C,D:!!rc.D};}
+    s.cats[e.target.dataset.cat]=e.target.checked; render();}));
+  document.querySelectorAll(".sidp-pdg").forEach(inp=>inp.addEventListener("change",e=>{
+    getSids()[+e.target.dataset.si].pdg=e.target.value; render();}));
+  document.querySelectorAll(".sidp-turn").forEach(inp=>inp.addEventListener("change",e=>{
+    getSids()[+e.target.dataset.si].turns[+e.target.dataset.ti][e.target.dataset.f]=e.target.value; render();}));
+  document.querySelectorAll(".sidp-addturn").forEach(b=>b.addEventListener("click",e=>{
+    getSids()[+e.target.dataset.si].turns.push({name:"",dist:"",limit:"",rtype:"none",restrict:""}); render();}));
+  document.querySelectorAll(".sidp-delturn").forEach(a=>a.addEventListener("click",e=>{
+    e.preventDefault(); getSids()[+e.target.dataset.si].turns.splice(+e.target.dataset.ti,1); render();}));
+}
 function wireProc(){
   const {rwy:key,proc:procId}=S.view;
   document.getElementById("back-rwy").addEventListener("click",()=>go("rwy",key));
@@ -1550,6 +1971,7 @@ function wireProc(){
     go("proc",key,procId,b.dataset.seg)));
   if(procId==="ILS"&&S.view.seg==="missed") wireIlsMA(key);
   if(procId==="ILS"&&S.view.seg==="adv") wireIlsAdv(key);
+  if(procId==="SIDC"||procId==="SIDPBN") wireSidPage(key,procId);
   document.querySelectorAll(".proc-in").forEach(inp=>inp.addEventListener("change",e=>{
     ensureProcCfg(key,procId)[e.target.dataset.f]=e.target.value; render();}));
   const src=document.getElementById("rdh-src");
@@ -1678,7 +2100,7 @@ function projectPayload(){
     icao:S.icao, fileName:S.fileName, company:S.company, procDate:S.procDate,
     vertRef:S.vertRef, points:S.points,
     decisions:{tolMatch:S.tolMatch, manualAEP:S.manualAEP,
-               codeOverrides:S.codeOverrides, rwyCfg:S.rwyCfg, manualLlz:S.manualLlz}};
+               codeOverrides:S.codeOverrides, rwyCfg:S.rwyCfg, manualLlz:S.manualLlz, criteria:S.criteria}};
 }
 function applyProject(p){
   if(!p||!String(p.tool||"").startsWith("IFP Design")||!Array.isArray(p.points))
@@ -1689,6 +2111,12 @@ function applyProject(p){
   const dcs=p.decisions||{};
   S.tolMatch=dcs.tolMatch??0.005; S.manualAEP=dcs.manualAEP??"";
   S.codeOverrides=dcs.codeOverrides||{}; S.manualLlz=dcs.manualLlz||{};
+  S.criteria=dcs.criteria||{};
+  if(S.criteria.wind!=null){   // short-lived global wind key → per-procedure keys
+    if(S.criteria.maWind==null) S.criteria.maWind=S.criteria.wind;
+    if(S.criteria.sidWind==null) S.criteria.sidWind=S.criteria.wind;
+    delete S.criteria.wind;
+  }
   S.rwyCfg=dcs.rwyCfg||{};
   if(!dcs.rwyCfg && dcs.ilsDecl){        // migrate older project files
     for(const [k,v] of Object.entries(dcs.ilsDecl)) if(v==="YES")
@@ -1855,7 +2283,7 @@ async function exportCaaWorkbook(){
   if(d.runways.some(rw=>rw.ilsOn)){
     const ws=wb.addWorksheet("ILS_Config");
     titleCell(ws,"A1","ILS CONFIGURATION — RDH & GLIDE PATH, PER RUNWAY");
-    ws.getCell("A2").value=`Standard RDH ${RDH_STD} ft. Glide path: minimum ${VPA_MIN}° · optimum ${VPA_OPT}° · maximum ${VPA_MAX}°. RDH source is the designer's declaration of which value governs.`;
+    ws.getCell("A2").value=`Standard RDH ${crit("rdhStd")} ft. Glide path: minimum ${crit("vpaMin")}° · optimum ${crit("vpaOpt")}° · maximum ${crit("vpaMax")}°. RDH source is the designer's declaration of which value governs.`;
     ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
     const cols=["Runway_ID","RDH_charted_ft","RDH_calibration_ft","Cal_report_ref","RDH_source",
                 "RDH_operative_ft","Diff_cal_minus_charted_ft","vs_standard_50ft","Glide_path_deg","Angle_check","FAF_alt_ft"];
@@ -1865,7 +2293,7 @@ async function exportCaaWorkbook(){
     for(const rw of d.runways.filter(x=>x.ilsOn)){
       const vals=[rw.key,rw.rdhCharted,rw.rdhCal,rw.ic.calRef||"",rw.rdhSource,
                   rw.rdhOperative,rw.rdhDiff,
-                  rw.rdhOperative!=null?rw.rdhOperative-RDH_STD:null,
+                  rw.rdhOperative!=null?rw.rdhOperative-crit("rdhStd"):null,
                   rw.vpa,rw.vpaCheck||"",rw.faf];
       const kinds=["in","in","in","in","in","auto","auto","auto","in","auto","in"];
       const fmts=[null,"0.00","0.00",null,null,"0.00","0.00","0.00","0.00",null,"0"];
@@ -1882,7 +2310,7 @@ async function exportCaaWorkbook(){
   if(d.runways.some(rw=>rw.finalCalc)){
     const ws=wb.addWorksheet("ILS_Final");
     titleCell(ws,"A1","ILS — FINAL APPROACH · FAF TRACK LENGTH & FAP DISTANCE");
-    ws.getCell("A2").value=`FAF: height above the RDH datum ÷ tan(glide path), rounded UP to 0.1 NM (NB PANS-OPS App C para 3 says nearest). FAP: H = h + ${OAS_FTNM}·D·tanθ + ${OAS_CURV_K}·D² solved for D with h = ${RDH_STD} ft, then ΔD = ${RDH_ADJ_K} × ${OAS_FTNM} × (${RDH_STD} − RDH) × cotθ at the actual angle.`;
+    ws.getCell("A2").value=`FAF: height above the RDH datum ÷ tan(glide path), rounded UP to 0.1 NM (NB PANS-OPS App C para 3 says nearest). FAP: H = h + ${OAS_FTNM}·D·tanθ + ${OAS_CURV_K}·D² solved for D with h = ${crit("rdhStd")} ft, then ΔD = ${RDH_ADJ_K} × ${OAS_FTNM} × (${crit("rdhStd")} − RDH) × cotθ at the actual angle.`;
     ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
     const cols=["Runway_ID","THR_elev_ft","RDH_operative_ft","GP_deg","FAF_alt_ft",
                 "Hgt_above_RDH_datum_ft","FAF_track_m","FAF_NM_unrounded","FAF_chart_NM",
