@@ -1957,13 +1957,6 @@ function viewSidPage(r,d,procId){
           first-turn distance — entered ${c.turns[0].dist.toFixed(2)} m vs minimum ${c.minDistM.toFixed(2)} m
           (climb to TNA ${minc&&minc.tna!=null?minc.tna.toFixed(2)+" ft":""} at ${crit("sidPdg")}%).</p>`:""}
         <button class="ghost sidp-addturn" data-si="${si}" style="padding:5px 14px;margin-top:8px">+ Add a turn</button>
-        <p class="note" style="margin:8px 0 0">Restrictions: <b>≥</b> at or above (the climb may exceed it; where the design gradient cannot reach it, the restriction GOVERNS the turn and the required gradient is shown) ·
-          <b>≤</b> at or below · <b>=</b> at. A SID cannot descend, so a later ≤/= constraint also ceilings every earlier turn.
-          A turn with no ≤/= constraint climbs no higher than the aerodrome SID cap (${crit("sidCap")} ft — set per aerodrome on the Design criteria page).
-          Computed altitude climbs at the SID gradient over each segment (m → ft ÷ 0.3048), then rounds UP to ${crit("sidAltRound")||"—"} ft (Design criteria; 0 = off) to give the ACTUAL altitude; constraints and the SID cap apply to that, and later turns climb on from it.
-          Turn speed defaults to the final MA IAS × ${crit("sidMassF")} per category (Table I-4-1-2 increased for departure mass); a per-turn limit reduces it but never below the intermediate MA IAS × ${crit("sidMassF")}. C = ${crit("sidCSec")} s at TAS(IAS, actual altitude, ISA+${crit("isaDev")}) + ${crit("sidWind")} kt wind.
-          AOB &amp; speed bands use the turn's ACTUAL altitude (AMSL): <b>PANS-OPS</b> (nominal track only) ${crit("poAob1")}° to ${crit("poBand1")} ft · ${crit("poAob2")}° to ${crit("poBand2")} ft · ${crit("poAob3")}° above, speed = the tabled value for the HIGHEST selected category (one nominal track, built on the larger values — the full per-category set is in the speeds table below);
-          <b>CAP778</b> ${crit("cpAob1")}° below ${crit("cpAobBand")} ft, ${crit("cpAob2")}° thereafter · ${crit("cpSpd1")} kt to ${crit("cpSpdBand")} ft, ${crit("cpSpd2")} kt thereafter, unless restricted.</p>
       </div></div>`;}).join("");
   return `${viewSidCommon(r,d)}
   <div class="hub" style="margin-top:18px">
@@ -1973,7 +1966,17 @@ function viewSidPage(r,d,procId){
         ${sids.length?"":`<p class="note" style="margin-top:0">No ${typeLabel} SIDs defined yet for ${esc(r.key)}.</p>`}
         <button class="act" id="sidp-add" style="padding:6px 16px">+ Add a SID</button>
         ${sids.length?`<button class="act" id="sidp-calc" style="padding:6px 20px;margin-left:10px"><b>Calculate</b></button>
-        <span class="note" style="margin-left:10px">Enter the SID details, then Calculate — the constraint logic reads the whole SID. Aerodrome SID cap: <b>${crit("sidCap")} ft</b> (Design criteria page).</span>`:""}
+        <span class="note" style="margin-left:10px">Enter the SID details, then Calculate — the constraint logic reads the whole SID. Aerodrome SID cap: <b>${crit("sidCap")} ft</b> (Design criteria page).</span>
+        <details id="sid-notes"${S._sidNotesOpen?" open":""} style="margin-top:10px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Method notes — restrictions · cap · rounding · speeds · AOB bands</summary>
+          <p class="note" style="margin:8px 0 0">Restrictions: <b>≥</b> at or above (the climb may exceed it; where the design gradient cannot reach it, the restriction GOVERNS the turn and the required gradient is shown) ·
+          <b>≤</b> at or below · <b>=</b> at. A SID cannot descend, so a later ≤/= constraint also ceilings every earlier turn.
+          A turn with no ≤/= constraint climbs no higher than the aerodrome SID cap (${crit("sidCap")} ft — set per aerodrome on the Design criteria page).
+          Computed altitude climbs at the SID gradient over each segment (m → ft ÷ 0.3048), then rounds UP to ${crit("sidAltRound")||"—"} ft (Design criteria; 0 = off) to give the ACTUAL altitude; constraints and the SID cap apply to that, and later turns climb on from it.
+          Turn speed defaults to the final MA IAS × ${crit("sidMassF")} per category (Table I-4-1-2 increased for departure mass); a per-turn limit reduces it but never below the intermediate MA IAS × ${crit("sidMassF")}. C = ${crit("sidCSec")} s at TAS(IAS, actual altitude, ISA+${crit("isaDev")}) + ${crit("sidWind")} kt wind.
+          AOB &amp; speed bands use the turn's ACTUAL altitude (AMSL): <b>PANS-OPS</b> (nominal track only) ${crit("poAob1")}° to ${crit("poBand1")} ft · ${crit("poAob2")}° to ${crit("poBand2")} ft · ${crit("poAob3")}° above, speed = the tabled value for the HIGHEST selected category (one nominal track, built on the larger values);
+          <b>CAP778</b> ${crit("cpAob1")}° below ${crit("cpAobBand")} ft, ${crit("cpAob2")}° thereafter · ${crit("cpSpd1")} kt to ${crit("cpSpdBand")} ft, ${crit("cpSpd2")} kt thereafter, unless restricted.</p>
+        </details>`:""}
       </div>
     </div>
     ${sidCards}
@@ -1989,6 +1992,8 @@ function wireSidPage(key,procId){
   const add=document.getElementById("sidp-add");
   if(add) add.addEventListener("click",()=>{
     getSids().push({name:"",pdg:"",turns:[{name:"",dist:"",limit:"",rtype:"none",restrict:""}]}); render();});
+  const nts=document.getElementById("sid-notes");
+  if(nts) nts.addEventListener("toggle",e=>{S._sidNotesOpen=e.target.open;});
   const calc=document.getElementById("sidp-calc");
   if(calc) calc.addEventListener("click",()=>{
     const d2=compute(); const r2=d2.runways.find(x=>x.key===key);
