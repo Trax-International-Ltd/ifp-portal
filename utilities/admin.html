@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#002039">
+<title>Terrain Points – Library admin</title>
+<style>
+
+/* ---- IFP house theme (mirrors the shared stylesheet of the Surface Filtering Tool / Surface List Generator) ---- */
+:root{
+  --ifp-bg:#f5f7f9; --ifp-surface:#ffffff; --ifp-surface-2:#f7f9fb; --ifp-field:#ffffff;
+  --ifp-text:#1b2733; --ifp-navy:#002039;
+  --ifp-n400:#5b6b7a; --ifp-n500:#6f7f8d; --ifp-n600:#8a98a5; --ifp-n800:#e2e8ee; --ifp-n900:#eef2f5;
+  --ifp-line:#cfd8e0;
+  --ifp-accent:#0982C1; --ifp-accent-300:#0982C1; --ifp-accent-400:#076ca1; --ifp-accent-600:#0982C1; --ifp-accent-700:#0982C1; --ifp-accent-800:#e6f2f9; --ifp-accent-900:#eaf1f6;
+  --ifp-orange:#0982C1;
+  --ifp-ok:#1d7a46; --ifp-ok-bg:#e7f3ec; --ifp-warn:#9a6700; --ifp-warn-bg:#fbf3dc; --ifp-err:#b3261e; --ifp-err-bg:#fbe9e7;
+  --ifp-divider:rgba(27,39,51,.12);
+  --ifp-card:0 0 0 1px #e2e8ee,0 1px 2px rgba(0,32,57,.06),0 4px 16px rgba(0,32,57,.05);
+  --ifp-card-hover:0 0 0 1px #0982C1,0 2px 4px rgba(0,32,57,.08),0 10px 28px rgba(0,32,57,.10);
+  --ifp-bar-bg:#002039; --ifp-bar-text:#ffffff; --ifp-bar-muted:#a8bccb; --ifp-bar-line:rgba(255,255,255,.14);
+  --ifp-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --ifp-mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+}
+.ifp-bar{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 auto;padding:0 18px;
+  background:var(--ifp-bar-bg);color:var(--ifp-bar-text);font-family:var(--ifp-font);font-size:13px;line-height:1;position:relative;z-index:30}
+.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-bar-text);text-decoration:none;font-weight:600;font-size:15px}
+.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:#5fb6e6}
+.ifp-bar a.ifp-home:hover{color:#8fd0f3}
+.ifp-bar .ifp-sep{color:var(--ifp-bar-muted)}
+.ifp-bar .ifp-here{color:var(--ifp-bar-muted)}
+.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-bar-muted)}
+:focus-visible{outline:2px solid var(--ifp-accent);outline-offset:2px}
+
+
+:root{--ground:var(--ifp-bg);--panel:var(--ifp-surface);--ink:var(--ifp-text);--muted:var(--ifp-n400);--line:var(--ifp-n800);--accent:var(--ifp-accent);--bad:var(--ifp-err);--ok:var(--ifp-ok)}
+body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.45 var(--ifp-font)}
+.wrap{padding:16px;max-width:820px;margin-inline:auto}
+h1{font-size:20px;font-weight:600;color:var(--ifp-navy);margin:0 0 4px}h2{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-n500);margin:0 0 10px}
+p{color:var(--muted);margin:0 0 14px}a{color:var(--accent)}
+.wrap>div:first-child a{color:var(--accent)!important;border:1px solid var(--ifp-line)!important;border-radius:8px!important;padding:5px 12px!important;font-weight:500!important}
+section{background:var(--panel);border:0;box-shadow:var(--ifp-card);border-radius:8px;padding:14px 16px;margin-bottom:14px}
+input[type=password],input[type=file]{font:13px var(--ifp-mono);color:var(--ink);background:var(--ifp-field);border:1px solid var(--line);border-radius:8px;padding:6px 8px;width:100%;box-sizing:border-box}
+input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{font:500 13px var(--ifp-font);border:1px solid var(--ifp-line);background:var(--panel);color:var(--ifp-navy);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}button.primary:hover{background:var(--ifp-accent-400);border-color:var(--ifp-accent-400);color:#fff}button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;flex:1 1 120px}.bar i{display:block;height:100%;width:0;background:var(--accent)}
+pre{font:12px var(--ifp-mono);background:var(--ground);border:1px solid var(--line);border-radius:6px;padding:8px;max-height:280px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
+table{border-collapse:collapse;width:100%;font:12px var(--ifp-mono)}td,th{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+th{font-family:var(--ifp-font);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.stat{display:inline-block;margin-right:18px}.stat b{font-size:18px;display:block;color:var(--ifp-navy)}
+.err{color:var(--bad)}.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+<div class="ifp-bar">
+  <a class="ifp-home" href="https://trax-international-ltd.github.io/ifp-portal/"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,120v96a8,8,0,0,1-8,8H160a8,8,0,0,1-8-8V164a4,4,0,0,0-4-4H108a4,4,0,0,0-4,4v52a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V120a16,16,0,0,1,4.69-11.31l80-80a16,16,0,0,1,22.62,0l80,80A16,16,0,0,1,224,120Z"/></svg>IFP Portal</a>
+  <span class="ifp-sep">/</span>
+  <span class="ifp-here">Terrain Points</span>
+  <span class="ifp-kind">Library admin</span>
+</div>
+<div class="wrap">
+<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><h1 style="margin:0">Terrain library admin</h1><a href="/" style="margin-left:auto;font-weight:600;text-decoration:none;border:1px solid var(--line);border-radius:4px;padding:5px 10px">← Back to the tool</a></div>
+<p>Upload the OS Terrain 50 archive and the ALOS AW3D30 zips once; the tool at <a href="/">/</a> then fetches only the tiles each run needs.</p>
+
+<section>
+  <h2>Admin password</h2>
+  <input type="password" id="pw" placeholder="ADMIN_PASSWORD set on the Railway service" autocomplete="current-password">
+  <div class="row"><button class="primary" id="connect">Connect</button><span id="connMsg"></span></div>
+</section>
+
+<section id="lib" hidden>
+  <h2>Library</h2>
+  <span class="stat"><b id="nOs">0</b>OS Terrain 50 tiles</span><span class="stat"><b id="nAlos">0</b>ALOS tiles</span><span class="stat"><b id="free">–</b>free on volume</span>
+  <div class="row"><button id="reindex">Rebuild index</button><span id="updated"></span></div>
+</section>
+
+<section id="up" hidden>
+  <h2>Upload archives</h2>
+  <p>Accepted: <code>terr50_gagg_gb.zip</code> (OS Terrain 50 ASCII grid), ALOS AW3D30 zips (any packaging that contains <code>*_DSM.tif</code>), loose <code>.tif</code> / <code>.asc</code> tiles. Files are sent in 32 MB chunks so large archives survive proxy limits; keep this tab open until each one finishes.</p>
+  <input type="file" id="files" multiple>
+  <div class="row"><button class="primary" id="send">Upload</button><div class="bar"><i id="bar"></i></div><span id="upMsg"></span></div>
+</section>
+
+<section id="inc" hidden>
+  <h2>Uploaded, waiting to be ingested</h2>
+  <table><thead><tr><th>File</th><th>Size</th><th></th></tr></thead><tbody id="incoming"></tbody></table>
+  <div class="row"><button class="primary" id="ingest">Ingest all</button><span id="ingMsg"></span></div>
+  <pre id="log" hidden></pre>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+let pw = sessionStorage.getItem('tp-admin') || ''; $('pw').value = pw;
+const api = (method, url, body, raw) => fetch(url, { method, headers: Object.assign({ 'x-admin-password': pw }, raw ? {} : (body ? { 'content-type': 'application/json' } : {})), body: raw ? body : (body ? JSON.stringify(body) : undefined) }).then(async r => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || r.statusText); return j; });
+const fmtB = b => b == null ? '–' : b > 1e9 ? (b / 1e9).toFixed(2) + ' GB' : (b / 1e6).toFixed(1) + ' MB';
+let poll = null;
+async function status() {
+  const s = await api('GET', '/admin/status');
+  $('nOs').textContent = s.index.os.toLocaleString(); $('nAlos').textContent = s.index.alos.toLocaleString(); $('free').textContent = fmtB(s.freeBytes);
+  $('updated').textContent = s.index.updated ? 'index updated ' + s.index.updated.replace('T', ' ').slice(0, 19) : '';
+  $('incoming').innerHTML = s.incoming.map(f => '<tr><td>' + f.name + (f.partial ? ' <span class="err">(incomplete)</span>' : '') + '</td><td>' + fmtB(f.bytes) + '</td><td><button data-del="' + f.name + '">Delete</button></td></tr>').join('') || '<tr><td colspan="3">Nothing waiting.</td></tr>';
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { await api('DELETE', '/admin/incoming/' + encodeURIComponent(b.dataset.del)); status(); });
+  $('ingest').disabled = s.job.running || !s.incoming.some(f => !f.partial);
+  $('ingMsg').textContent = s.job.running ? 'Ingesting…' : '';
+  if (s.job.log.length) { $('log').hidden = false; $('log').textContent = s.job.log.join('\n'); $('log').scrollTop = 1e9; }
+  if (s.job.running && !poll) poll = setInterval(status, 2000);
+  if (!s.job.running && poll) { clearInterval(poll); poll = null; }
+}
+$('connect').onclick = async () => {
+  pw = $('pw').value; sessionStorage.setItem('tp-admin', pw);
+  try { await status(); $('connMsg').innerHTML = '<span class="ok">Connected</span>'; ['lib', 'up', 'inc'].forEach(i => $(i).hidden = false); }
+  catch (e) { $('connMsg').innerHTML = '<span class="err">' + e.message + '</span>'; }
+};
+$('reindex').onclick = async () => { await api('POST', '/admin/reindex'); status(); };
+$('send').onclick = async () => {
+  const files = Array.from($('files').files); if (!files.length) return;
+  const CH = 32 * 1024 * 1024; $('send').disabled = true;
+  try {
+    for (const f of files) {
+      const chunks = Math.ceil(f.size / CH);
+      for (let i = 0; i < chunks; i++) {
+        $('upMsg').textContent = f.name + ' · chunk ' + (i + 1) + '/' + chunks;
+        $('bar').style.width = (100 * (i + 1) / chunks).toFixed(1) + '%';
+        let ok = false, err;
+        for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+          try { await api('PUT', '/admin/upload?name=' + encodeURIComponent(f.name) + '&chunk=' + i + '&chunks=' + chunks, f.slice(i * CH, (i + 1) * CH), true); ok = true; }
+          catch (e) { err = e; await new Promise(r => setTimeout(r, 1500)); }
+        }
+        if (!ok) throw err;
+      }
+    }
+    $('upMsg').innerHTML = '<span class="ok">Uploaded. Now press Ingest all.</span>';
+  } catch (e) { $('upMsg').innerHTML = '<span class="err">' + e.message + '</span>'; }
+  $('send').disabled = false; status();
+};
+$('ingest').onclick = async () => {
+  const s = await api('GET', '/admin/status');
+  await api('POST', '/admin/ingest', { names: s.incoming.filter(f => !f.partial).map(f => f.name) });
+  status();
+};
+if (pw) $('connect').click();
+</script>
+</div>
+</body>
+</html>

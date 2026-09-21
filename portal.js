@@ -10,10 +10,16 @@ const PORTAL_CONFIG = {
 // to give it the orange rule; the rest use the neutral rule.
 const ANNOUNCEMENTS = [
   {
+    date: "21 Sep 2026",
+    title: "Terrain Points",
+    body: "Generate circular terrain obstacles from OS Terrain 50 or ALOS AW3D30 (served from the shared tile library) and export PDToolkit import CSVs.",
+    isLatest: true,
+  },
+  {
     date: "18 Sep 2026",
     title: "UK AIP to Map 3D",
     body: "Load the NATS AIP KML package, narrow it down by group, level band or radius, and export shapefiles, DXF, CSV or GeoJSON.",
-    isLatest: true,
+    
   },
   {
     date: "17 Sep 2026",
