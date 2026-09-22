@@ -2353,6 +2353,14 @@ function viewSidPage(r,d,procId){
             <th>Alt restriction (ft)</th><th>Computed alt (ft)</th><th>Actual alt (ft)</th>
             <th>PANS-OPS — AOB · IAS</th><th>CAP778 — AOB · IAS</th><th>C (m)</th><th></th></tr></thead>
           <tbody>${rows}</tbody></table></div>
+        ${(()=>{
+          if(!c) return "";
+          const cums=c.turns.map(t=>t.cum).filter(v=>v!=null);
+          if(!cums.length) return "";
+          const totM=cums[cums.length-1], totNM=totM/NM_M;
+          return `<p class="note" style="margin:8px 0 0"><b>Total track distance:</b>
+            <span class="mono">${totM.toFixed(2)} m · ${totNM.toFixed(2)} NM → <b>${Math.ceil(totNM-1e-9)} NM</b></span>
+            <span style="color:var(--muted)">(final cumulative from the DER, rounded UP to the whole NM)</span></p>`;})()}
         ${c&&c.cats&&c.cats.length?`
         ${(()=>{const bad=c.turns.filter(t=>t.perCat.some(p=>p.belowSpeed));
           if(!bad.length) return "";
