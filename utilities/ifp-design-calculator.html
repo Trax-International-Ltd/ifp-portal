@@ -387,6 +387,13 @@ const CRIT_DEFS=[
  {k:"sidAltRound",g:"SIDs",             label:"Round actual altitude UP to (ft)",def:100, note:"The climb-derived turn altitude is rounded UP to this increment (10, 100, …) before the constraints apply; enter 0 for no rounding. Explicit restriction values and the SID cap are used as entered."},
  {k:"sidWind", g:"SIDs",               label:"Wind (kt)",                       def:30,  note:"Added to TAS in the value C calculation."},
  {k:"sidMassF",g:"SIDs",               label:"Departure speed factor",          def:1.1, note:"PANS-OPS: MA speeds increased by 10% for departure mass — applied to both the default turn speed and the minimum."},
+ {k:"cioMocPct",g:"Close-in obstacles",   label:"MOC gradient (%)",               def:0.8, note:"MOC = this % of the distance flown (Dr, plus Do in turning areas)."},
+ {k:"cioMinMoc",g:"Close-in obstacles",   label:"Turning MOC — minimum (m)",      def:75,  note:"Clamp applied to turning-area MOC only; straight (AREA A) MOC is unclamped."},
+ {k:"cioMaxMoc",g:"Close-in obstacles",   label:"Turning MOC — maximum (m)",      def:300, note:""},
+ {k:"cioOis",   g:"Close-in obstacles",   label:"OIS gradient (%)",               def:2.5, note:"The 2.5% obstacle identification surface from the datum altitude (DER + 5 m)."},
+ {k:"cioCloseH",g:"Close-in obstacles",   label:"Close-in height above DER (m)",  def:60,  note:"An OIS-penetrating obstacle is CLOSE-IN when elevation + MOC − DER elevation is below this."},
+ {k:"cioDvfRad",g:"Close-in obstacles",   label:"DVF match search radius (m)",    def:150, note:"How far around a UK (DVF) obstacle to look for surveyed candidates in the eyeball check."},
+ {k:"cioAutoRad",g:"Close-in obstacles",  label:"DVF auto-match distance (m)",    def:1,   note:"A surveyed obstacle within this distance of a DVOF (UK) obstacle is matched automatically — no eyeball needed."},
  {k:"poBand1", g:"SID turns — AOB & speed", label:"PANS-OPS band 1 top (ft AMSL)", def:1000, note:"Nominal track only: 15° AOB up to here."},
  {k:"poBand2", g:"SID turns — AOB & speed", label:"PANS-OPS band 2 top (ft AMSL)", def:3000, note:"20° AOB between the bands; 25° above."},
  {k:"poAob1",  g:"SID turns — AOB & speed", label:"PANS-OPS AOB — band 1 (°)",         def:15,  note:""},
@@ -806,6 +813,11 @@ function buildChecks(d){
     }
     if(r.procsOn.length&&!r.catsOn.length)
       list.push({sev:"warn",msg:`RWY ${r.key}: procedures declared but no aircraft category selected`,go:"rwy:"+r.key});
+    if(r.cfg.cio&&r.cfg.cio.obs&&r.cfg.cio.obs.length){
+      const cc=cioCalc(r,d);
+      if(!cc.need)
+        list.push({sev:"ok",msg:`RWY ${r.key}: ${cc.list.length} close-in obstacle(s) identified · DVF review: ${cc.ukMatched} matched, ${cc.ukNoMatch} no-match${cc.ukManual?` (${cc.ukManual} manual)`:""}`,go:"cio:"+r.key});
+    }
   }
   return list;
 }
@@ -824,6 +836,7 @@ function go(view,rwy,proc,seg){
 function goCheck(target){
   if(!target) return;
   if(target.startsWith("proc:")){const [,rwy,pid]=target.split(":");go("proc",rwy,pid,"config");}
+  else if(target.startsWith("cio:")) go("cio",target.slice(4));
   else if(target.startsWith("rwy:")) go("rwy",target.slice(4));
   else go(target);
 }
@@ -840,6 +853,7 @@ function render(){
     case "points": m.innerHTML=viewPoints(d); wirePoints(); break;
     case "codes":  m.innerHTML=viewCodes(d);  wireCodes(); break;
     case "crit":   m.innerHTML=viewCrit();     wireCrit(); break;
+    case "cio":    m.innerHTML=viewCio(d,S.view.rwy); wireCio(); break;
     case "rwy":    m.innerHTML=viewRunway(d,S.view.rwy); wireRunway(); break;
     case "proc":   m.innerHTML=viewProc(d,S.view.rwy,S.view.proc,S.view.seg); wireProc(); break;
     default:       m.innerHTML=viewHub(d);    wireHub(); break;
@@ -852,6 +866,7 @@ function renderNav(d){
   const items=[["hub","Dashboard"]];
   const procLabel=id=>PROC_TYPES.find(([p])=>p===id)?.[1]||id;
   const pageNames={elev:"Aerodrome elevation",points:"Survey points",codes:"Survey codes",crit:"Design criteria"};
+  if(S.view.name==="cio") pageNames.cio=`RWY ${S.view.rwy} · Close-in obstacles`;
   let tail="";
   if(pageNames[S.view.name]) tail=`<a href="#" class="here">${pageNames[S.view.name]}</a>`;
   if(S.view.name==="rwy") tail=`<a href="#" class="here">RWY ${esc(S.view.rwy)}</a>`;
@@ -1207,7 +1222,223 @@ function viewRunway(d,key){
         ?`<div class="bd p0"><ul class="proc-list">${procRows}</ul></div>`
         :`<div class="bd"><p class="note" style="margin:0">Select procedure types above to create their workspaces.</p></div>`}
     </div>
+    <div class="card full">
+      <div class="hd">Departures — close-in obstacles<span class="right">once per runway end — shared by every SID</span></div>
+      <div class="bd p0"><ul class="proc-list">
+        <li><span class="nm">Close-in obstacles</span>
+            <span class="st">${(()=>{
+              const c=cioCalc(r,d);
+              if(c.need) return `import the PDToolkit XML and set the DER line — waiting for ${esc(c.need)}`;
+              return `${c.list.length} close-in obstacle(s) from ${c.total} assessed · DVF review: ${c.ukMatched} matched, ${c.ukNoMatch} no-match${c.ukManual?` (${c.ukManual} manual)`:""}`;})()}</span>
+            <button class="ghost" id="open-cio" style="margin-left:auto;padding:5px 16px">Open</button></li>
+      </ul></div>
+    </div>
   </div>`;
+}
+/* ---------- close-in obstacles page (per runway end) ---------- */
+function ensureCio(key){
+  const cfg=ensureCfg(key);
+  if(!cfg.cio) cfg.cio={obs:[],fileName:"",importedAt:"",matchObs:[],matchFile:"",matchAt:"",derLine:{},doSegs:[],derEle:"",dvf:{}};
+  cfg.cio.derLine=cfg.cio.derLine||{}; cfg.cio.dvf=cfg.cio.dvf||{}; cfg.cio.doSegs=cfg.cio.doSegs||[];
+  return cfg.cio;
+}
+/* AutoCAD LIST paste: pull every "X=…  Y=…" pair out of the text */
+function parseAcadPoints(text){
+  const pts=[]; const re=/X\s*=\s*(-?[\d.]+)\s*,?\s*Y\s*=\s*(-?[\d.]+)/g; let m;
+  while((m=re.exec(text))) pts.push({x:m[1],y:m[2]});
+  if(pts.length) return pts;
+  for(const ln of String(text).split(/\n+/)){    // fallback: plain coordinate pairs, one per line
+    const nums=ln.match(/-?\d+(?:\.\d+)?/g);
+    if(nums&&nums.length>=2&&Math.abs(Number(nums[0]))>1000) pts.push({x:nums[0],y:nums[1]});
+  }
+  return pts;
+}
+function viewCio(d,key){
+  const r=d.runways.find(x=>x.key===key);
+  if(!r) return `<div class="empty">Runway ${esc(key)} not found.</div>`;
+  const cio=r.cfg.cio||{obs:[],derLine:{},dvf:{}};
+  const c=cioCalc(r,d);
+  const dl=cio.derLine||{};
+  const inRow=(label,html2,comment)=>`<div class="row"><div class="k">${label}</div><div class="v in">${html2}</div><div class="c">${comment||""}</div></div>`;
+  const num=(f,v,w)=>`<input type="number" step="any" class="cio-in cell-in" data-f="${f}" value="${esc(v??"")}" style="width:${w||130}px">`;
+
+  const importCard=`
+    <div class="card">
+      <div class="hd">1 · PDToolkit XMLs<span class="right">${cio.obs&&cio.obs.length?`${cio.obs.length} assessed`:"nothing imported"}${cio.matchObs&&cio.matchObs.length?` · match set ${cio.matchObs.length}`:""}</span></div>
+      <div class="bd">
+        <p class="note" style="margin-top:0"><b>Assessment XML</b> — the NORMAL departure-splay run: this set alone drives the OIS,
+          close-in and gradient calculations, so containment is PDToolkit's own.
+          <b>DVOF match XML</b> (optional) — the ENLARGED (+50 m) run: used purely to find surveyed twins of DVOF obstacles for
+          the duplicate check; nothing in it is ever assessed. Re-importing either replaces that set; settings and review marks are kept.</p>
+        <input type="file" id="cio-file" accept=".xml" style="display:none">
+        <input type="file" id="cio-mfile" accept=".xml" style="display:none">
+        <button class="act" id="cio-import" style="padding:6px 16px">${cio.obs&&cio.obs.length?"Re-import assessment XML":"Import assessment XML"}</button>
+        <button class="ghost" id="cio-mimport" style="padding:6px 16px;margin-left:8px">${cio.matchObs&&cio.matchObs.length?"Re-import DVOF match XML":"Import DVOF match XML (optional)"}</button>
+        ${cio.fileName?`<div class="mono" style="margin-top:8px;font-size:12px;color:var(--muted)">assessment: ${esc(cio.fileName)} · ${esc((cio.importedAt||"").slice(0,16).replace("T"," "))}</div>`:""}
+        ${cio.matchFile?`<div class="mono" style="margin-top:2px;font-size:12px;color:var(--muted)">match set: ${esc(cio.matchFile)} · ${esc((cio.matchAt||"").slice(0,16).replace("T"," "))} · ${cio.matchObs.length} surveyed obstacle(s) beyond the assessment</div>`:""}
+      </div>
+    </div>`;
+
+  const setupCard=`
+    <div class="card">
+      <div class="hd">2 · DER line & datum</div>
+      <div class="bd">
+        <div class="kv compact" style="margin-bottom:8px">
+          ${inRow("DER line — start X / Y",num("derLine.x1",dl.x1,120)+" "+num("derLine.y1",dl.y1,120),"The splay origin line, grid coordinates.")}
+          ${inRow("DER line — end X / Y",num("derLine.x2",dl.x2,120)+" "+num("derLine.y2",dl.y2,120),"")}
+          ${inRow("Paste AutoCAD LIST output",`<textarea id="cio-acad" rows="2" style="width:100%;max-width:260px;font-family:var(--mono);font-size:11px;background:var(--input-y);border:1px solid var(--line)" placeholder="          at point  X=697863.1421  Y=5670763.7098  Z=   0.0000"></textarea>`,
+            "Paste the two DER-line vertices straight from AutoCAD — the X/Y pairs are read out for you.")}
+          ${inRow("DER elevation (m)",num("derEle",cio.derEle,100),
+            `Blank uses the SID datum: <b>${r.sid.elevM!=null?f3(r.sid.elevM):"—"}</b> m (${esc(r.sid.elevSrc)}). Datum altitude = DER + ${crit("sidDerH")} m.`)}
+        </div>
+        <p class="note" style="margin:0">PDG ${crit("sidPdg")}% · OIS ${crit("cioOis")}% · MOC ${crit("cioMocPct")}% of distance
+          (turning clamp ${crit("cioMinMoc")}–${crit("cioMaxMoc")} m) · close-in below ${crit("cioCloseH")} m above the DER —
+          all on the Design criteria page.</p>
+      </div>
+    </div>`;
+
+  let results="";
+  if(c.need){
+    results=`<div class="card full"><div class="hd">Assessment</div>
+      <div class="bd"><p class="note" style="margin:0">Waiting for: <b>${esc(c.need)}</b>.</p></div></div>`;
+  }else{
+    const P=crit("sidPdg");
+    const headline=c.highest<P/100
+      ?`Obstacle clearance: <b>&lt;${P}%</b> — no obstacle (excluding close-in) requires more than the standard PDG.`
+      :`Obstacle clearance: maintain minimum <b>${(c.highest*100).toFixed(2)}%</b> climb to <b>${c.govUntil!=null?c.govUntil:"—"} ft</b>.`;
+    const govRow=(g,label)=>g?`
+        <tr><td class="t">${label}</td><td class="num auto">${esc(g.id)}</td><td class="t">${esc(g.desc).slice(0,40)}</td>
+            <td class="num auto">${g.elevM.toFixed(2)}</td><td class="num auto">${g.moc.toFixed(2)}</td>
+            <td class="num auto">${(g.pdgReq*100).toFixed(2)}%</td><td class="num auto">${esc(g.latlong)}</td></tr>`:"";
+    const dvfOf=x=>(cio.dvf||{})[x.id]||{};
+    const listRows=c.list.map((x,i)=>{
+      const isUK=x.id.startsWith("UK"); const dv=dvfOf(x);
+      const effDup=dv.dup||(x.autoDup?x.autoDup.id:(x.autoNoMatch?"NO MATCH":""));
+      const cand=isUK?`
+        <select class="cio-dvf cell-in" data-id="${esc(x.id)}" style="width:150px;background:var(--input-y)">
+          <option value=""${!dv.dup?" selected":""}>${!dv.dup?(x.autoDup?"auto: "+esc(x.autoDup.id):"auto: no match"):"— review —"}</option>
+          <option value="NO MATCH"${dv.dup==="NO MATCH"?" selected":""}>no surveyed match</option>
+          ${(x.cands||[]).map(cd=>`<option value="${esc(cd.id)}"${dv.dup===cd.id?" selected":""}>${esc(cd.id)} · ${cd.dist.toFixed(1)} m · Δ${cd.dElev>=0?"+":""}${cd.dElev.toFixed(2)} m${cd.ext?" · match set":""}</option>`).join("")}
+        </select>`:"";
+      return `
+      <tr${isUK&&effDup&&effDup!=="NO MATCH"?' style="opacity:.55"':""}>
+        <td class="num auto">${i+1}</td>
+        <td class="num ${isUK?"in":"auto"}">${esc(x.id)}${isUK?`<div class="mono" style="font-size:10px;color:#B45309">DVF</div>`:""}</td>
+        <td class="t">${esc(x.desc)}</td>
+        <td class="num auto">${esc(x.latlong)}</td>
+        <td class="num auto"><b>${x.elevM.toFixed(2)}</b></td>
+        <td class="num auto">${(x.pdgReq*100).toFixed(2)}%</td>
+        <td class="num in">${cand}${isUK&&effDup?`<div class="mono" style="font-size:10px">${effDup==="NO MATCH"?`no surveyed match${!dv.dup?" (auto)":""}${x.cands&&x.cands.length&&!dv.dup?` — nearest ${x.cands[0].dist.toFixed(1)} m`:""}`:`duplicate of ${esc(effDup)}${!dv.dup&&x.autoDup?` — auto-matched (${x.autoDup.dist.toFixed(2)} m)`:""}`}</div>`:""}</td>
+        <td class="num in">${isUK?`<input type="text" class="cio-cmt cell-in" data-id="${esc(x.id)}" value="${esc(dv.comment??"")}" placeholder="comment" style="width:130px">`:""}</td>
+      </tr>`;}).join("");
+    results=`
+    <div class="card full">
+      <div class="hd">Assessment — ${c.total} obstacles<span class="right">${c.penCount} penetrate the OIS · ${c.ciCount} close-in before de-duplication</span></div>
+      <div class="bd">
+        <div class="verdict ${c.highest<P/100?"ok":"warn"}" style="margin-bottom:12px"><div class="word" style="font-size:15px">${headline}</div></div>
+        <div class="tbl-wrap auto-h"><table>
+          <thead><tr><th>Governing obstacle</th><th>ID</th><th>Description</th><th>Elev (m)</th><th>MOC (m)</th><th>PDG req</th><th>Lat/Long</th></tr></thead>
+          <tbody>
+            ${govRow(c.govCI,"Including close-in")}
+            ${govRow(c.gov,"Excluding close-in")}
+          </tbody></table></div>
+        ${c.incomplete?`<p class="note" style="color:#B91C1C">${c.incomplete} row(s) skipped — turning-area rows need the TNA (for the straight-area length) or DO datum segments.</p>`:""}
+        <div class="cfg-k" style="margin-top:12px">Obstacle lookup</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="cio-lookup" class="cell-in" value="${esc(S._cioLookup??"")}" placeholder="obstacle ID" style="width:180px;background:var(--input-y)">
+          <span class="mono" style="font-size:12px">${(()=>{
+            const q=String(S._cioLookup??"").trim(); if(!q) return "type an ID to see why an obstacle is (or is not) driving the assessment";
+            const hit=c.rows.find(x=>x.id===q);
+            if(hit) return `<b>${esc(q)}</b>: IN the splay · elev ${hit.elevM.toFixed(2)} m · Dr ${hit.dr.toFixed(2)} m · MOC ${hit.moc.toFixed(2)} m · PDG req ${(hit.pdgReq*100).toFixed(2)}% · ${hit.pen?"penetrates":"clears"} the OIS · close-in: ${hit.closeIn===true?"YES":hit.closeIn===false?"no":"n/a"}`;
+            const mx=(cio.matchObs||[]).find(o=>o.id===q);
+            if(mx) return `<b>${esc(q)}</b>: MATCH SET ONLY — captured by the enlarged export, not in the assessment. Never assessed; DVF candidate only (elev ${mx.elevM!=null?mx.elevM.toFixed(2):"—"} m).`;
+            const raw=(cio.obs||[]).find(o=>o.id===q);
+            if(raw) return `<b>${esc(q)}</b>: imported but not assessed — check the inputs above.`;
+            return `<b>${esc(q)}</b>: not in the assessment XML — if it appears only in the enlarged export it is a buffer capture and rightly excluded from the calculation.`;})()}</span>
+        </div>
+      </div>
+    </div>
+    <div class="card full">
+      <div class="hd">Close-in obstacles — de-duplicated<span class="right">${c.list.length} listed · ${c.autoRemoved} DVF removed at exact surveyed locations · DVF review: ${c.ukMatched} matched, ${c.ukNoMatch} no-match${c.ukManual?` (${c.ukManual} manual)`:""}</span></div>
+      <div class="bd">
+        <p class="note" style="margin-top:0">Duplicates removed on ID + lat/long; where a surveyed obstacle sits within ${crit("cioAutoRad")} m of a DVF (UK…)
+          obstacle they are matched automatically — the surveyed one is kept where it is itself close-in, otherwise the DVF
+          entry is marked as its duplicate without an eyeball check. Remaining <b>UK</b> rows are auto-decided: a surveyed obstacle within ${crit("cioAutoRad")} m is
+          matched, anything else defaults to "no surveyed match" — and the nearest surveyed candidates (within ${crit("cioDvfRad")} m,
+          with position and elevation differences, including surveyed obstacles from the enlarged DVOF match XML) stay in the
+          dropdown so every auto decision can be reviewed and overridden. Marked duplicates stay listed, greyed, for the record.</p>
+        <div class="tbl-wrap auto-h"><table>
+          <thead><tr><th>#</th><th>ID</th><th>Description</th><th>Lat/Long</th><th>Elev (m)</th><th>PDG req</th><th>Duplicate survey obs</th><th>Comments</th></tr></thead>
+          <tbody>${listRows}</tbody></table></div>
+      </div>
+    </div>`;
+  }
+  return `
+  <div class="ws-head">
+    <span class="rw">RWY ${esc(r.key)} — close-in obstacles</span>
+    <button class="ghost" id="back-rwy" style="padding:5px 14px">← Runway</button>
+  </div>
+  <div class="hub">${importCard}${setupCard}${results}</div>`;
+}
+function wireCio(){
+  const key=S.view.rwy;
+  document.getElementById("back-rwy").addEventListener("click",()=>go("rwy",key));
+  const setPath=(o,path,val)=>{const ks=path.split(".");for(let i=0;i<ks.length-1;i++){o[ks[i]]=o[ks[i]]||{};o=o[ks[i]];}o[ks[ks.length-1]]=val;};
+  document.querySelectorAll(".cio-in").forEach(inp=>inp.addEventListener("change",e=>{
+    setPath(ensureCio(key),e.target.dataset.f,e.target.value); render();}));
+  const acad=document.getElementById("cio-acad");
+  if(acad) acad.addEventListener("input",e=>{
+    const pts=parseAcadPoints(e.target.value);
+    if(pts.length>=2){
+      const cio=ensureCio(key);
+      cio.derLine={x1:pts[0].x,y1:pts[0].y,x2:pts[1].x,y2:pts[1].y};
+      render();
+    }});
+
+  const btn=document.getElementById("cio-import"), file=document.getElementById("cio-file");
+  if(btn&&file){
+    btn.addEventListener("click",()=>file.click());
+    file.addEventListener("change",e=>{
+      const f=e.target.files[0]; if(!f) return;
+      const reader=new FileReader();
+      reader.onload=()=>{
+        const obs=parseObstacleXml(String(reader.result));
+        if(!obs.length){ alert("No <Penetration> records found — is this a PDToolkit penetration XML?"); return; }
+        const cio=ensureCio(key);
+        cio.obs=obs; cio.fileName=f.name; cio.importedAt=new Date().toISOString();
+        cio.matchObs=trimMatchSet(cio.matchObs,cio.obs);   // assessment changed → re-trim the match extras
+        render();
+      };
+      reader.readAsText(f);
+    });
+  }
+  const mbtn=document.getElementById("cio-mimport"), mfile=document.getElementById("cio-mfile");
+  if(mbtn&&mfile){
+    mbtn.addEventListener("click",()=>mfile.click());
+    mfile.addEventListener("change",e=>{
+      const f=e.target.files[0]; if(!f) return;
+      const reader=new FileReader();
+      reader.onload=()=>{
+        const obs=parseObstacleXml(String(reader.result));
+        if(!obs.length){ alert("No <Penetration> records found — is this a PDToolkit penetration XML?"); return; }
+        const cio=ensureCio(key);
+        cio.matchObs=trimMatchSet(obs,cio.obs||[]);
+        cio.matchFile=f.name; cio.matchAt=new Date().toISOString();
+        render();
+      };
+      reader.readAsText(f);
+    });
+  }
+  document.querySelectorAll(".cio-dvf").forEach(sel=>sel.addEventListener("change",e=>{
+    const cio=ensureCio(key);
+    cio.dvf[e.target.dataset.id]=cio.dvf[e.target.dataset.id]||{};
+    cio.dvf[e.target.dataset.id].dup=e.target.value; render();}));
+  const lk=document.getElementById("cio-lookup");
+  if(lk) lk.addEventListener("change",e=>{S._cioLookup=e.target.value;render();});
+  document.querySelectorAll(".cio-cmt").forEach(inp=>inp.addEventListener("change",e=>{
+    const cio=ensureCio(key);
+    cio.dvf[e.target.dataset.id]=cio.dvf[e.target.dataset.id]||{};
+    cio.dvf[e.target.dataset.id].comment=e.target.value; render();}));
 }
 function wireRunway(){
   const key=S.view.rwy;
@@ -1219,6 +1450,8 @@ function wireRunway(){
     const pid=b.dataset.proc;
     go("proc",key,pid, APPROACH_IDS.includes(pid)?"final":"config");}));
   document.querySelectorAll(".rwy-jump").forEach(b=>b.addEventListener("click",()=>go("rwy",b.dataset.rwy)));
+  const oc=document.getElementById("open-cio");
+  if(oc) oc.addEventListener("click",()=>go("cio",key));
 }
 
 /* ---------- procedure workspace (per runway end, per procedure) ---------- */
@@ -1705,13 +1938,14 @@ function wireIlsAdv(key){
    Minimum turn altitude (TNA) defaults to aerodrome elevation + 500 ft.
    Minimum distance to the first turn: climb from 5 m above the DER elevation
    at 3.3% until reaching the TNA. Common to every SID on the runway end.     */
+const r2d=v=>v==null?null:Math.round(v*100)/100;   // work to the DISPLAYED 2 dp — the calculation must match what is on screen
 function sidCommonCalc(r,d){
   const sc=r.cfg.sidCommon||{};
-  const tnaDefault=d.operative!=null?d.operative/FT_M+crit("tnaAbove"):null;   // aerodrome m → published ft, + increment
-  const tna=safeNum(sc.tna)??tnaDefault;
+  const tnaDefault=d.operative!=null?r2d(d.operative/FT_M)+crit("tnaAbove"):null;   // PUBLISHED aerodrome ft (2 dp) + increment
+  const tna=r2d(safeNum(sc.tna))??tnaDefault;
   if(r.sid.elevM==null) return {need:"DER elevation (no TODA_END / TORA_END in the survey — enter it manually)",tna,tnaDefault};
   if(tna==null) return {need:"minimum turn altitude (no aerodrome elevation yet — enter the TNA manually)",tna,tnaDefault};
-  const originM=r.sid.elevM+crit("sidDerH");          // climb origin, METRES — surveyed DER + 5 m, no conversion
+  const originM=r2d(r.sid.elevM)+crit("sidDerH");     // climb origin, METRES — the 2 dp DER value + 5 m, as worked by hand
   const originFt=originM/FT_M;                        // published ft (Annex 5)
   if(!(tna*FT_M>originM)) return {need:"a TNA above the climb origin",tna,tnaDefault,originM,originFt};
   const distM=(tna*FT_M-originM)/(crit("sidPdg")/100);   // all in metres: (TNA m − origin m) ÷ gradient
@@ -1726,7 +1960,7 @@ function sidCalc(r,sid,minDistM){
   if(r.sid.elevM==null) return {need:"DER elevation"};
   const g=safeNum(sid.pdg)??crit("sidPdg");
   if(!(g>0)) return {need:"a valid climb gradient"};
-  const origin=(r.sid.elevM+crit("sidDerH"))/FT_M;   // (surveyed m + 5 m) → ft, since published altitudes are ft
+  const origin=(r2d(r.sid.elevM)+crit("sidDerH"))/FT_M;   // (2 dp DER m + 5 m) → ft, since published altitudes are ft
   const sidCats=CATS.filter(cat=>(sid.cats?sid.cats[cat]:r.cfg.cats[cat]));
   const ts=sid.turns||[];
   const rtype=t=>t.rtype||(String(t.restrict??"").trim()?"le":"none");  // older saves: a bare value meant at-or-below
@@ -1840,7 +2074,7 @@ function viewSidCommon(r,d){
         <div class="c">Standard procedure design gradient for the minimum-distance calculation.</div></div>
       <div class="row"><div class="k">Minimum distance to first turn (m)</div>
         <div class="v auto"><b>${c.distM.toFixed(2)}</b></div>
-        <div class="c">(TNA × 0.3048 − climb origin m) ÷ ${(crit("sidPdg")/100).toFixed(3)} — all metres, measured from the DER.</div></div>
+        <div class="c">(TNA × 0.3048 − climb origin m) ÷ ${(crit("sidPdg")/100).toFixed(3)} — all metres, measured from the DER; the inputs are taken at the displayed 2 dp.</div></div>
       <div class="row"><div class="k">Minimum distance to first turn (NM)</div>
         <div class="v auto"><b>${c.distNM.toFixed(2)}</b></div><div class="c"></div></div>`;
   return `
@@ -1877,6 +2111,177 @@ function wireSidCommon(key){
     cfg.sidCommon[e.target.dataset.f]=e.target.value;
     render();
   }));
+}
+/* ============ Close-in obstacles (departures) — per runway end ============
+   Ported from the close-in workbook (IDL-007-2), verified against its cached
+   values for all 1 789 rows of the EGKK RWY08L assessment:
+   Dr   = perpendicular distance from the DER line − obstacle radius (≥0)   [AREA A]
+        = the straight-area length (distance to reach the TNA at the PDG,
+          or the KK-line distance where entered)                            [turning]
+   Do   = 0 [AREA A]; min distance to the DO datum segments − radius (≥0)   [turning]
+   MOC  = 0.8% × Dr [AREA A] · clamp(0.8% × (Dr+Do), 75..300 m) [turning]
+   OIS height  = (Dr+Do) × 2.5% + datum altitude (DER + 5 m)
+   penetrates  = OIS height < obstacle elevation
+   PDG required = (elev + MOC − datum alt) ÷ (Dr+Do)
+   CLOSE-IN     = AREA A ∧ penetrates ∧ (elev + MOC − DER elev) < 60 m
+   Highest PDG  = max PDG required over NON-close-in rows; where >3.3% the
+   climb applies until ceil((PDG×t₂/(highest−PDG)+t₂) ÷ 0.3048, 100) ft.     */
+function parseObstacleXml(text){
+  const out=[]; const re=/<Penetration>([\s\S]*?)<\/Penetration>/g;
+  const tag=(s,t)=>{const m=s.match(new RegExp("<"+t+">([^<]*)<\\/"+t+">"));return m?m[1]:"";};
+  let m;
+  while((m=re.exec(text))){
+    const b=m[1];
+    const om=b.match(/<Obstacle>([\s\S]*?)<\/Obstacle>/); const o=om?om[1]:"";
+    out.push({surf:tag(b,"SurfaceDescription"),
+      penX:safeNum(tag(b,"PenetrationX")),penY:safeNum(tag(b,"PenetrationY")),
+      id:tag(o,"ID"),desc:tag(o,"Description"),
+      elevM:safeNum(tag(o,"ElevationMetres")),radM:safeNum(tag(o,"RadiusMetres"))??0,
+      latlong:tag(o,"LatLong"),
+      x:safeNum(tag(o,"X")),y:safeNum(tag(o,"Y")),survey:tag(o,"Survey")});
+  }
+  return out;
+}
+function cioDistToLine(x,y,L){        // perpendicular distance to the infinite DER line
+  const dx=L.x2-L.x1, dy=L.y2-L.y1, len=Math.hypot(dx,dy);
+  if(!(len>0)) return null;
+  return Math.abs(dy*(x-L.x1)-dx*(y-L.y1))/len;   // origin-shifted — avoids cancellation on large grid coordinates
+}
+/* keep only what the DVF check needs from the enlarged export: SURVEYED
+   obstacles beyond the assessment set, minimal fields */
+function trimMatchSet(matchObs,assessObs){
+  if(!matchObs||!matchObs.length) return [];
+  const have=new Set((assessObs||[]).map(o=>o.id+"|"+o.latlong));
+  const seen=new Set(); const out=[];
+  for(const o of matchObs){
+    if(String(o.id||"").startsWith("UK")) continue;          // DVOF never match DVOF
+    if(have.has(o.id+"|"+o.latlong)) continue;               // already in the assessment
+    if(seen.has(o.id)) continue;
+    seen.add(o.id);
+    out.push({id:o.id,desc:o.desc,elevM:o.elevM,x:o.x,y:o.y,latlong:o.latlong});
+  }
+  return out;
+}
+function cioPointInPoly(x,y,poly){          // ray casting
+  let inside=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const xi=poly[i].x,yi=poly[i].y,xj=poly[j].x,yj=poly[j].y;
+    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi)) inside=true;
+  }
+  return inside;
+}
+function cioDistToPoly(x,y,poly){
+  let d=Infinity;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++)
+    d=Math.min(d,cioDistToSeg(x,y,poly[j].x,poly[j].y,poly[i].x,poly[i].y));
+  return d;
+}
+function cioDistToSeg(x,y,x1,y1,x2,y2){
+  const A=x-x1,B=y-y1,C=x2-x1,D=y2-y1, len=C*C+D*D;
+  let t=len!==0?(A*C+B*D)/len:-1;
+  const xx=t<0?x1:t>1?x2:x1+t*C, yy=t<0?y1:t>1?y2:y1+t*D;
+  return Math.hypot(x-xx,y-yy);
+}
+function cioCalc(r,d){
+  const cio=r.cfg.cio||{};
+  if(!cio.obs||!cio.obs.length) return {need:"an imported PDToolkit penetration XML"};
+  const L=cio.derLine||{};
+  const line={x1:safeNum(L.x1),y1:safeNum(L.y1),x2:safeNum(L.x2),y2:safeNum(L.y2)};
+  if([line.x1,line.y1,line.x2,line.y2].some(v=>v==null)) return {need:"the DER line (two vertices)"};
+  const derEle=safeNum(cio.derEle)??r2d(r.sid.elevM);
+  if(derEle==null) return {need:"the DER elevation"};
+  const dAlt=derEle+crit("sidDerH");
+  const P=crit("sidPdg")/100, mocPct=crit("cioMocPct")/100, oisG=crit("cioOis")/100;
+  // straight-area length for turning rows: the climb-to-TNA distance
+  const sc=sidCommonCalc(r,d);
+  const drTurn=sc&&!sc.need?sc.distM:null;
+  /* TWO-XML model: cio.obs is the NORMAL (un-enlarged) PDToolkit assessment —
+     it alone drives every calculation, so containment is PDToolkit's own.
+     cio.matchObs is the optional ENLARGED export, kept purely as the DVF
+     match pool (surveyed obstacles only) — never assessed. */
+  const segs=(cio.doSegs||[]).map(s=>({x1:safeNum(s.x1),y1:safeNum(s.y1),x2:safeNum(s.x2),y2:safeNum(s.y2)}))
+              .filter(s=>[s.x1,s.y1,s.x2,s.y2].every(v=>v!=null));
+  const rows=cio.obs.map(o=>{
+    const isContour=String(o.desc||"").slice(0,7)==="Contour";
+    const xi=isContour?o.penX:o.x, yi=isContour?o.penY:o.y;
+    const isA=o.surf==="AREA A";
+    let dr=null,doM=null;
+    if(isA){ dr=Math.max(cioDistToLine(xi,yi,line)-o.radM,0); doM=0; }
+    else{
+      dr=drTurn;
+      doM=segs.length?Math.max(Math.min(...segs.map(s=>cioDistToSeg(xi,yi,s.x1,s.y1,s.x2,s.y2)))-o.radM,0):null;
+    }
+    if(dr==null||doM==null||o.elevM==null)
+      return {...o,xi,yi,incomplete:true};
+    // eslint-disable-next-line no-unused-vars
+    const dist=dr+doM;
+    const moc=isA?mocPct*dr:Math.min(Math.max(mocPct*dist,crit("cioMinMoc")),crit("cioMaxMoc"));
+    const ois=dist*oisG+dAlt;
+    const pen=ois<o.elevM;
+    const pdgReq=dist>0?((o.elevM+moc)-dAlt)/dist:0;
+    const closeIn=isA?(pen&&(o.elevM+moc-derEle)<crit("cioCloseH")):null;
+    return {...o,xi,yi,dr,doM,dist,moc,ois,pen,pdgReq,closeIn};
+  });
+  const usable=rows.filter(x=>!x.incomplete);
+  // highest PDG required over the NON-close-in rows, and its climb-until altitude
+  let gov=null;
+  for(const x of usable) if(x.closeIn!==true&&(gov===null||x.pdgReq>gov.pdgReq)) gov=x;
+  const highest=gov?gov.pdgReq:0;
+  let govUntil=null;
+  if(gov&&highest>P){
+    const t2=gov.elevM+gov.moc-dAlt-gov.dist*P, t3=highest-P;
+    govUntil=Math.ceil((P*(t2/t3)+t2)/FT_M/100)*100;
+  }
+  let govCI=null;   // governing including close-in
+  for(const x of usable) if(gov===null||x.pdgReq>(govCI?govCI.pdgReq:-1)) govCI=x;
+  // ---- close-in list: dedupe (id+latlong); same location keeps the surveyed obstacle ----
+  const ci=usable.filter(x=>x.closeIn===true);
+  const seen=new Set(), ded=[];
+  for(const x of ci){ const k=x.id+"|"+x.latlong; if(seen.has(k))continue; seen.add(k); ded.push(x); }
+  const byLoc=new Map();
+  for(const x of ded){ if(!byLoc.has(x.latlong))byLoc.set(x.latlong,[]); byLoc.get(x.latlong).push(x); }
+  const list=[]; let autoRemoved=0;
+  for(const xs of byLoc.values()){
+    const surveyed=xs.filter(x=>!x.id.startsWith("UK"));
+    if(surveyed.length&&surveyed.length<xs.length) autoRemoved+=xs.length-surveyed.length;
+    for(const x of (surveyed.length?surveyed:xs)) list.push(x);
+  }
+  // surveyed pool for matching: the assessment set plus the match-set extras
+  const surveyedAll=new Map();
+  for(const x of usable) if(!x.id.startsWith("UK")&&!surveyedAll.has(x.id)) surveyedAll.set(x.id,x);
+  for(const x of (cio.matchObs||[])) if(!surveyedAll.has(x.id)) surveyedAll.set(x.id,{...x,ext:true});
+  /* AUTO-MATCH: a surveyed obstacle within cioAutoRad (1 m) of a DVOF obstacle
+     is the same obstacle — the DVOF entry STAYS LISTED (the workbook removes
+     duplicates at exact locations only) but is marked as its duplicate
+     automatically, so no eyeball is needed. */
+  const autoRad=crit("cioAutoRad");
+  for(const x of list){
+    if(!x.id.startsWith("UK")) continue;
+    let best=null;
+    for(const s of surveyedAll.values()){
+      const dist=Math.hypot(s.x-x.x,s.y-x.y);
+      if(dist<=autoRad&&(best===null||dist<best.dist)) best={id:s.id,dist,buffer:!!s.buffer};
+    }
+    if(best) x.autoDup=best;
+  }
+  list.sort((a,b)=>b.elevM-a.elevM||String(a.id).localeCompare(String(b.id),undefined,{numeric:true}));
+  const rad=crit("cioDvfRad");
+  for(const x of list) if(x.id.startsWith("UK")){
+    x.cands=[...surveyedAll.values()]
+      .map(s=>({id:s.id,desc:s.desc,elevM:s.elevM,dist:Math.hypot(s.x-x.x,s.y-x.y),dElev:s.elevM-x.elevM,ext:!!s.ext}))
+      .filter(c=>c.dist<=rad).sort((a,b)=>a.dist-b.dist).slice(0,3);
+    if(!x.autoDup) x.autoNoMatch=true;   // nothing within the auto-match distance → NO MATCH by default, review optional
+  }
+  const effDup=x=>{const dv=(cio.dvf||{})[x.id]||{};return dv.dup||(x.autoDup?x.autoDup.id:(x.autoNoMatch?"NO MATCH":""));};
+  const ukRows=list.filter(x=>x.id.startsWith("UK"));
+  const ukMatched=ukRows.filter(x=>effDup(x)&&effDup(x)!=="NO MATCH").length;
+  const ukNoMatch=ukRows.filter(x=>effDup(x)==="NO MATCH").length;
+  const ukManual=ukRows.filter(x=>((cio.dvf||{})[x.id]||{}).dup).length;
+  const ukOpen=0;
+  return {rows:usable,total:rows.length,matchExtra:(cio.matchObs||[]).length,
+          incomplete:rows.length-usable.length,
+          penCount:usable.filter(x=>x.pen).length,ciCount:ci.length,
+          list,autoRemoved,gov,govCI,highest,govUntil,dAlt,derEle,drTurn,ukOpen,ukMatched,ukNoMatch,ukManual};
 }
 /* The SID page: the common datum block, then this type's SIDs.
    Results render only after Calculate — the constraint logic reads the whole
@@ -2393,6 +2798,34 @@ async function exportCaaWorkbook(){
       ws.getCell(r2,9).font={size:9,name:"Arial",bold:true};
       ws.getCell(r2,15).font={size:9,name:"Arial",bold:true};
       r2++;
+    }
+  }
+
+  /* ---- Close_In_Obstacles (per runway end, where assessed) ---- */
+  {
+    const withCio=d.runways.filter(rw=>{const c=rw.cfg.cio;return c&&c.obs&&c.obs.length;});
+    if(withCio.length){
+      const ws=wb.addWorksheet("Close_In_Obstacles");
+      titleCell(ws,"A1","CLOSE-IN OBSTACLES — DEPARTURES, PER RUNWAY END");
+      ws.getCell("A2").value=`From the PDToolkit departure-splay assessment. Close-in: penetrates the ${crit("cioOis")}% OIS and (elevation + MOC − DER elevation) < ${crit("cioCloseH")} m. De-duplicated on ID + lat/long; at identical positions the surveyed obstacle is kept. DVF (UK…) rows show the designer's eyeball match against surveyed obstacles.`;
+      ws.getCell("A2").font={italic:true,size:9,name:"Arial"};
+      const cols=["Runway","ID","Description","Lat/Long","Elevation_m","PDG_required","Duplicate_survey_obs","Comments"];
+      ws.columns=[{width:9},{width:15},{width:42},{width:26},{width:12},{width:12},{width:20},{width:30}];
+      const hd=ws.getRow(4); hd.values=cols; styleHeaderRow(hd);
+      let r2=5;
+      for(const rw of withCio){
+        const c=cioCalc(rw,d);
+        if(c.need) continue;
+        for(const x of c.list){
+          const dv=(rw.cfg.cio.dvf||{})[x.id]||{};
+          const vals=[rw.key,x.id,x.desc,x.latlong,x.elevM,x.pdgReq,
+                      x.id.startsWith("UK")?(dv.dup||(x.autoDup?`${x.autoDup.id} (auto ${x.autoDup.dist.toFixed(2)} m)`:"NO MATCH (auto)")):"",dv.comment||""];
+          vals.forEach((v,i)=>{const cell=ws.getCell(r2,i+1);cell.value=v;
+            dataCell(cell,i>=6?"in":"auto",i===4?"0.00":i===5?"0.00%":null);});
+
+          r2++;
+        }
+      }
     }
   }
 
