@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#002039">
+<title>DVOF Duplicate Filter</title>
+<style>
+
+/* ---- IFP house theme (mirrors the shared stylesheet of the Surface Filtering Tool / Surface List Generator) ---- */
+:root{
+  --ifp-bg:#f5f7f9; --ifp-surface:#ffffff; --ifp-surface-2:#f7f9fb; --ifp-field:#ffffff;
+  --ifp-text:#1b2733; --ifp-navy:#002039;
+  --ifp-n400:#5b6b7a; --ifp-n500:#6f7f8d; --ifp-n600:#8a98a5; --ifp-n800:#e2e8ee; --ifp-n900:#eef2f5;
+  --ifp-line:#cfd8e0;
+  --ifp-accent:#0982C1; --ifp-accent-300:#0982C1; --ifp-accent-400:#076ca1; --ifp-accent-600:#0982C1; --ifp-accent-700:#0982C1; --ifp-accent-800:#e6f2f9; --ifp-accent-900:#eaf1f6;
+  --ifp-orange:#0982C1;
+  --ifp-ok:#1d7a46; --ifp-ok-bg:#e7f3ec; --ifp-warn:#9a6700; --ifp-warn-bg:#fbf3dc; --ifp-err:#b3261e; --ifp-err-bg:#fbe9e7;
+  --ifp-divider:rgba(27,39,51,.12);
+  --ifp-card:0 0 0 1px #e2e8ee,0 1px 2px rgba(0,32,57,.06),0 4px 16px rgba(0,32,57,.05);
+  --ifp-card-hover:0 0 0 1px #0982C1,0 2px 4px rgba(0,32,57,.08),0 10px 28px rgba(0,32,57,.10);
+  --ifp-bar-bg:#002039; --ifp-bar-text:#ffffff; --ifp-bar-muted:#a8bccb; --ifp-bar-line:rgba(255,255,255,.14);
+  --ifp-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --ifp-mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+}
+.ifp-bar{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 auto;padding:0 18px;
+  background:var(--ifp-bar-bg);color:var(--ifp-bar-text);font-family:var(--ifp-font);font-size:13px;line-height:1;position:relative;z-index:30}
+.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:var(--ifp-bar-text);text-decoration:none;font-weight:600;font-size:15px}
+.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:#5fb6e6}
+.ifp-bar a.ifp-home:hover{color:#8fd0f3}
+.ifp-bar .ifp-sep{color:var(--ifp-bar-muted)}
+.ifp-bar .ifp-here{color:var(--ifp-bar-muted)}
+.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ifp-bar-muted)}
+:focus-visible{outline:2px solid var(--ifp-accent);outline-offset:2px}
+
+
+:root{
+  --ground:var(--ifp-bg); --surface:var(--ifp-surface); --sunk:var(--ifp-surface-2); --ink:var(--ifp-text); --muted:var(--ifp-n400); --line:var(--ifp-n800);
+  --cap:#0E766E; --dvof:#7D8B95; --dup:#B01F66; --near:#B7701A; --focus:var(--ifp-accent);
+  --dup-soft:rgba(176,31,102,.10); --cap-soft:rgba(14,118,110,.10);
+  --f-head:var(--ifp-font);
+  --f-body:var(--ifp-font);
+  --f-mono:var(--ifp-mono);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.5 var(--f-body);padding-inline:16px;padding-block:0 40px}
+.ifp-bar{margin-bottom:20px}
+.wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{font-family:var(--f-head);font-weight:600;margin:0;text-wrap:balance}
+h1{font-size:22px;line-height:1.15;letter-spacing:-.01em;color:var(--ifp-navy)}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--ifp-n500);font-weight:600}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px;border-bottom:1px solid var(--line);padding-bottom:14px}
+header.top p{margin:4px 0 0;color:var(--muted);max-width:70ch}
+.tag{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:340px minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:0;box-shadow:var(--ifp-card);border-radius:8px}
+.side{display:flex;flex-direction:column}
+.side section{padding:16px;display:flex;flex-direction:column;gap:12px}
+.side section + section{border-top:1px solid var(--line)}
+/* file slots */
+.slot{border:1px dashed var(--ifp-line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:6px;cursor:pointer;background:var(--ground);transition:border-color .15s,background .15s}
+.slot:hover,.slot.over{border-color:var(--ifp-accent);background:var(--ifp-accent-800)}
+.slot:focus-within{outline:2px solid var(--focus);outline-offset:2px}
+.slot.loaded{border-style:solid;border-color:var(--ifp-line);background:var(--surface)}
+.slot .kind{display:flex;align-items:center;gap:8px;font-family:var(--f-head);font-weight:600;font-size:14px;color:var(--ifp-navy)}
+.swatch{width:10px;height:10px;flex:none}
+.swatch.cap{background:var(--cap)}
+.swatch.dvof{background:var(--dvof);border-radius:50%}
+.swatch.dup{border:2px solid var(--dup);border-radius:50%;width:12px;height:12px}
+.swatch.near{background:var(--near);border-radius:50%}
+.slot .fname{font-family:var(--f-mono);font-size:12px;word-break:break-all}
+.slot .meta{font-size:12px;color:var(--muted)}
+.slot .err{font-size:12px;color:var(--ifp-err)}
+.slot input{position:absolute;width:1px;height:1px;opacity:0}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+.row{display:flex;gap:10px;align-items:center}
+input[type=number],select,input[type=search]{font:inherit;color:var(--ink);background:var(--ifp-field);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:0}
+input[type=number]:hover,select:hover,input[type=search]:hover{border-color:var(--ifp-line)}
+input[type=number]{width:84px;font-family:var(--f-mono)}
+input[type=range]{flex:1;accent-color:var(--ifp-accent);min-width:0}
+select{width:100%}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.unit{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--ink)}
+.check input{margin-top:3px;accent-color:var(--ifp-accent)}
+.hint{font-size:12px;color:var(--muted);margin:0}
+button{font:inherit;cursor:pointer}
+.btn{background:var(--ifp-accent);color:#fff;border:1px solid var(--ifp-accent);border-radius:8px;padding:9px 14px;font-weight:600;font-family:var(--f-head);font-size:14px}
+.btn:hover{background:var(--ifp-accent-400);border-color:var(--ifp-accent-400)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--ifp-navy);border:1px solid var(--ifp-line);font-size:13px;font-weight:500;padding:6px 12px}
+.btn.ghost:hover{background:transparent;border-color:var(--ifp-accent);color:var(--ifp-accent)}
+.files{list-style:none;margin:0;padding:0;font-family:var(--f-mono);font-size:11.5px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+.files li{word-break:break-all}
+.files a{color:var(--ifp-accent)}
+.status{font-size:12.5px;min-height:1.2em;margin:0}
+.status.bad{color:var(--ifp-err)}
+/* results */
+.main{display:flex;flex-direction:column;gap:18px;min-width:0}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;padding:0}
+@media (max-width:700px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stat{padding:12px 14px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--line)}
+.stat:last-child{border-right:0}
+@media (max-width:700px){.stat{border-bottom:1px solid var(--line)}}
+.stat .k{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.stat .v{font-family:var(--f-mono);font-size:22px;font-weight:500;color:var(--ifp-navy);font-variant-numeric:tabular-nums}
+.stat.hl .v{color:var(--dup)}
+.card{padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.mapbox{position:relative;height:460px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--sunk);touch-action:none}
+@media (max-width:600px){.mapbox{height:340px}}
+canvas#map{width:100%;height:100%;display:block;cursor:grab}
+canvas#map.drag{cursor:grabbing}
+.empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--muted);pointer-events:none}
+.empty div{max-width:42ch}
+.empty strong{display:block;font-family:var(--f-head);font-size:17px;font-weight:600;color:var(--ifp-navy);margin-bottom:6px}
+.mapctl{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:4px}
+.mapctl button{width:30px;height:30px;border:0;background:var(--surface);color:var(--ifp-navy);border-radius:8px;font-family:var(--f-mono);font-size:15px;line-height:1;box-shadow:var(--ifp-card)}
+.mapctl button:hover{color:var(--ifp-accent)}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:0;border-radius:8px;padding:7px 9px;font-size:12px;max-width:280px;box-shadow:0 0 0 1px var(--ifp-n800),0 6px 18px rgba(0,32,57,.14);z-index:2}
+.tip b{font-family:var(--f-head);font-weight:600}
+.tip .mono{font-size:11.5px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.two{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}
+svg#hist{width:100%;height:auto;display:block}
+svg#hist text{font-family:var(--f-mono);font-size:10px;fill:var(--muted)}
+/* table */
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:5px 12px;font-size:13px}
+.tabs button:hover{border-color:var(--ifp-accent);color:var(--ifp-accent)}
+.tabs button[aria-selected=true]{background:var(--ifp-navy);color:#fff;border-color:var(--ifp-navy)}
+.tablewrap{overflow-x:auto;max-height:440px;overflow-y:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:6px 9px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--ifp-navy);color:#fff;font-weight:600;font-size:11.5px;letter-spacing:.04em;z-index:1}
+td.num,th.num{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+td.desc{white-space:normal;min-width:180px;max-width:280px}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--dup-soft)}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:11px;padding:1px 6px;border-radius:4px}
+.pill.up{background:var(--dup-soft);color:var(--dup)}
+.foot{font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="ifp-bar" style="margin-inline:-16px">
+  <a class="ifp-home" href="../index.html"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,120v96a8,8,0,0,1-8,8H160a8,8,0,0,1-8-8V164a4,4,0,0,0-4-4H108a4,4,0,0,0-4,4v52a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V120a16,16,0,0,1,4.69-11.31l80-80a16,16,0,0,1,22.62,0l80,80A16,16,0,0,1,224,120Z"/></svg>IFP Portal</a>
+  <span class="ifp-sep">/</span>
+  <span class="ifp-here">DVOF Duplicate Filter</span>
+  <span class="ifp-kind">Utility</span>
+</div>
+
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>DVOF Duplicate Filter</h1>
+      <p>Strip DVOF obstacles that duplicate a CAP1732 surveyed obstacle, within a horizontal and height tolerance. The CAP1732 survey is never altered. Outputs are PDToolkit-ready .pds files.</p>
+    </div>
+    <span class="tag" id="modeTag">All processing runs in your browser. No data leaves this page.</span>
+  </header>
+
+  <div class="grid">
+    <aside class="panel side">
+      <section>
+        <h2>Datasets</h2>
+        <label class="slot" id="slotCap" for="fileCap">
+          <span class="kind"><span class="swatch cap"></span>CAP1732 survey <span class="unit">.csv</span></span>
+          <span class="fname" id="capName">Drop or choose the surveyed obstacle CSV</span>
+          <span class="meta" id="capMeta">Keeps all records. Used as the reference.</span>
+          <span class="err" id="capErr" hidden></span>
+          <input type="file" id="fileCap" accept=".csv,.txt">
+        </label>
+        <label class="slot" id="slotDvof" for="fileDvof">
+          <span class="kind"><span class="swatch dvof"></span>DVOF extract <span class="unit">.pds</span></span>
+          <span class="fname" id="dvofName">Drop or choose the DVOF PDToolkit file</span>
+          <span class="meta" id="dvofMeta">Duplicates are removed from this set only.</span>
+          <span class="err" id="dvofErr" hidden></span>
+          <input type="file" id="fileDvof" accept=".pds,.txt">
+        </label>
+      </section>
+
+      <section>
+        <h2>Tolerance</h2>
+        <label class="f" for="hTol">Horizontal separation
+          <span class="row"><input type="range" id="hRange" min="0" max="200" step="1" value="50" aria-label="Horizontal tolerance slider"><input type="number" id="hTol" min="0" max="2000" step="0.5" value="50"><span class="unit">m</span></span>
+        </label>
+        <label class="f" for="vMode">Height check (DVOF elevation vs CAP1732 orthometric height)
+          <select id="vMode">
+            <option value="upper" selected>Remove only if DVOF isn't higher than survey + tolerance</option>
+            <option value="abs">Remove only if height difference is within ± tolerance</option>
+            <option value="off">Off. Horizontal distance only</option>
+          </select>
+        </label>
+        <label class="f" for="vTol" id="vTolWrap">Height tolerance
+          <span class="row"><input type="number" id="vTol" min="0" max="500" step="0.5" value="10"><span class="unit">m</span></span>
+        </label>
+        <p class="hint" id="vHint">A DVOF obstacle recorded much taller than the surveyed one nearby is kept, so a height isn't lost by the filter.</p>
+      </section>
+
+      <section>
+        <h2>Output</h2>
+        <label class="check" for="optTag"><input type="checkbox" id="optTag" checked><span>Add the matched CAP1732 record and separation to each duplicate's Description</span></label>
+        <label class="check" for="optCap"><input type="checkbox" id="optCap" checked><span>Include the CAP1732 survey converted to .pds</span></label>
+        <button class="btn" id="btnZip" disabled>Download results (.zip)</button>
+        <ul class="files" id="fileList"></ul>
+        <p class="status" id="status" role="status"></p>
+      </section>
+    </aside>
+
+    <main class="main">
+      <div class="panel stats" aria-label="Summary">
+        <div class="stat"><span class="k"><span class="swatch cap"></span>CAP1732 obstacles</span><span class="v" id="sCap">–</span></div>
+        <div class="stat"><span class="k"><span class="swatch dvof"></span>DVOF obstacles</span><span class="v" id="sDvof">–</span></div>
+        <div class="stat hl"><span class="k"><span class="swatch dup"></span>Duplicates removed</span><span class="v" id="sDup">–</span></div>
+        <div class="stat"><span class="k">DVOF retained</span><span class="v" id="sKeep">–</span></div>
+        <div class="stat"><span class="k"><span class="swatch near"></span>Kept on height</span><span class="v" id="sNear">–</span></div>
+      </div>
+
+      <div class="panel card">
+        <div class="card-head">
+          <h2>Plot</h2>
+          <div class="legend">
+            <span><span class="swatch cap"></span>CAP1732</span>
+            <span><span class="swatch dvof"></span>DVOF retained</span>
+            <span><span class="swatch dup"></span>DVOF duplicate</span>
+            <span><span class="swatch near"></span>In range, kept on height</span>
+          </div>
+        </div>
+        <div class="mapbox" id="mapbox">
+          <canvas id="map" aria-label="Plot of CAP1732 and DVOF obstacles"></canvas>
+          <div class="empty" id="mapEmpty"><div><strong>Load both datasets to begin</strong>Drop the CAP1732 CSV and the DVOF .pds on the left. Either file can go in either box; the tool works out which is which.</div></div>
+          <div class="mapctl" id="mapctl" hidden>
+            <button id="zIn" aria-label="Zoom in">+</button>
+            <button id="zOut" aria-label="Zoom out">−</button>
+            <button id="zFit" aria-label="Fit to survey" title="Fit to survey">⤢</button>
+          </div>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+        <p class="foot">Scroll to zoom, drag to pan. Tolerance rings appear around CAP1732 obstacles when zoomed in. Click a table row to jump to it.</p>
+      </div>
+
+      <div class="panel card">
+        <div class="card-head"><h2>Nearest CAP1732 obstacle to each DVOF obstacle</h2><span class="tag" id="histNote"></span></div>
+        <svg id="hist" viewBox="0 0 640 170" role="img" aria-label="Histogram of separation distances"></svg>
+        <p class="foot">Distances 0–200 m in 5 m bins, log count. Genuine duplicates cluster near zero; the tail is unrelated neighbours. Set the tolerance where the cluster ends. Magenta bars fall inside the horizontal tolerance.</p>
+      </div>
+
+      <div class="panel card">
+        <div class="card-head">
+          <div class="tabs" role="tablist">
+            <button role="tab" id="tabDup" aria-selected="true">Duplicates removed</button>
+            <button role="tab" id="tabNear" aria-selected="false">Kept on height check</button>
+          </div>
+          <input type="search" id="q" placeholder="Filter by ID or description" aria-label="Filter table">
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr>
+              <th>DVOF ID</th><th>DVOF description</th><th class="num">DVOF elev m</th>
+              <th>CAP1732 record</th><th>CAP1732 feature</th><th class="num">CAP elev m</th>
+              <th class="num">Separation m</th><th class="num">Δ height m</th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <p class="foot" id="tableFoot">Δ height is DVOF elevation minus CAP1732 orthometric height; positive means DVOF records it higher.</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const R = 6371008.8, RAD = Math.PI / 180;
+const S = { cap: null, dvof: null, res: null, nearest: null, tab: 'dup', proj: null, view: null };
+
+/* ---------- parsing helpers ---------- */
+function csvLine(s) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) { if (c === '"') { if (s[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur); return out;
+}
+// Packed DMS like 555212.1235N / 0042530.1860W, or decimal degrees
+function parsePacked(s) {
+  s = String(s || '').trim().toUpperCase(); if (!s) return NaN;
+  const m = s.match(/^([NSEW])?\s*([+-]?[0-9]+(?:\.[0-9]*)?)\s*([NSEW])?$/); if (!m) return NaN;
+  const hem = m[1] || m[3] || ''; let num = m[2]; let neg = num.startsWith('-'); num = num.replace(/^[+-]/, '');
+  const [ip, fp = ''] = num.split('.'); let v;
+  if (ip.length >= 5) { const d = +ip.slice(0, -4), mi = +ip.slice(-4, -2), se = +(ip.slice(-2) + '.' + (fp || '0')); if (mi >= 60 || se >= 60) return NaN; v = d + mi / 60 + se / 3600; }
+  else v = parseFloat(num);
+  if (hem === 'S' || hem === 'W') neg = true;
+  return neg ? -v : v;
+}
+// PDToolkit "55:25:5.2300" / "-5:-37:-43.6500"
+function parseColonDms(s) {
+  const p = String(s).trim().split(':'); if (p.length !== 3) return parseFloat(s);
+  const neg = p.some(x => x.trim().startsWith('-'));
+  const v = Math.abs(parseFloat(p[0])) + Math.abs(parseFloat(p[1])) / 60 + Math.abs(parseFloat(p[2])) / 3600;
+  return neg ? -v : v;
+}
+function fmtColonDms(v) {
+  const neg = v < 0; let a = Math.abs(v);
+  let d = Math.floor(a), mf = (a - d) * 60, m = Math.floor(mf), s = (mf - m) * 60;
+  s = Math.round(s * 10000) / 10000;
+  if (s >= 60) { s -= 60; m++; } if (m >= 60) { m -= 60; d++; }
+  const sg = x => (neg && x !== 0 ? '-' : '');
+  return `${sg(d)}${d}:${sg(m)}${m}:${sg(s)}${s.toFixed(4)}`;
+}
+function parseLen(s) { // "63.7032m" | "209ft" | "63.7"
+  const m = String(s || '').trim().match(/^([+-]?[0-9.eE+-]+)\s*(m|ft)?$/i); if (!m) return NaN;
+  const v = parseFloat(m[1]); return (m[2] && m[2].toLowerCase() === 'ft') ? v * 0.3048 : v;
+}
+
+function parseCap(text) {
+  const lines = text.split(/\r?\n/); const meta = {}; let hi = -1;
+  for (let i = 0; i < Math.min(lines.length, 200); i++) {
+    const cells = csvLine(lines[i]); const up = cells.map(c => c.trim().toUpperCase());
+    if (up.includes('LATITUDE') && up.includes('LONGITUDE')) { hi = i; break; }
+    const m = (cells[0] || '').match(/^\s*([A-Za-z0-9 ]+?)\s*:\s*(.*)$/); if (m) meta[m[1]] = m[2].trim();
+  }
+  if (hi < 0) throw new Error('No column header row found. The CSV needs LATITUDE and LONGITUDE columns.');
+  const H = csvLine(lines[hi]).map(c => c.trim().toUpperCase()); const c = n => H.indexOf(n);
+  const ix = { lat: c('LATITUDE'), lon: c('LONGITUDE'), orth: c('ORTHOMETRIC HEIGHT (M)'), orthFt: c('ORTHOMETRIC HEIGHT (FT)'),
+    type: c('TYPE OF FEATURE'), ident: c('IDENTIFICATION'), rid: c('RECORD IDENTIFIER'), lit: c('LIT OR UNLIT'),
+    hacc: c('HORIZONTAL ACCURACY (M)'), date: c('SURVEY DATE'), agl: c('HEIGHT ABOVE GROUND LEVEL (M)'), site: c('SITE NAME') };
+  if (ix.orth < 0 && ix.orthFt < 0) throw new Error('No ORTHOMETRIC HEIGHT (M) column found.');
+  const recs = []; let skipped = 0;
+  for (let i = hi + 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const f = csvLine(lines[i]); const g = k => ix[k] >= 0 ? (f[ix[k]] || '').trim() : '';
+    const lat = parsePacked(g('lat')), lon = parsePacked(g('lon'));
+    let el = parseFloat(g('orth')); if (!isFinite(el) && ix.orthFt >= 0) el = parseFloat(g('orthFt')) * 0.3048;
+    if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || !isFinite(el)) { skipped++; continue; }
+    recs.push({ i: recs.length, lat, lon, el, type: g('type'), ident: g('ident'), rid: g('rid') || String(recs.length + 1),
+      lit: g('lit'), hacc: parseFloat(g('hacc')), date: g('date'), agl: parseFloat(g('agl')), site: g('site') });
+  }
+  if (!recs.length) throw new Error('No obstacle rows with valid coordinates and heights.');
+  const ad = meta.AerodromeIdent || (recs[0].site) || 'CAP1732';
+  return { recs, meta, skipped, ad };
+}
+
+function parsePds(text) {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const endsEol = /\r?\n$/.test(text);
+  const lines = text.replace(/\r?\n$/, '').split(/\r?\n/);
+  if (!lines.some(l => l.startsWith('pdtInputObstacle'))) throw new Error('No pdtInputObstacle records found. Is this a PDToolkit .pds file?');
+  const chunks = []; let cur = [];
+  for (const ln of lines) { if (ln.trim() === 'draw') { chunks.push(cur); cur = []; } else cur.push(ln); }
+  const trailer = cur.some(l => l.trim()) ? cur : [];
+  let header = [];
+  if (chunks.length) {
+    const first = chunks[0]; const k = first.findIndex(l => l.split('\t')[1] === 'Obstacle ID');
+    if (k > 0) { header = first.slice(0, k); chunks[0] = first.slice(k); }
+    else if (k < 0 && first[0] && !first[0].includes('\t')) { header = [first[0]]; chunks[0] = first.slice(1); }
+  }
+  const recs = []; let unparsed = 0;
+  for (const ch of chunks) {
+    if (!ch.length) continue;
+    const r = { i: recs.length, lines: ch, id: '', uid: '', desc: '', el: NaN, lat: NaN, lon: NaN };
+    for (const ln of ch) {
+      const f = ln.split('\t'); if (f.length < 3) continue; const key = f[1], val = f.slice(2).join('\t');
+      if (key === 'Obstacle ID') r.id = val; else if (key === 'Unique ID') r.uid = val; else if (key === 'Description') r.desc = val;
+      else if (key === 'Elevation') r.el = parseLen(val);
+      else if (key === 'Position') { const [a, b] = val.split(','); r.lat = parseColonDms(a); r.lon = parseColonDms(b); }
+    }
+    if (!isFinite(r.lat) || !isFinite(r.lon)) unparsed++;
+    recs.push(r);
+  }
+  return { recs, header, trailer, eol, endsEol, unparsed };
+}
+
+/* ---------- matching ---------- */
+function makeIndex(pts, cell, lat0) {
+  const dLat = cell / (R * RAD), dLon = cell / (R * RAD * Math.cos(lat0 * RAD)); const map = new Map();
+  for (const p of pts) { const k = Math.floor(p.lat / dLat) + ',' + Math.floor(p.lon / dLon); let a = map.get(k); if (!a) map.set(k, a = []); a.push(p); }
+  return { map, dLat, dLon };
+}
+function around(ix, lat, lon) {
+  const i = Math.floor(lat / ix.dLat), j = Math.floor(lon / ix.dLon); const out = [];
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const v = ix.map.get((i + a) + ',' + (j + b)); if (v) for (const p of v) out.push(p); }
+  return out;
+}
+function dist(a, b) {
+  const x = (b.lon - a.lon) * RAD * Math.cos((a.lat + b.lat) / 2 * RAD), y = (b.lat - a.lat) * RAD;
+  return R * Math.hypot(x, y);
+}
+function capLat0() { const r = S.cap.recs; return r.reduce((s, p) => s + p.lat, 0) / r.length; }
+
+function computeNearest() { // nearest CAP within 200 m, for the histogram
+  const lat0 = capLat0(); const ix = makeIndex(S.cap.recs, 200, lat0); const out = [];
+  for (const d of S.dvof.recs) {
+    if (!isFinite(d.lat)) continue; let best = Infinity;
+    for (const c of around(ix, d.lat, d.lon)) { const m = dist(d, c); if (m < best) best = m; }
+    if (best <= 200) out.push(best);
+  }
+  S.nearest = out;
+}
+
+function settings() {
+  return { h: Math.max(0, parseFloat($('hTol').value) || 0), mode: $('vMode').value, v: Math.max(0, parseFloat($('vTol').value) || 0) };
+}
+function passes(dz, st) { if (st.mode === 'off') return true; if (!isFinite(dz)) return false; return st.mode === 'abs' ? Math.abs(dz) <= st.v : dz <= st.v; }
+function vRuleText(st) {
+  if (st.mode === 'off') return 'Height check off (horizontal only)';
+  return st.mode === 'abs' ? `|DVOF - CAP1732| <= ${st.v} m` : `DVOF elevation <= CAP1732 height + ${st.v} m`;
+}
+
+function runMatch() {
+  if (!S.cap || !S.dvof) return;
+  const st = settings(); const lat0 = capLat0();
+  const ix = makeIndex(S.cap.recs, Math.max(st.h, 1), lat0);
+  const dup = [], near = [], dupSet = new Set(), nearSet = new Set();
+  for (const d of S.dvof.recs) {
+    if (!isFinite(d.lat)) continue;
+    const cands = [];
+    for (const c of around(ix, d.lat, d.lon)) { const m = dist(d, c); if (m <= st.h) cands.push({ c, m }); }
+    if (!cands.length) continue;
+    cands.sort((a, b) => a.m - b.m);
+    const hit = cands.find(o => passes(d.el - o.c.el, st));
+    if (hit) { dup.push({ d, c: hit.c, m: hit.m, dz: d.el - hit.c.el }); dupSet.add(d.i); }
+    else { const o = cands[0]; near.push({ d, c: o.c, m: o.m, dz: d.el - o.c.el }); nearSet.add(d.i); }
+  }
+  S.res = { st, dup, near, dupSet, nearSet };
+  renderStats(); renderHist(); renderTable(); draw(); renderFileList();
+}
+
+/* ---------- outputs ---------- */
+const f3 = v => isFinite(v) ? (Math.round(v * 1000) / 1000).toString() : '';
+function baseName(n) { return n.replace(/\.[^.]+$/, '').replace(/[^\w.-]+/g, '_'); }
+function outNames() {
+  const b = baseName(S.dvof.name), ad = (S.cap.ad || 'CAP1732').replace(/[^\w-]+/g, '_');
+  return { clean: `${b}_${ad}_deduplicated.pds`, dups: `${b}_${ad}_duplicates.pds`, cap: `${ad}_CAP1732.pds`, report: `${ad}_DVOF_match_report.csv`, readme: `${ad}_README.txt`, zip: `${ad}_DVOF_dedupe.zip` };
+}
+function buildPds(recs, linesOf) {
+  const P = S.dvof; const out = [...P.header];
+  for (const r of recs) { for (const l of linesOf(r)) out.push(l); out.push('draw'); }
+  for (const l of P.trailer) out.push(l);
+  return out.join(P.eol) + (P.endsEol ? P.eol : '');
+}
+function cleanPds() { const ds = S.res.dupSet; return buildPds(S.dvof.recs.filter(r => !ds.has(r.i)), r => r.lines); }
+function dupPds() {
+  const tag = $('optTag').checked; const byI = new Map(S.res.dup.map(x => [x.d.i, x]));
+  const recs = S.dvof.recs.filter(r => byI.has(r.i));
+  return buildPds(recs, r => {
+    if (!tag) return r.lines;
+    const x = byI.get(r.i); const note = ` [DUPLICATE OF CAP1732 ${x.c.rid} ${x.c.ident || x.c.type} @ ${x.m.toFixed(1)}m, dH ${x.dz >= 0 ? '+' : ''}${x.dz.toFixed(1)}m]`;
+    let done = false; const L = r.lines.map(l => { const f = l.split('\t'); if (!done && f[1] === 'Description') { done = true; return l + note; } return l; });
+    if (!done) { const k = Math.max(0, L.findIndex(l => l.split('\t')[1] === 'Unique ID')) + 1; L.splice(k, 0, 'pdtInputObstacle\tDescription\t' + note.trim()); }
+    return L;
+  });
+}
+function uuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+  const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+function capPds() {
+  const C = S.cap; const eol = S.dvof ? S.dvof.eol : '\r\n'; const ad = C.ad;
+  const out = ['pdtPANSOPS'];
+  for (const c of C.recs) {
+    const dm = c.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); const date = dm ? `${dm[2].padStart(2, '0')}/${dm[1].padStart(2, '0')}/${dm[3]}` : c.date;
+    const lit = /^(Y|YES|LIT)$/i.test(c.lit) ? 'Yes' : 'No';
+    const veg = /TREE|VEGETATION|HEDGE|WOOD/i.test(c.type + ' ' + c.ident) ? 'Yes' : 'No';
+    const pe = isFinite(c.hacc) && c.hacc > 0 ? c.hacc : 1;
+    const P = 'pdtInputObstacle\t';
+    out.push(P + 'Obstacle ID\t' + `${ad}-${c.rid}`, P + 'Unique ID\t{' + uuid() + '}',
+      P + 'Description\t' + `CAP1732 ${[c.type, c.ident].filter(Boolean).join(' - ')}`,
+      P + 'Elevation\t' + f3(c.el) + 'm', P + 'Position\t' + fmtColonDms(c.lat) + ', ' + fmtColonDms(c.lon),
+      P + 'Position Error (radius)\t' + f3(pe) + 'm', P + 'Lit\t' + lit, P + 'Vegetation\t' + veg);
+    if (date) out.push(P + 'Survey Date\t' + date);
+    out.push('draw');
+  }
+  return out.join(eol) + eol;
+}
+function csvCell(v) { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+function reportCsv() {
+  const st = S.res.st;
+  const head = ['Status', 'DVOF Obstacle ID', 'DVOF Unique ID', 'DVOF Description', 'DVOF Lat', 'DVOF Lon', 'DVOF Elevation (m)',
+    'CAP1732 Record ID', 'CAP1732 Type', 'CAP1732 Identification', 'CAP1732 Lat', 'CAP1732 Lon', 'CAP1732 Orthometric Height (m)',
+    'Horizontal Separation (m)', 'Height Difference DVOF-CAP (m)', 'Horizontal Tolerance (m)', 'Height Rule'];
+  const rows = [head.join(',')];
+  const add = (x, status) => rows.push([status, x.d.id, x.d.uid, x.d.desc, x.d.lat.toFixed(7), x.d.lon.toFixed(7), f3(x.d.el), x.c.rid, x.c.type, x.c.ident,
+    x.c.lat.toFixed(7), x.c.lon.toFixed(7), f3(x.c.el), x.m.toFixed(2), isFinite(x.dz) ? x.dz.toFixed(2) : '', st.h, vRuleText(st)].map(csvCell).join(','));
+  S.res.dup.forEach(x => add(x, 'REMOVED - DUPLICATE'));
+  S.res.near.forEach(x => add(x, 'RETAINED - FAILED HEIGHT CHECK'));
+  return rows.join('\r\n') + '\r\n';
+}
+function readme(n) {
+  const st = S.res.st, P = S.dvof, C = S.cap;
+  const kept = P.recs.length - S.res.dup.length;
+  return [
+    'DVOF duplicate filter - run record', '',
+    'Generated: ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC', '',
+    'Inputs',
+    '  CAP1732 survey : ' + C.name + ' (' + C.recs.length + ' obstacles' + (C.skipped ? ', ' + C.skipped + ' rows skipped - no valid position/height' : '') + ')',
+    '    Aerodrome    : ' + C.ad + (C.meta.SurveyProcessDate ? '   Survey processed: ' + C.meta.SurveyProcessDate : '') + (C.meta.DataOriginatorCompany ? '   Originator: ' + C.meta.DataOriginatorCompany : ''),
+    '  DVOF extract   : ' + P.name + ' (' + P.recs.length + ' obstacles' + (P.unparsed ? ', ' + P.unparsed + ' without a readable position - retained' : '') + ')', '',
+    'Rule',
+    '  A DVOF obstacle is a duplicate when a CAP1732 obstacle lies within ' + st.h + ' m horizontally',
+    '  and ' + vRuleText(st) + '.',
+    '  Heights compared: DVOF Elevation (AMSL) vs CAP1732 Orthometric Height (m).',
+    '  Only DVOF obstacles are removed. CAP1732 records are never altered.', '',
+    'Results',
+    '  Duplicates removed            : ' + S.res.dup.length,
+    '  DVOF retained                 : ' + kept,
+    '  Within range, kept on height  : ' + S.res.near.length, '',
+    'Files',
+    '  ' + n.clean + '  - DVOF with duplicates removed (import into PDToolkit)',
+    '  ' + n.dups + '  - the removed DVOF obstacles, as evidence',
+    $('optCap').checked ? '  ' + n.cap + '  - CAP1732 survey converted to PDToolkit format' : null,
+    '  ' + n.report + '  - every match with separation and height difference', ''
+  ].filter(l => l !== null).join('\r\n');
+}
+function outputs() {
+  const n = outNames(); const files = [
+    { name: n.clean, data: cleanPds() }, { name: n.dups, data: dupPds() }];
+  if ($('optCap').checked) files.push({ name: n.cap, data: capPds() });
+  files.push({ name: n.report, data: reportCsv() }, { name: n.readme, data: readme(n) });
+  return { n, files };
+}
+/* zip (stored, no compression) */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u) { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = CRC[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0; const d = new Date();
+  const tm = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), dt = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  for (const f of files) {
+    const name = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+    h.setUint16(10, tm, true); h.setUint16(12, dt, true); h.setUint32(14, crc, true); h.setUint32(18, data.length, true); h.setUint32(22, data.length, true);
+    h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+    parts.push(h.buffer, name, data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true);
+    c.setUint16(12, tm, true); c.setUint16(14, dt, true); c.setUint32(16, crc, true); c.setUint32(20, data.length, true); c.setUint32(24, data.length, true);
+    c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+    cen.push(c.buffer, name); off += 30 + name.length + data.length;
+  }
+  const csz = cen.reduce((s, p) => s + p.byteLength, 0); const e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, csz, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...cen, e.buffer], { type: 'application/zip' });
+}
+
+/* download routing: hosted page → downloads capability (zip only); standalone file → direct links */
+const standalone = !window.claude;
+let dlPromise = standalone ? Promise.resolve(null) : (window.claude.use ? window.claude.use('downloads') : Promise.resolve(null));
+if (standalone) $('modeTag').textContent = 'Standalone copy. All processing runs locally in your browser.';
+function anchorSave(name, blob) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function setStatus(t, bad) { const s = $('status'); s.textContent = t; s.classList.toggle('bad', !!bad); }
+$('btnZip').addEventListener('click', async () => {
+  if (!S.res) return;
+  const { n, files } = outputs(); const blob = makeZip(files);
+  if (standalone) { anchorSave(n.zip, blob); setStatus('Saved ' + n.zip); return; }
+  const dl = await dlPromise;
+  if (!dl) { setStatus('Downloads aren\'t available in this view. Use the standalone copy of the tool instead.', true); return; }
+  try { await dl.save({ filename: n.zip, data: blob }); setStatus('Saved ' + n.zip); }
+  catch (e) {
+    const c = e && e.code;
+    if (c === 'declined') setStatus('Download cancelled.');
+    else if (c === 'rate_limited') setStatus('A save prompt is already open. Finish that one first.', true);
+    else if (c === 'extension_not_enabled') setStatus('.zip downloads are switched off in this view. Use the standalone copy of the tool.', true);
+    else setStatus('Download failed (' + (c || 'unknown') + '). Use the standalone copy of the tool.', true);
+  }
+});
+function renderFileList() {
+  const ul = $('fileList'); ul.textContent = '';
+  if (!S.res) return; const n = outNames();
+  const items = [[n.clean, 'clean'], [n.dups, 'dups']]; if ($('optCap').checked) items.push([n.cap, 'cap']); items.push([n.report, 'report'], [n.readme, 'readme']);
+  for (const [name, key] of items) {
+    const li = document.createElement('li');
+    if (standalone) {
+      const a = document.createElement('a'); a.href = '#'; a.textContent = name;
+      a.addEventListener('click', ev => { ev.preventDefault(); const f = outputs().files.find(x => x.name === name); anchorSave(name, new Blob([f.data], { type: 'text/plain' })); });
+      li.appendChild(a);
+    } else li.textContent = name;
+    ul.appendChild(li);
+  }
+  $('btnZip').disabled = false;
+}
+
+/* ---------- file loading ---------- */
+function sniff(text) { return /(^|\n)pdtInputObstacle\t/.test(text.slice(0, 20000)) || text.startsWith('pdtPANSOPS') ? 'dvof' : 'cap'; }
+function showErr(which, msg) { const e = $(which + 'Err'); e.textContent = msg || ''; e.hidden = !msg; }
+function loadFile(file) {
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    const text = String(fr.result); const kind = sniff(text);
+    try {
+      if (kind === 'dvof') {
+        const P = parsePds(text); P.name = file.name; S.dvof = P; showErr('dvof');
+        $('dvofName').textContent = file.name;
+        $('dvofMeta').textContent = `${P.recs.length.toLocaleString()} obstacles` + (P.unparsed ? ` · ${P.unparsed} without position (kept)` : '');
+        $('slotDvof').classList.add('loaded');
+      } else {
+        const C = parseCap(text); C.name = file.name; S.cap = C; showErr('cap');
+        $('capName').textContent = file.name;
+        $('capMeta').textContent = `${C.recs.length.toLocaleString()} obstacles · ${C.ad}` + (C.meta.CoordinateSystem ? ` · ${C.meta.EarthReferenceModel || ''}` : '') + (C.skipped ? ` · ${C.skipped} rows skipped` : '');
+        $('slotCap').classList.add('loaded');
+      }
+    } catch (err) { showErr(kind, err.message); return; }
+    onData();
+  };
+  fr.onerror = () => showErr('cap', 'Could not read that file.');
+  fr.readAsText(file);
+}
+for (const [slot, input] of [['slotCap', 'fileCap'], ['slotDvof', 'fileDvof']]) {
+  const el = $(slot);
+  $(input).addEventListener('change', e => { for (const f of e.target.files) loadFile(f); e.target.value = ''; });
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('over'); for (const f of e.dataTransfer.files) loadFile(f); });
+}
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => { e.preventDefault(); for (const f of e.dataTransfer.files) loadFile(f); });
+
+function onData() {
+  $('sCap').textContent = S.cap ? S.cap.recs.length.toLocaleString() : '–';
+  $('sDvof').textContent = S.dvof ? S.dvof.recs.length.toLocaleString() : '–';
+  setupProjection(); fitView();
+  if (S.cap && S.dvof) { computeNearest(); runMatch(); }
+  else draw();
+}
+
+/* ---------- settings wiring ---------- */
+let t = 0; const rerun = () => { clearTimeout(t); t = setTimeout(runMatch, 60); };
+$('hRange').addEventListener('input', e => { $('hTol').value = e.target.value; rerun(); });
+$('hTol').addEventListener('input', e => { $('hRange').value = Math.min(200, +e.target.value || 0); rerun(); });
+$('vTol').addEventListener('input', rerun);
+$('vMode').addEventListener('change', () => {
+  const m = $('vMode').value; $('vTolWrap').hidden = m === 'off';
+  $('vHint').textContent = m === 'upper' ? 'A DVOF obstacle recorded much taller than the surveyed one nearby is kept, so a height isn\'t lost by the filter.'
+    : m === 'abs' ? 'Both heights must agree within the tolerance, whichever is higher.' : 'Any DVOF obstacle inside the horizontal tolerance is removed, whatever its height.';
+  rerun();
+});
+$('optTag').addEventListener('change', renderFileList);
+$('optCap').addEventListener('change', renderFileList);
+
+/* ---------- stats / histogram / table ---------- */
+function renderStats() {
+  const r = S.res; $('sDup').textContent = r.dup.length.toLocaleString();
+  $('sKeep').textContent = (S.dvof.recs.length - r.dup.length).toLocaleString();
+  $('sNear').textContent = r.near.length.toLocaleString();
+}
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function renderHist() {
+  const svg = $('hist'); if (!S.nearest) { svg.innerHTML = ''; return; }
+  const W = 640, H = 170, L = 40, Rt = 10, T = 8, B = 24, bw = 5, nb = 40; const bins = new Array(nb).fill(0);
+  for (const d of S.nearest) bins[Math.min(nb - 1, Math.floor(d / bw))]++;
+  const mx = Math.max(10, ...bins); const top = Math.pow(10, Math.ceil(Math.log10(mx)));
+  const y = v => v <= 0 ? H - B : (H - B) - (Math.log10(v + 1) / Math.log10(top + 1)) * (H - B - T);
+  const x = d => L + (d / 200) * (W - L - Rt); const tol = S.res.st.h;
+  let s = '';
+  for (let p = 1; p <= top; p *= 10) s += `<line x1="${L}" x2="${W - Rt}" y1="${y(p)}" y2="${y(p)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${y(p) + 3}" text-anchor="end">${p}</text>`;
+  bins.forEach((c, i) => {
+    if (!c) return; const x0 = x(i * bw) + 0.75, x1 = x((i + 1) * bw) - 0.75; const inside = (i + 1) * bw <= tol + 1e-9 || (i * bw < tol);
+    s += `<rect x="${x0}" y="${y(c)}" width="${Math.max(1, x1 - x0)}" height="${(H - B) - y(c)}" fill="${inside ? 'var(--dup)' : 'var(--dvof)'}"><title>${i * bw}–${(i + 1) * bw} m: ${c}</title></rect>`;
+  });
+  s += `<line x1="${L}" x2="${W - Rt}" y1="${H - B}" y2="${H - B}" stroke="var(--muted)" stroke-width="1"/>`;
+  for (let d = 0; d <= 200; d += 25) s += `<line x1="${x(d)}" x2="${x(d)}" y1="${H - B}" y2="${H - B + 4}" stroke="var(--muted)"/><text x="${x(d)}" y="${H - 8}" text-anchor="middle">${d}${d === 200 ? ' m' : ''}</text>`;
+  if (tol <= 200) s += `<line x1="${x(tol)}" x2="${x(tol)}" y1="${T}" y2="${H - B}" stroke="var(--ink)" stroke-dasharray="3 3"/><text x="${Math.min(x(tol) + 4, W - 60)}" y="${T + 10}" text-anchor="start" style="fill:var(--ink)">${tol} m</text>`;
+  svg.innerHTML = s;
+  $('histNote').textContent = `${S.nearest.length.toLocaleString()} DVOF obstacles within 200 m of the survey`;
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function renderTable() {
+  if (!S.res) return; const list = S.tab === 'dup' ? S.res.dup : S.res.near; const q = $('q').value.trim().toLowerCase();
+  const rows = q ? list.filter(x => (x.d.id + ' ' + x.d.desc + ' ' + x.c.rid + ' ' + x.c.type + ' ' + x.c.ident).toLowerCase().includes(q)) : list;
+  const sorted = rows.slice().sort((a, b) => a.m - b.m); const LIM = 600; const show = sorted.slice(0, LIM);
+  $('tbody').innerHTML = show.map((x, k) => {
+    const up = x.dz > (S.res.st.mode === 'off' ? Infinity : S.res.st.v) ? ' up' : '';
+    return `<tr data-k="${k}"><td class="mono">${esc(x.d.id)}</td><td class="desc">${esc(x.d.desc)}</td><td class="num">${x.d.el.toFixed(1)}</td>` +
+      `<td class="mono">${esc(x.c.rid)}</td><td>${esc([x.c.type, x.c.ident].filter(Boolean).join(' · '))}</td><td class="num">${x.c.el.toFixed(1)}</td>` +
+      `<td class="num">${x.m.toFixed(1)}</td><td class="num"><span class="pill${up}">${x.dz >= 0 ? '+' : ''}${x.dz.toFixed(1)}</span></td></tr>`;
+  }).join('') || `<tr><td colspan="8" class="foot">${list.length ? 'No rows match the filter.' : S.tab === 'dup' ? 'No duplicates at these settings.' : 'No DVOF obstacles were kept on the height check.'}</td></tr>`;
+  $('tbody').onclick = e => { const tr = e.target.closest('tr[data-k]'); if (!tr) return; const x = show[+tr.dataset.k]; focusOn(x); };
+  $('tableFoot').textContent = (sorted.length > LIM ? `Showing the ${LIM} closest of ${sorted.length.toLocaleString()}. All are in the report CSV. ` : '') +
+    'Δ height is DVOF elevation minus CAP1732 orthometric height; positive means DVOF records it higher.';
+}
+for (const [id, tab] of [['tabDup', 'dup'], ['tabNear', 'near']]) $(id).addEventListener('click', () => {
+  S.tab = tab; $('tabDup').setAttribute('aria-selected', tab === 'dup'); $('tabNear').setAttribute('aria-selected', tab === 'near'); renderTable();
+});
+$('q').addEventListener('input', renderTable);
+
+/* ---------- map ---------- */
+const cv = $('map'), ctx = cv.getContext('2d'); let W = 0, H = 0, dpr = 1;
+function setupProjection() {
+  const src = S.cap ? S.cap.recs : S.dvof ? S.dvof.recs.filter(r => isFinite(r.lat)) : null;
+  if (!src || !src.length) { S.proj = null; return; }
+  const lat0 = src.reduce((s, p) => s + p.lat, 0) / src.length, lon0 = src.reduce((s, p) => s + p.lon, 0) / src.length;
+  const kx = R * RAD * Math.cos(lat0 * RAD), ky = R * RAD; S.proj = { lat0, lon0, kx, ky };
+  const pj = p => { p.x = (p.lon - lon0) * kx; p.y = (p.lat - lat0) * ky; };
+  if (S.cap) S.cap.recs.forEach(pj); if (S.dvof) S.dvof.recs.forEach(r => { if (isFinite(r.lat)) pj(r); });
+}
+function fitView() {
+  if (!S.proj) return; const src = S.cap ? S.cap.recs : S.dvof.recs.filter(r => isFinite(r.lat));
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const p of src) { if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x; if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y; }
+  const w = Math.max(200, x1 - x0), h = Math.max(200, y1 - y0);
+  S.view = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, s: Math.min((W || 600) / (w * 1.1), (H || 400) / (h * 1.1)) };
+}
+function resize() { const b = $('mapbox').getBoundingClientRect(); dpr = window.devicePixelRatio || 1; W = b.width; H = b.height; cv.width = W * dpr; cv.height = H * dpr; draw(); }
+new ResizeObserver(() => { const had = W; resize(); if (!had && S.proj) { fitView(); draw(); } }).observe($('mapbox'));
+const sx = x => W / 2 + (x - S.view.cx) * S.view.s, sy = y => H / 2 - (y - S.view.cy) * S.view.s;
+let raf = 0; function draw() { cancelAnimationFrame(raf); raf = requestAnimationFrame(paint); }
+function paint() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  const has = !!S.proj && !!S.view; $('mapEmpty').hidden = !!(S.cap && S.dvof); $('mapctl').hidden = !has; if (!has) return;
+  const col = { cap: css('--cap'), dvof: css('--dvof'), dup: css('--dup'), near: css('--near'), ink: css('--ink'), muted: css('--muted') };
+  const s = S.view.s, pad = 20, vis = p => { const X = sx(p.x), Y = sy(p.y); return X > -pad && X < W + pad && Y > -pad && Y < H + pad; };
+  const zoomed = s > 0.12; const ds = S.res ? S.res.dupSet : null, ns = S.res ? S.res.nearSet : null;
+  // tolerance rings
+  if (S.res && S.cap && S.res.st.h * s >= 5) {
+    ctx.strokeStyle = col.cap; ctx.globalAlpha = .35; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    for (const c of S.cap.recs) if (vis(c)) { ctx.beginPath(); ctx.arc(sx(c.x), sy(c.y), S.res.st.h * s, 0, 7); ctx.stroke(); }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
+  // DVOF retained
+  if (S.dvof) {
+    ctx.fillStyle = col.dvof; const r = zoomed ? 2.6 : 1.5;
+    for (const d of S.dvof.recs) if (isFinite(d.lat) && !(ds && ds.has(d.i)) && !(ns && ns.has(d.i)) && vis(d)) { ctx.beginPath(); ctx.arc(sx(d.x), sy(d.y), r, 0, 7); ctx.fill(); }
+  }
+  // CAP squares
+  if (S.cap) { ctx.fillStyle = col.cap; const h = zoomed ? 3 : 1.6; for (const c of S.cap.recs) if (vis(c)) ctx.fillRect(sx(c.x) - h, sy(c.y) - h, h * 2, h * 2); }
+  if (S.res) {
+    // links
+    if (zoomed) { ctx.lineWidth = 1; ctx.strokeStyle = col.dup; ctx.globalAlpha = .7;
+      for (const x of S.res.dup) if (vis(x.d)) { ctx.beginPath(); ctx.moveTo(sx(x.d.x), sy(x.d.y)); ctx.lineTo(sx(x.c.x), sy(x.c.y)); ctx.stroke(); }
+      ctx.globalAlpha = 1; }
+    ctx.fillStyle = col.near; for (const x of S.res.near) if (vis(x.d)) { ctx.beginPath(); ctx.arc(sx(x.d.x), sy(x.d.y), zoomed ? 3.5 : 2.2, 0, 7); ctx.fill(); }
+    ctx.strokeStyle = col.dup; ctx.lineWidth = zoomed ? 2 : 1.4;
+    for (const x of S.res.dup) if (vis(x.d)) { ctx.beginPath(); ctx.arc(sx(x.d.x), sy(x.d.y), zoomed ? 5.5 : 3.2, 0, 7); ctx.stroke(); }
+  }
+  if (S.focus) { ctx.strokeStyle = col.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sx(S.focus.x), sy(S.focus.y), 12, 0, 7); ctx.stroke(); }
+  // scale bar
+  const target = 120 / s; const pw = Math.pow(10, Math.floor(Math.log10(target))); const nice = [1, 2, 5, 10].map(k => k * pw).filter(v => v <= target).pop() || pw;
+  const px = nice * s; ctx.fillStyle = col.ink; ctx.strokeStyle = col.ink; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(12, H - 14); ctx.lineTo(12 + px, H - 14); ctx.moveTo(12, H - 19); ctx.lineTo(12, H - 14); ctx.moveTo(12 + px, H - 19); ctx.lineTo(12 + px, H - 14); ctx.stroke();
+  ctx.font = '11px ' + css('--f-mono'); const nm = nice / 1852;
+  ctx.fillText((nice >= 1000 ? (nice / 1000) + ' km' : nice + ' m') + (nm >= 0.1 ? ` (${nm < 1 ? nm.toFixed(2) : nm.toFixed(1)} NM)` : ''), 18 + px, H - 10);
+}
+function focusOn(x) {
+  if (!S.view) return; S.view.cx = (x.d.x + x.c.x) / 2; S.view.cy = (x.d.y + x.c.y) / 2; S.view.s = Math.max(S.view.s, Math.min(W, H) / Math.max(250, x.m * 6));
+  S.focus = x.d; draw(); $('mapbox').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+}
+function zoomAt(f, X = W / 2, Y = H / 2) {
+  const v = S.view; if (!v) return; const mx = v.cx + (X - W / 2) / v.s, my = v.cy - (Y - H / 2) / v.s;
+  v.s = Math.min(50, Math.max(1e-5, v.s * f)); v.cx = mx - (X - W / 2) / v.s; v.cy = my + (Y - H / 2) / v.s; draw();
+}
+cv.addEventListener('wheel', e => { if (!S.view) return; e.preventDefault(); const b = cv.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - b.left, e.clientY - b.top); }, { passive: false });
+let drag = null;
+cv.addEventListener('pointerdown', e => { if (!S.view) return; drag = { x: e.clientX, y: e.clientY, cx: S.view.cx, cy: S.view.cy }; cv.setPointerCapture(e.pointerId); cv.classList.add('drag'); $('tip').hidden = true; });
+cv.addEventListener('pointermove', e => {
+  if (drag) { S.view.cx = drag.cx - (e.clientX - drag.x) / S.view.s; S.view.cy = drag.cy + (e.clientY - drag.y) / S.view.s; draw(); return; }
+  hover(e);
+});
+const endDrag = () => { drag = null; cv.classList.remove('drag'); };
+cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+cv.addEventListener('pointerleave', () => { $('tip').hidden = true; });
+cv.addEventListener('dblclick', e => { const b = cv.getBoundingClientRect(); zoomAt(2, e.clientX - b.left, e.clientY - b.top); });
+$('zIn').onclick = () => zoomAt(1.6); $('zOut').onclick = () => zoomAt(1 / 1.6); $('zFit').onclick = () => { S.focus = null; fitView(); draw(); };
+function hover(e) {
+  if (!S.view) return; const b = cv.getBoundingClientRect(), X = e.clientX - b.left, Y = e.clientY - b.top; let best = null, bd = 64;
+  const test = (p, kind) => { const dx = sx(p.x) - X, dy = sy(p.y) - Y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = { p, kind }; } };
+  if (S.cap) for (const c of S.cap.recs) test(c, 'cap');
+  if (S.dvof) for (const d of S.dvof.recs) if (isFinite(d.lat)) test(d, 'dvof');
+  const tip = $('tip'); if (!best) { tip.hidden = true; return; }
+  const p = best.p; let html;
+  if (best.kind === 'cap') html = `<b>CAP1732 ${esc(p.rid)}</b><br>${esc([p.type, p.ident].filter(Boolean).join(' · '))}<br><span class="mono">${p.el.toFixed(2)} m AMSL${isFinite(p.agl) ? ' · ' + p.agl.toFixed(1) + ' m AGL' : ''}</span>`;
+  else {
+    const m = S.res && (S.res.dupSet.has(p.i) ? S.res.dup.find(x => x.d === p) : S.res.nearSet.has(p.i) ? S.res.near.find(x => x.d === p) : null);
+    const st = !S.res ? '' : S.res.dupSet.has(p.i) ? 'Duplicate, removed' : S.res.nearSet.has(p.i) ? 'In range, kept on height' : 'Retained';
+    html = `<b>DVOF ${esc(p.id)}</b><br>${esc(p.desc)}<br><span class="mono">${p.el.toFixed(2)} m AMSL</span>` + (st ? `<br>${st}` : '') +
+      (m ? `<br><span class="mono">↔ CAP ${esc(m.c.rid)} · ${m.m.toFixed(1)} m · Δh ${m.dz >= 0 ? '+' : ''}${m.dz.toFixed(1)} m</span>` : '');
+  }
+  tip.innerHTML = html; tip.hidden = false;
+  const tw = tip.offsetWidth, th = tip.offsetHeight; tip.style.left = Math.min(W - tw - 6, X + 14) + 'px'; tip.style.top = (Y + 14 + th > H ? Y - th - 10 : Y + 14) + 'px';
+}
+const redrawTheme = () => { draw(); };
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redrawTheme);
+new MutationObserver(redrawTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+if (document.fonts) document.fonts.ready.then(draw);
+resize();
+window.__dvof = { S, outputs, parsePds };
+})();
+</script>
+</body>
+</html>

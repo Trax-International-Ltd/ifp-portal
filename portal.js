@@ -10,10 +10,16 @@ const PORTAL_CONFIG = {
 // to give it the orange rule; the rest use the neutral rule.
 const ANNOUNCEMENTS = [
   {
+    date: "23 Sep 2026",
+    title: "DVOF Duplicate Filter",
+    body: "Strip DVOF obstacles that duplicate a CAP1732 surveyed obstacle within a horizontal and height tolerance, and export PDToolkit-ready .pds files.",
+    isLatest: true,
+  },
+  {
     date: "21 Sep 2026",
     title: "Terrain Points",
     body: "Generate circular terrain obstacles from OS Terrain 50 or ALOS AW3D30 (served from the shared tile library) and export PDToolkit import CSVs.",
-    isLatest: true,
+    
   },
   {
     date: "18 Sep 2026",
