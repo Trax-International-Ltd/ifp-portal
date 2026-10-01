@@ -1,0 +1,448 @@
+<title>Mountainous MOC Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F3F5F6; --surface:#FFFFFF; --sunken:#EBEFF1; --ink:#15202B; --ink2:#46535F; --muted:#6B7883;
+  --line:#D5DCE1; --accent:#1D5D8C; --accent2:#7FA9C8; --accent-soft:#E1ECF4; --magenta:#9B2C73; --magenta-soft:#F5E6EF;
+  --warn:#8A5A00; --warn-bg:#FBF1DC; --good:#23693F; --good-bg:#E3F1E8;
+  --display:"Archivo Narrow","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0F161C; --surface:#162029; --sunken:#1C2833; --ink:#E6ECF0; --ink2:#B4C0CA; --muted:#8997A3;
+    --line:#2C3A46; --accent:#6FAEDB; --accent2:#3F6A8A; --accent-soft:#1B3347; --magenta:#E07BB8; --magenta-soft:#3A1F31;
+    --warn:#E8B75A; --warn-bg:#3A2D12; --good:#74C795; --good-bg:#16301F;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F161C; --surface:#162029; --sunken:#1C2833; --ink:#E6ECF0; --ink2:#B4C0CA; --muted:#8997A3;
+  --line:#2C3A46; --accent:#6FAEDB; --accent2:#3F6A8A; --accent-soft:#1B3347; --magenta:#E07BB8; --magenta-soft:#3A1F31;
+  --warn:#E8B75A; --warn-bg:#3A2D12; --good:#74C795; --good-bg:#16301F;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);padding:28px 20px 60px}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.005em}
+h1{font-size:34px;font-weight:700;line-height:1.1}
+h2{font-size:22px;font-weight:600}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--magenta)}
+.lede{color:var(--ink2);max-width:74ch;margin:8px 0 0}
+header{display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--line);padding-bottom:20px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:20px}
+.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px}
+.sec-head p{margin:0;color:var(--muted);font-size:13.5px;max-width:70ch}
+.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px 20px}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:500;color:var(--ink2)}
+label.f small{font-weight:400;color:var(--muted)}
+label.f.check{flex-direction:row;align-items:center;gap:8px;align-self:end;padding-bottom:8px}
+label.f.check input{width:auto}
+input,select{font:14px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:7px 8px;width:100%}
+input[type=number]{font-family:var(--mono);font-variant-numeric:tabular-nums}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input::placeholder{color:var(--muted)}
+.scroll{overflow-x:auto;margin:0 -4px;padding:0 4px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{font:600 11.5px var(--body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:bottom;white-space:nowrap}
+th .u{text-transform:none;letter-spacing:0;font-weight:500}
+th.n,td.n{text-align:right}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.inputs td input,.inputs td select{padding:5px 6px;font-size:13px}
+.inputs td input[type=number]{width:86px}
+.inputs td input.name{min-width:150px}
+.inputs td select.phase{min-width:190px}
+.inputs td select.sm{min-width:74px}
+tr.sel td{background:var(--accent-soft)}
+.btn{font:500 13.5px var(--body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:7px 12px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.btn.primary:hover{filter:brightness(1.08);color:var(--surface)}
+.btn.icon{padding:4px 9px;color:var(--muted)}
+.btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
+.pill{display:inline-block;font:500 11.5px var(--body);padding:2px 8px;border-radius:99px;white-space:nowrap}
+.pill.cap{background:var(--magenta-soft);color:var(--magenta)}
+.pill.ok{background:var(--good-bg);color:var(--good)}
+.pill.no{background:var(--sunken);color:var(--muted)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+td.total{font-weight:600;color:var(--ink)}
+td.moca{font-weight:600;color:var(--accent);font-size:14.5px}
+.note{font-size:12.5px;color:var(--muted);margin:10px 0 0;max-width:120ch}
+.example{font:500 11.5px var(--mono);color:var(--warn);background:var(--warn-bg);padding:3px 8px;border-radius:3px;letter-spacing:.03em}
+.chartbox{position:relative}
+svg text{font-family:var(--mono);font-size:11px;fill:var(--muted)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font:12px/1.45 var(--mono);padding:7px 9px;border-radius:4px;white-space:nowrap;transform:translate(-50%,-100%);margin-top:-10px}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12.5px;color:var(--ink2);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:18px;height:0;border-top:2px solid var(--accent)}
+.sw.a2{border-top:2px solid var(--accent2)}
+.sw.d{border-top:2px dashed var(--magenta)}
+.sw.d2{border-top:2px dotted var(--magenta)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 2px var(--surface)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:20px}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+.method{font-size:14px;color:var(--ink2)}
+.method p{margin:10px 0 4px}
+.formula{font:13px/1.75 var(--mono);background:var(--sunken);padding:10px 12px;border-radius:4px;color:var(--ink);overflow-x:auto;white-space:nowrap}
+.formula .c{color:var(--muted)}
+textarea{width:100%;min-height:240px;font:13px/1.55 var(--body);color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:10px 12px;resize:vertical}
+.toast{font-size:12.5px;color:var(--good)}
+.ref td,.ref th{padding:4px 6px;font-size:12.5px}
+footer{font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Doc 8168 · Instrument flight procedure design</div>
+  <h1>Mountainous MOC Calculator</h1>
+  <p class="lede">Sizes the additional clearance over mountainous terrain using the method of Pérez Sanz et al. (2024). The additional clearance is the wind-induced altimeter error (Eq. 1) plus the height lost in mountain-wave turbulence (Appendix A, by aircraft category and angle of attack). The design wind comes from segment altitude, so the increase grows with altitude. MOC is in metres; altitudes and elevations are in feet.</p>
+</header>
+
+<section class="panel" aria-labelledby="h-set">
+  <div class="sec-head"><h2 id="h-set">Method settings</h2><p>These apply to every segment and are written into the methodology statement below.</p></div>
+  <div class="settings">
+    <label class="f" for="s-model">Altimeter error model
+      <select id="s-model">
+        <option value="cubic">Eq. 1, cubic fit to ICAO Vol III (paper)</option>
+        <option value="square">Square law, 0.127 × V² ft (Bernoulli)</option>
+        <option value="interp">Linear interpolation of ICAO Vol III table</option>
+      </select>
+      <small>All three agree with the ICAO CFD values to within a few feet.</small>
+    </label>
+    <label class="f" for="s-thresh">Mountainous threshold, terrain variation (ft)
+      <input id="s-thresh" type="number" step="50" value="2953">
+      <small>Default 900 m (2,953 ft), the lower bound of the Vol III table.</small>
+    </label>
+    <label class="f" for="s-cap">Maximum increase (% of base MOC)
+      <input id="s-cap" type="number" step="5" min="0" max="100" value="100">
+      <small>PANS-OPS allows up to 100%.</small>
+    </label>
+    <label class="f" for="s-min">Minimum wind for any increase (kt)
+      <input id="s-min" type="number" step="1" value="10">
+      <small>The paper's tables start at 10 kt. Set 20 to follow the ICAO Vol III table instead.</small>
+    </label>
+    <label class="f" for="s-mocr">Round total MOC up to
+      <select id="s-mocr"><option value="1" selected>Next 1 m</option><option value="5">Next 5 m</option><option value="10">Next 10 m</option><option value="0">No rounding</option></select>
+    </label>
+    <label class="f" for="s-round">Round MOCA up to
+      <select id="s-round"><option value="50">Next 50 ft</option><option value="100" selected>Next 100 ft</option><option value="1">Next 1 ft</option></select>
+    </label>
+    <label class="f check" for="s-all"><input id="s-all" type="checkbox"> Apply to every segment regardless of terrain variation</label>
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="h-seg">
+  <div class="sec-head">
+    <h2 id="h-seg">Segments</h2>
+    <span class="example" id="ex-flag">EXAMPLE DATA · replace with your procedure</span>
+  </div>
+  <div class="scroll">
+  <table class="inputs" id="t-in">
+    <thead><tr>
+      <th>Segment</th><th>Phase</th><th class="n">Base MOC <span class="u">m</span></th><th class="n">Obstacle elev <span class="u">ft</span></th><th class="n">Terrain var <span class="u">ft</span></th><th>Lowest cat</th><th>AOA</th><th class="n">Wind alt <span class="u">ft</span></th><th class="n">Wind <span class="u">kt</span></th><th></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  </div>
+  <p class="note"><b>Lowest cat</b>: the smallest aircraft category using the segment. The paper finds lower categories lose more height, so the lowest one governs. <b>AOA</b>: the paper's guidance is up to 4° en-route, −2° to 2° on arrival and up to 6° on departure or missed approach. Choosing a phase sets a default. <b>Wind alt</b>: leave blank to iterate on the resulting MOCA. <b>Wind</b>: leave blank for the ICAO standard wind (2h/1000 + 47 kt). The paper uses 30 kt for SID and final missed approach turns, which is the default for those phases.</p>
+  <div class="btnrow">
+    <button class="btn primary" id="b-add" type="button">Add segment</button>
+    <button class="btn" id="b-clear" type="button">Clear all</button>
+    <button class="btn" id="b-reset" type="button">Restore example</button>
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="h-res">
+  <div class="sec-head"><h2 id="h-res">Results</h2><p>Select a row to show it on the chart.</p></div>
+  <div class="scroll">
+  <table id="t-out">
+    <thead><tr>
+      <th>Segment</th><th class="n">Wind alt <span class="u">ft</span></th><th class="n">Wind <span class="u">kt</span></th><th class="n">Altimeter <span class="u">m</span></th><th class="n">Turbulence <span class="u">m</span></th><th class="n">Increase <span class="u">m</span></th><th class="n">% of base</th><th class="n">Total MOC <span class="u">m</span></th><th class="n">MOC <span class="u">ft</span></th><th class="n">MOCA <span class="u">ft</span></th><th>Status</th><th class="n">Vol III <span class="u">m</span></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  </div>
+  <p class="note">MOCA = obstacle elevation + total MOC converted to feet, then rounded up. The Vol III column shows the en-route mountainous MOC (450 m for 900–1,500 m terrain variation, 600 m above 1,500 m), for comparison only.</p>
+  <div class="btnrow">
+    <button class="btn" id="b-copyres" type="button">Copy results for Excel</button>
+    <span class="toast" id="toast-res" aria-live="polite"></span>
+  </div>
+</section>
+
+<div class="grid2">
+<section class="panel" aria-labelledby="h-chart">
+  <div class="sec-head"><h2 id="h-chart">Increase against altitude</h2></div>
+  <p class="note" id="chart-sub" style="margin:0 0 8px"></p>
+  <div class="chartbox" id="chartbox">
+    <svg id="chart" viewBox="0 0 640 320" width="100%" role="img" aria-label="Additional clearance against segment altitude"></svg>
+    <div class="tip" id="tip" hidden></div>
+  </div>
+  <div class="legend">
+    <span><i class="sw"></i>Altimeter + turbulence</span>
+    <span><i class="sw a2"></i>Altimeter error only</span>
+    <span><i class="sw d"></i>Cap</span>
+    <span><i class="sw d2"></i>50% of base MOC</span>
+    <span><i class="dot"></i>Segments (applied)</span>
+  </div>
+  <p class="note">Curves use the ICAO standard wind at each altitude. Dots show the increase actually applied to each segment, including any wind override and cap.</p>
+</section>
+
+<section class="panel method" aria-labelledby="h-basis">
+  <div class="sec-head"><h2 id="h-basis">Basis</h2></div>
+  <div class="formula">
+    V = 2h/1000 + 47 kt <span class="c">(Eq. 12)</span><br>
+    Δh<sub>alt</sub> = −6.25×10⁻⁵V³ + 0.14V² − 0.825V + 14 ft <span class="c">(Eq. 1)</span><br>
+    Δh<sub>turb</sub> = Table A1–A3 (cat, AOA, V) <span class="c">(App. A)</span><br>
+    ΔMOC = min(Δh<sub>alt</sub> + Δh<sub>turb</sub>, cap × MOC<sub>base</sub>)<br>
+    MOCA = obstacle + (MOC<sub>base</sub> + ΔMOC) ↑
+  </div>
+  <p>The turbulence values come from the paper's gust-response chain (Eqs. 2–27). It runs: wind at 700 hPa (Hellman law) → mountain-wave class → vertical gust → load factor change Δn → derived gust velocity → height loss. It uses a reference aircraft per category at maximum PANS-OPS IAS and a low operating weight. The table below shows the paper's values for the <b id="ref-aoa">4°</b> angle of attack in feet. Values between wind speeds are interpolated.</p>
+  <div class="scroll"><table class="ref" id="t-ref"></table></div>
+  <p class="note">Checked: Eq. 1 plus these values reproduces all 90 entries of the paper's Tables 8–10 exactly. Winds above 80 kt hold turbulence at its 80 kt value, extrapolate the altimeter error, and are flagged.</p>
+</section>
+</div>
+
+<section class="panel" aria-labelledby="h-stmt">
+  <div class="sec-head"><h2 id="h-stmt">Methodology statement</h2><p>Generated from the settings above. Copy it into your submission and edit as needed.</p></div>
+  <textarea id="stmt" aria-label="Methodology statement"></textarea>
+  <div class="btnrow">
+    <button class="btn" id="b-copystmt" type="button">Copy statement</button>
+    <span class="toast" id="toast-stmt" aria-live="polite"></span>
+  </div>
+</section>
+
+<footer>This is a design aid. Check paragraph references and values against the current amendment of Doc 8168. The results do not replace the designer's judgement or the approval process. Sources: ICAO Doc 8168 Vol II and Vol III; Pérez Sanz L., Fernández-Shaw González A., Pérez-Castán J.A., Serrano-Mira L., Rodríguez Fernández D., Sánchez Ayra E., “Additional Clearance over Obstacles to Determine Minimum Flight Altitude in Mountainous Terrain”, Applied Sciences 14(12):5155, 2024, doi:10.3390/app14125155.</footer>
+</div>
+
+<script>
+(function(){
+const FT=0.3048;
+const PHASES=[
+  {id:"enr",label:"En-route",moc:300,aoa:4},
+  {id:"msa",label:"MSA / TAA sector",moc:300,aoa:4},
+  {id:"hold",label:"Holding",moc:300,aoa:4},
+  {id:"init",label:"Initial approach",moc:300,aoa:2},
+  {id:"inter",label:"Intermediate approach",moc:150,aoa:2},
+  {id:"fin",label:"Final approach (NPA, FAF)",moc:75,aoa:2},
+  {id:"mai",label:"Missed approach, intermediate",moc:30,aoa:6,wind:30},
+  {id:"maf",label:"Missed approach, final",moc:50,aoa:6,wind:30},
+  {id:"cus",label:"Custom",moc:null,aoa:null}
+];
+// Pérez Sanz et al. 2024, Appendix A, Tables A1–A3: turbulence height loss (ft) vs wind (kt)
+const WK=[10,15,20,25,30,35,40,45,50,55,60,65,70,75,80];
+const TURB={
+ 2:{A:[0,30,52,63,68,69,71,72,74,75,75,75,76,76,77],B:[0,4,8,12,16,21,26,31,34,36,37,37,38,39,40],C:[0,3,6,10,13,18,23,28,32,33,34,34,35,36,37],D:[0,3,5,8,11,15,21,26,30,31,32,32,33,34,35]},
+ 4:{A:[0,41,65,70,72,74,77,80,82,83,84,84,85,86,86],B:[0,8,17,24,29,34,40,46,51,54,55,56,57,59,61],C:[0,7,13,20,26,31,36,42,47,49,50,51,52,54,56],D:[0,6,12,18,24,29,34,39,43,46,47,48,49,50,52]},
+ 6:{A:[0,46,71,74,76,80,83,87,90,92,93,93,94,95,96],B:[0,14,25,33,39,46,53,61,66,67,67,68,68,68,68],C:[0,12,22,29,35,41,48,56,63,66,67,67,67,67,68],D:[0,10,20,27,33,38,45,52,59,62,64,65,66,67,67]}
+};
+const EXAMPLE=[
+  {name:"Airway ABC–DEF",phase:"enr",moc:300,obs:9200,tv:4600,cat:"B",aoa:4,alt:"",wind:""},
+  {name:"MSA 25 NM, 090–180°",phase:"msa",moc:300,obs:8400,tv:4100,cat:"A",aoa:4,alt:"",wind:""},
+  {name:"IAF to IF",phase:"init",moc:300,obs:6100,tv:3600,cat:"A",aoa:2,alt:"",wind:""},
+  {name:"IF to FAF",phase:"inter",moc:150,obs:4700,tv:3300,cat:"A",aoa:2,alt:"",wind:""},
+  {name:"Missed approach, final",phase:"maf",moc:50,obs:4200,tv:3300,cat:"C",aoa:6,alt:"",wind:30},
+  {name:"Valley segment",phase:"init",moc:300,obs:2200,tv:1500,cat:"A",aoa:2,alt:"",wind:""}
+];
+const KEY="mountain-moc-v2";
+let rows, sel=0, isExample=true;
+try{const s=JSON.parse(localStorage.getItem(KEY)||"null"); if(s&&Array.isArray(s.rows)){rows=s.rows;isExample=!!s.ex;}}catch(e){}
+if(!rows) rows=JSON.parse(JSON.stringify(EXAMPLE));
+function save(){try{localStorage.setItem(KEY,JSON.stringify({rows,ex:isExample}))}catch(e){}}
+
+const $=id=>document.getElementById(id);
+const S=()=>({model:$("s-model").value,thresh:+$("s-thresh").value||0,cap:Math.min(100,Math.max(0,+$("s-cap").value||0)),round:+$("s-round").value||1,mocr:+$("s-mocr").value,minW:+$("s-min").value||0,all:$("s-all").checked});
+
+const ICAO=[[0,0],[20,55.8],[40,203.4],[60,456.0],[80,810.4]];
+function altErr(v,model){
+  if(v<=0) return 0;
+  if(model==="square") return 0.127*v*v;
+  if(model==="interp"){
+    for(let i=1;i<ICAO.length;i++){ if(v<=ICAO[i][0]){const a=ICAO[i-1],b=ICAO[i];return a[1]+(b[1]-a[1])*(v-a[0])/(b[0]-a[0]);} }
+    const a=ICAO[3],b=ICAO[4]; return b[1]+(b[1]-a[1])*(v-b[0])/20;
+  }
+  return Math.max(0,-6.25e-5*v**3+0.14*v*v-0.825*v+14);
+}
+function turbLoss(cat,aoa,v){
+  if(cat==="none") return 0;
+  const t=(TURB[aoa]||TURB[4])[cat]; if(!t) return 0;
+  if(v<=WK[0]) return 0;
+  if(v>=80) return t[t.length-1];
+  const i=Math.min(WK.length-2,Math.floor((v-10)/5)); const f=(v-WK[i])/5;
+  return t[i]+(t[i+1]-t[i])*f;
+}
+const stdWind=h=>2*h/1000+47;
+const num=x=>(x===""||x===null||x===undefined||isNaN(+x))?null:+x;
+const upTo=(x,r)=>r<=0?x:Math.ceil(x/r-1e-9)*r;
+
+function calc(r,s){
+  const base=num(r.moc)||0, obs=num(r.obs)||0, tv=num(r.tv), wo=num(r.wind), fixedAlt=num(r.alt);
+  const cat=r.cat||"A", aoa=+r.aoa||4;
+  const mountain=s.all||(tv!==null&&tv>=s.thresh);
+  const capM=base*s.cap/100;
+  let alt=fixedAlt!==null?fixedAlt:obs+base/FT, wind=0, aeFt=0, tuFt=0, incM=0, rawM=0, total=base, moca=0;
+  for(let it=0;it<15;it++){
+    wind=wo!==null?wo:stdWind(alt);
+    const active=mountain&&wind>=s.minW&&wind>0;
+    aeFt=active?altErr(wind,s.model):0;
+    tuFt=active?turbLoss(cat,aoa,wind):0;
+    rawM=(aeFt+tuFt)*FT;
+    incM=Math.min(rawM,capM);
+    total=upTo(base+incM,s.mocr);
+    moca=upTo(obs+total/FT,s.round);
+    if(fixedAlt!==null||wo!==null) break;
+    if(Math.abs(moca-alt)<1){alt=moca;break;}
+    alt=moca;
+  }
+  let vol3=null; if(tv!==null){ if(tv>=1500/FT) vol3=600; else if(tv>=900/FT) vol3=450; }
+  return {alt:fixedAlt!==null?fixedAlt:moca, wind, aeM:aeFt*FT, tuM:tuFt*FT, rawM, incM, pct:base?incM/base*100:0, total, moca,
+    capped:rawM>capM+0.05, mountain, extrap:mountain&&wind>80, low:mountain&&wind<s.minW, vol3, base, cat, aoa};
+}
+
+const tin=$("t-in").querySelector("tbody"), tout=$("t-out").querySelector("tbody");
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const opt=(v,cur,l)=>`<option value="${v}"${String(v)===String(cur)?" selected":""}>${l}</option>`;
+function renderInputs(){
+  tin.innerHTML=rows.map((r,i)=>`<tr data-i="${i}" class="${i===sel?"sel":""}">
+    <td><input class="name" id="r${i}-name" data-k="name" value="${esc(r.name)}" aria-label="Segment name"></td>
+    <td><select class="phase" id="r${i}-phase" data-k="phase" aria-label="Phase">${PHASES.map(p=>opt(p.id,r.phase,p.label+(p.moc?` (${p.moc} m)`:""))).join("")}</select></td>
+    <td class="n"><input type="number" id="r${i}-moc" data-k="moc" value="${esc(r.moc)}" aria-label="Base MOC m"></td>
+    <td class="n"><input type="number" id="r${i}-obs" data-k="obs" value="${esc(r.obs)}" aria-label="Obstacle elevation ft"></td>
+    <td class="n"><input type="number" id="r${i}-tv" data-k="tv" value="${esc(r.tv)}" aria-label="Terrain variation ft"></td>
+    <td><select class="sm" id="r${i}-cat" data-k="cat" aria-label="Lowest aircraft category">${["A","B","C","D"].map(c=>opt(c,r.cat,"Cat "+c)).join("")}${opt("none",r.cat,"None")}</select></td>
+    <td><select class="sm" id="r${i}-aoa" data-k="aoa" aria-label="Angle of attack">${[2,4,6].map(a=>opt(a,r.aoa,a+"°")).join("")}</select></td>
+    <td class="n"><input type="number" id="r${i}-alt" data-k="alt" value="${esc(r.alt)}" placeholder="auto" aria-label="Wind altitude ft"></td>
+    <td class="n"><input type="number" id="r${i}-wind" data-k="wind" value="${esc(r.wind)}" placeholder="ICAO std" aria-label="Wind override kt"></td>
+    <td><button class="btn icon" type="button" data-del="${i}" aria-label="Remove segment">✕</button></td>
+  </tr>`).join("");
+}
+const f0=x=>Math.round(x).toLocaleString("en-GB");
+const f1=x=>(Math.round(x*10)/10).toLocaleString("en-GB",{minimumFractionDigits:1,maximumFractionDigits:1});
+const fm=x=>Number.isInteger(Math.round(x*10)/10)?f0(x):f1(x);
+function renderOut(){
+  const s=S(); const res=rows.map(r=>calc(r,s));
+  tout.innerHTML=res.map((c,i)=>{
+    let st;
+    if(!c.mountain) st=`<span class="pill no">Not mountainous</span>`;
+    else if(c.low) st=`<span class="pill no">Wind below ${s.minW} kt</span>`;
+    else if(c.capped) st=`<span class="pill cap">Capped at ${s.cap}%</span>`;
+    else st=`<span class="pill ok">Calculated</span>`;
+    if(c.extrap) st+=` <span class="pill warn">Wind &gt; 80 kt, extrapolated</span>`;
+    return `<tr data-o="${i}" class="${i===sel?"sel":""}" style="cursor:pointer">
+      <td>${esc(rows[i].name)||"Segment "+(i+1)}</td><td class="n">${f0(c.alt)}</td><td class="n">${c.wind.toFixed(0)}</td>
+      <td class="n">${f1(c.aeM)}</td><td class="n">${f1(c.tuM)}</td><td class="n">${f1(c.incM)}</td><td class="n">${c.pct.toFixed(0)}%</td>
+      <td class="n total">${fm(c.total)}</td><td class="n">${f0(c.total/FT)}</td><td class="n moca">${f0(c.moca)}</td><td>${st}</td>
+      <td class="n">${c.vol3?c.vol3:"–"}</td></tr>`;
+  }).join("") || `<tr><td colspan="12" style="color:var(--muted);padding:14px 8px">Add a segment to see results.</td></tr>`;
+  window.__res=res; renderChart(res,s); renderRef(); renderStmt(s);
+}
+
+function renderRef(){
+  const r=rows[sel]; const aoa=r?(+r.aoa||4):4; $("ref-aoa").textContent=aoa+"°";
+  const cols=[10,20,30,40,50,60,70,80];
+  let h=`<thead><tr><th class="n">Wind kt</th>${cols.map(w=>`<th class="n">${w}</th>`).join("")}</tr></thead><tbody>`;
+  h+=`<tr><td>Altimeter</td>${cols.map(w=>`<td class="n">${f0(altErr(w,"cubic"))}</td>`).join("")}</tr>`;
+  ["A","B","C","D"].forEach(c=>{h+=`<tr><td>Turb cat ${c}</td>${cols.map(w=>`<td class="n">${TURB[aoa][c][WK.indexOf(w)]}</td>`).join("")}</tr>`;});
+  $("t-ref").innerHTML=h+"</tbody>";
+}
+
+function renderChart(res,s){
+  const svg=$("chart"), W=640,H=320,m={l:48,r:30,t:14,b:40};
+  const r=rows[sel], c=res[sel];
+  const base=c?c.base:300, cat=r?(r.cat||"A"):"A", aoa=r?(+r.aoa||4):4, capM=base*s.cap/100;
+  $("chart-sub").textContent=r?`Shown for “${r.name||"Segment "+(sel+1)}”: base MOC ${base} m, ${cat==="none"?"no turbulence":"cat "+cat+", "+aoa+"° AOA"}.`:"";
+  const xMax=20000, pts=[];
+  for(let h=0;h<=xMax;h+=250){const v=stdWind(h), on=v>=s.minW; const ae=on?altErr(v,s.model)*FT:0; pts.push([h,on?ae+turbLoss(cat,aoa,v)*FT:0,ae,v]);}
+  const top=Math.max(capM*1.15,...res.map(q=>q.incM*1.1),60);
+  const yMax=Math.ceil(Math.min(top,Math.max(capM*1.15,360))/20)*20;
+  const x=h=>m.l+(W-m.l-m.r)*h/xMax, y=v=>m.t+(H-m.t-m.b)*(1-Math.min(v,yMax)/yMax);
+  let g="";
+  const step=yMax>400?100:yMax>200?50:yMax>80?20:10;
+  for(let v=0;v<=yMax+1e-6;v+=step){g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end">${v}</text>`;}
+  for(let h=0;h<=xMax;h+=5000){g+=`<text x="${x(h)}" y="${H-m.b+18}" text-anchor="middle">${h.toLocaleString("en-GB")}</text>`;}
+  g+=`<text x="${(m.l+W-m.r)/2}" y="${H-4}" text-anchor="middle">Segment altitude (ft)</text>`;
+  g+=`<text x="13" y="${(m.t+H-m.b)/2}" text-anchor="middle" transform="rotate(-90 13 ${(m.t+H-m.b)/2})">Increase (m)</text>`;
+  g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--muted)" stroke-width="1"/>`;
+  g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(capM)}" y2="${y(capM)}" stroke="var(--magenta)" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${W-m.r-4}" y="${y(capM)-6}" text-anchor="end" style="fill:var(--magenta)">cap ${fm(capM)} m</text>`;
+  if(s.cap>50){g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(base/2)}" y2="${y(base/2)}" stroke="var(--magenta)" stroke-width="1.5" stroke-dasharray="2 4"/><text x="${W-m.r-4}" y="${y(base/2)-6}" text-anchor="end" style="fill:var(--magenta)">50% ${fm(base/2)} m</text>`;}
+  const path=k=>pts.map((p,i)=>(i?"L":"M")+x(p[0]).toFixed(1)+" "+y(p[k]).toFixed(1)).join("");
+  g+=`<path d="${path(2)}" fill="none" stroke="var(--accent2)" stroke-width="2" stroke-linejoin="round"/>`;
+  g+=`<path d="${path(1)}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
+  res.forEach((q,i)=>{ if(q.alt<=xMax) g+=`<circle cx="${x(q.alt)}" cy="${y(q.incM)}" r="${i===sel?6:4.5}" fill="var(--ink)" stroke="var(--surface)" stroke-width="2"/>`; });
+  g+=`<line id="xh" x1="0" x2="0" y1="${m.t}" y2="${H-m.b}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/><circle id="xd" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>`;
+  g+=`<rect x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent" id="hit"/>`;
+  svg.innerHTML=g;
+  const hit=$("hit"), tip=$("tip");
+  hit.addEventListener("pointermove",ev=>{
+    const b=svg.getBoundingClientRect(), px=(ev.clientX-b.left)*W/b.width;
+    let h=Math.round(((px-m.l)/(W-m.l-m.r))*xMax/250)*250; h=Math.max(0,Math.min(xMax,h));
+    const p=pts[h/250], applied=Math.min(p[1],capM);
+    $("xh").setAttribute("x1",x(h));$("xh").setAttribute("x2",x(h));$("xh").setAttribute("visibility","visible");
+    $("xd").setAttribute("cx",x(h));$("xd").setAttribute("cy",y(p[1]));$("xd").setAttribute("visibility","visible");
+    tip.hidden=false; tip.style.left=(x(h)*b.width/W)+"px"; tip.style.top=(y(p[1])*b.height/H)+"px";
+    tip.innerHTML=`${h.toLocaleString("en-GB")} ft · wind ${p[3].toFixed(0)} kt<br>altimeter ${f1(p[2])} m + turb ${f1(p[1]-p[2])} m<br>applied ${f1(applied)} m (${base?(applied/base*100).toFixed(0):0}%)`;
+  });
+  hit.addEventListener("pointerleave",()=>{tip.hidden=true;$("xh").setAttribute("visibility","hidden");$("xd").setAttribute("visibility","hidden");});
+}
+
+function renderStmt(s){
+  const model={cubic:"Pérez Sanz et al. (2024) Eq. 1, a third-order polynomial fitted to the ICAO Doc 8168 Vol III wind/altimeter-error table: Δh = −6.25×10⁻⁵V³ + 0.14V² − 0.825V + 14 ft, V in knots",square:"a Bernoulli square-law fit to the ICAO Doc 8168 Vol III wind/altimeter-error table: Δh = 0.127V² ft, V in knots",interp:"linear interpolation of the ICAO Doc 8168 Vol III wind/altimeter-error table (CFD Norway Report 109.1989)"}[s.model];
+  const mr=s.mocr>0?`rounded up to the next ${s.mocr} m`:"not rounded";
+  $("stmt").value=
+`Additional MOC in mountainous areas: methodology
+
+1. Purpose. Doc 8168 Vol II permits the MOC to be increased by up to 100% over mountainous areas. The increase accounts for (a) altimeter error induced by strong winds over mountainous terrain (Bernoulli pressure reduction over ridges) and (b) height loss in mountain-wave turbulence. ICAO does not specify how to size the increase below the maximum. We apply the method published by Pérez Sanz et al. (2024), which quantifies both effects as a function of wind speed.
+
+2. Applicability. A segment is treated as mountainous where the terrain variation within its primary area is ${s.all?"any value (applied to all segments)":"at least "+Math.round(s.thresh).toLocaleString("en-GB")+" ft ("+Math.round(s.thresh*0.3048)+" m), consistent with the lower bound of the Doc 8168 Vol III mountainous-area table"}.
+
+3. Design wind. The wind for each segment is the ICAO standard wind, V = 2h/1000 + 47 kt (h = segment altitude in ft). The exception is segments where PANS-OPS specifies a protection-area wind (e.g. 30 kt for SID and final missed approach turns). Where the segment altitude depends on the result, the calculation is iterated until the MOCA converges. No increase is applied for winds below ${s.minW} kt.
+
+4. Altimeter error component. Calculated from ${model}.
+
+5. Turbulence component. The height loss in mountain-wave turbulence is taken from Pérez Sanz et al. (2024), Appendix A, Tables A1–A3. It is selected by the lowest aircraft category using the segment (lower categories lose more height) and the angle of attack for the phase of flight: 2° approach, 4° en-route, 6° departure and missed approach. Values between tabulated wind speeds are interpolated linearly. The published values come from a gust-response analysis: 700 hPa cross-ridge wind, mountain-wave class, vertical gust, load-factor change, then height loss. That analysis used reference aircraft per category at the maximum PANS-OPS IAS and a low operating weight, so it is conservative.
+
+6. Combination and limits. The two components are added, as the paper proposes. The increase is limited to ${s.cap}% of the base MOC for the segment. Total MOC is ${mr}. MOCA = controlling obstacle elevation + total MOC (converted to feet), rounded up to ${s.round<=1?"the next foot":"the next "+s.round+" ft"}.
+
+7. Verification. The implementation reproduces the paper's Tables 8–10 (additional clearance for 2°, 4° and 6° AOA, 10–80 kt) exactly. Winds above 80 kt are outside the published range: the altimeter component is extrapolated, the turbulence component is held at its 80 kt value, and the segment is flagged for review.
+
+8. Cross-check. Results are compared with the Doc 8168 Vol III mountainous en-route MOC (450 m / 600 m).
+
+9. Exclusions. Cold-temperature altimeter error and aircraft system error are not included. They are covered separately by pilot temperature corrections and the procedure's own design criteria.
+
+Reference: Pérez Sanz L. et al., "Additional Clearance over Obstacles to Determine Minimum Flight Altitude in Mountainous Terrain", Applied Sciences 14(12):5155 (2024), doi:10.3390/app14125155.`;
+}
+
+function all(){renderInputs();renderOut();$("ex-flag").hidden=!isExample;}
+tin.addEventListener("input",e=>{
+  const t=e.target, tr=t.closest("tr"); if(!tr||!t.dataset.k) return;
+  const i=+tr.dataset.i, k=t.dataset.k; rows[i][k]=t.value;
+  if(k==="phase"){const p=PHASES.find(p=>p.id===t.value); if(p&&p.moc!==null){rows[i].moc=p.moc; rows[i].aoa=p.aoa; rows[i].wind=p.wind||""; isExample=false; save(); all(); return;}}
+  if(k==="moc"&&rows[i].phase!=="cus"){const p=PHASES.find(p=>p.id===rows[i].phase); if(p&&p.moc!==+t.value){rows[i].phase="cus"; const ps=$(`r${i}-phase`); if(ps) ps.value="cus";}}
+  isExample=false; $("ex-flag").hidden=true; save(); renderOut();
+});
+tin.addEventListener("focusin",e=>{const tr=e.target.closest("tr"); if(tr){const i=+tr.dataset.i; if(i!==sel){sel=i; tin.querySelectorAll("tr").forEach(r=>r.classList.toggle("sel",+r.dataset.i===sel)); renderOut();}}});
+tin.addEventListener("click",e=>{const b=e.target.closest("[data-del]"); if(!b) return; rows.splice(+b.dataset.del,1); sel=Math.max(0,Math.min(sel,rows.length-1)); isExample=false; save(); all();});
+tout.addEventListener("click",e=>{const tr=e.target.closest("tr[data-o]"); if(!tr) return; sel=+tr.dataset.o; all();});
+$("b-add").onclick=()=>{rows.push({name:"New segment",phase:"init",moc:300,obs:"",tv:"",cat:"A",aoa:2,alt:"",wind:""}); sel=rows.length-1; isExample=false; save(); all(); const n=$(`r${sel}-name`); if(n){n.focus();n.select();}};
+$("b-clear").onclick=()=>{rows=[]; sel=0; isExample=false; save(); all();};
+$("b-reset").onclick=()=>{rows=JSON.parse(JSON.stringify(EXAMPLE)); sel=0; isExample=true; save(); all();};
+["s-model","s-thresh","s-cap","s-round","s-mocr","s-min","s-all"].forEach(id=>$(id).addEventListener("input",renderOut));
+
+async function copy(text,toastId,ta){
+  try{await navigator.clipboard.writeText(text); $(toastId).textContent="Copied";}
+  catch(e){ if(ta){ta.focus();ta.select();} $(toastId).textContent="Copy blocked here. Text selected, press Ctrl/Cmd+C"; }
+  setTimeout(()=>$(toastId).textContent="",3000);
+}
+$("b-copystmt").onclick=()=>copy($("stmt").value,"toast-stmt",$("stmt"));
+$("b-copyres").onclick=()=>{
+  const h=["Segment","Phase","Base MOC m","Obstacle ft","Terrain variation ft","Category","AOA","Wind alt ft","Wind kt","Altimeter m","Turbulence m","Increase m","% of base","Total MOC m","Total MOC ft","MOCA ft"];
+  const lines=[h.join("\t")].concat((window.__res||[]).map((c,i)=>{const r=rows[i];const p=PHASES.find(p=>p.id===r.phase);return [r.name,p?p.label:"",c.base,r.obs,r.tv,c.cat,c.aoa,Math.round(c.alt),c.wind.toFixed(0),c.aeM.toFixed(1),c.tuM.toFixed(1),c.incM.toFixed(1),c.pct.toFixed(0)+"%",c.total,Math.round(c.total/FT),c.moca].join("\t");}));
+  copy(lines.join("\n"),"toast-res",null);
+};
+all();
+})();
+</script>

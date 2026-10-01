@@ -2377,6 +2377,7 @@ function viewSidPage(r,d,procId){
       </div></div>`;}).join("");
   return `${viewSidCommon(r,d)}
   <div class="hub" style="margin-top:18px">
+    ${sidCards}
     <div class="card full">
       <div class="hd">SIDs — ${typeLabel}<span class="right">${sids.length} defined</span></div>
       <div class="bd">
@@ -2396,7 +2397,6 @@ function viewSidPage(r,d,procId){
         </details>`:""}
       </div>
     </div>
-    ${sidCards}
   </div>`;
 }
 function wireSidPage(key,procId){
