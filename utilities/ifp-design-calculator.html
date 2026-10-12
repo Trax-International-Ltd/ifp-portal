@@ -337,6 +337,7 @@ const PROC_TYPES = [
   ["RNPAR","RNP AR","Approach — PBN"],
   ["SIDC","SID — Conventional","Departure"],
   ["SIDPBN","SID — PBN","Departure"],
+  ["OMNI","Omnidirectional","Departure"],
 ];
 const PROC_GROUPS = [...new Set(PROC_TYPES.map(p=>p[2]))];
 const APPROACH_IDS = PROC_TYPES.filter(p=>p[2].startsWith("Approach")).map(p=>p[0]);
@@ -1164,6 +1165,11 @@ function viewRunway(d,key){
       if(c.need||r.sid.elevM==null) return "set the SID datum";
       return `DER ${f2(r.sid.elevM)} m · TNA ${c.tna.toFixed(2)} ft · first turn ${c.distM.toFixed(2)} m · ${n} SID${n===1?"":"s"}`;
     }
+    if(id==="OMNI"){
+      const c=omniCalc(r,d,(r.cfg.proc&&r.cfg.proc.OMNI)||{});
+      if(c.need) return "set the SID datum";
+      return `PDG ${c.g}% · Area 1 ${c.d1!=null?c.d1.toFixed(2)+" m":"—"}${c.d2!=null?` · Area 2 ${c.d2.toFixed(2)} m`:""}${c.d3!=null?` · Area 3 ${c.d3.toFixed(2)} m`:""}`;
+    }
     return "configuration to follow";
   };
   const procRows=r.procsOn.map(id=>`
@@ -1464,7 +1470,9 @@ function viewProc(d,key,procId,seg){
   const segLabel=segs.find(([s])=>s===seg)[1];
 
   let body="";
-  if(procId==="SIDC"||procId==="SIDPBN"){
+  if(procId==="OMNI"){
+    body=viewOmni(r,d,procId);
+  } else if(procId==="SIDC"||procId==="SIDPBN"){
     body=viewSidPage(r,d,procId);
   } else if(procId==="ILS" && seg==="missed"){
     body=viewIlsMA(r);
@@ -2287,6 +2295,73 @@ function cioCalc(r,d){
           penCount:usable.filter(x=>x.pen).length,ciCount:ci.length,
           list,autoRemoved,gov,govCI,highest,govUntil,dAlt,derEle,drTurn,ukOpen,ukMatched,ukNoMatch,ukManual};
 }
+/* ---------- Omnidirectional departure (per runway end) ----------
+   PANS-OPS Pt I S3 Ch4: in omnidirectional turns the turn initiation area is
+   Area 1 (along the departure track until the PDG reaches the minimum turn
+   height) and Area 2 (splaying at 30° until the specified turn altitude/
+   height); Area 3, the turn area, is the remaining circle centred on the
+   runway centre line 600 m from the start of take-off.
+   All climbs run from the SID datum (2 dp DER elevation + 5 m) at the PDG,
+   on the same 2 dp working-value convention as the SIDs. */
+function omniCalc(r,d,oc){
+  if(r.sid.elevM==null) return {need:"the DER elevation (SID datum)"};
+  const g=safeNum(oc.pdg)??crit("sidPdg");
+  if(!(g>0)) return {need:"a valid PDG"};
+  const datum=r2d(r.sid.elevM)+crit("sidDerH");           // m
+  const opFt=d.operative!=null?r2d(d.operative/FT_M):null;
+  const tna=opFt!=null?opFt+crit("tnaAbove"):null;        // Area 1 top — same as the SID minimum turn altitude
+  const dist=alt=>alt!=null&&alt*FT_M>datum?(alt*FT_M-datum)/(g/100):null;
+  const d1=tna!=null?dist(tna):null;
+  const a2=r2d(safeNum(oc.alt2)), a3=r2d(safeNum(oc.alt3));
+  const d2=dist(a2), d3=dist(a3);
+  return {g,datum,tna,d1,a2,d2,seg2:(d1!=null&&d2!=null)?d2-d1:null,a3,d3};
+}
+function viewOmni(r,d,procId){
+  const oc=(r.cfg.proc&&r.cfg.proc[procId])||{};
+  const c=omniCalc(r,d,oc);
+  const row=(k,v,cm)=>`<div class="row"><div class="k">${k}</div><div class="v auto">${v}</div><div class="c">${cm||""}</div></div>`;
+  const mNM=m=>m!=null?`<b>${m.toFixed(2)} m</b> · ${(m/NM_M).toFixed(2)} NM`:"—";
+  const body=c.need?`<p class="note" style="margin:0">Waiting for: <b>${esc(c.need)}</b>.</p>`:`
+      <div class="kv compact" style="margin-bottom:0">
+        <div class="row"><div class="k">PDG (%)</div>
+          <div class="v in"><input type="number" step="0.1" class="omni-in" data-f="pdg" value="${esc(oc.pdg??"")}" placeholder="${crit('sidPdg')}"></div>
+          <div class="c">Blank uses the standard ${crit("sidPdg")}% — overtype where a higher gradient is published.</div></div>
+        <div class="row"><div class="k">Climb datum (m)</div>
+          <div class="v auto">${c.datum.toFixed(2)}</div>
+          <div class="c">DER elevation (2 dp) + ${crit("sidDerH")} m — the SID datum.</div></div>
+        <div class="row"><div class="hd2">Area 1 — along the departure track to the minimum turn altitude</div></div>
+        ${row("Minimum turn altitude (ft)",c.tna!=null?c.tna.toFixed(2):"—",`Aerodrome elevation + ${crit("tnaAbove")} ft — the same value as the SID minimum turn altitude.`)}
+        ${row("Distance to reach it (from the DER)",mNM(c.d1),`(TNA × 0.3048 − datum) ÷ ${(c.g/100).toFixed(3)} — Area 1 ends here.`)}
+        <div class="row"><div class="hd2">Area 2 — splays at 30° to the specified turn altitude</div></div>
+        <div class="row"><div class="k">Specified turn altitude (ft)</div>
+          <div class="v in"><input type="number" step="1" class="omni-in" data-f="alt2" value="${esc(oc.alt2??"")}"></div>
+          <div class="c">${c.a2!=null&&c.tna!=null&&c.a2<c.tna?`<span style="color:#B45309;font-weight:700">below the minimum turn altitude ${c.tna.toFixed(2)} ft — check</span>`:"The altitude/height at which Area 2 ends."}</div></div>
+        ${row("Distance to reach it (from the DER)",mNM(c.d2),c.seg2!=null?`Area 2 length beyond Area 1: <b>${c.seg2.toFixed(2)} m</b>.`:"")}
+        <div class="row"><div class="hd2">Area 3 — turn area (circle centred on the centre line, 600 m from the start of take-off)</div></div>
+        <div class="row"><div class="k">Required altitude (ft)</div>
+          <div class="v in"><input type="number" step="1" class="omni-in" data-f="alt3" value="${esc(oc.alt3??"")}"></div>
+          <div class="c">The altitude to be reached in the turn area.</div></div>
+        ${row("Distance to reach it (from the DER)",mNM(c.d3),"")}
+      </div>`;
+  return `
+  <div class="hub">
+    <div class="card full">
+      <div class="hd">Omnidirectional departure — areas & climb distances
+        <span class="right">${c.need?"":`PDG ${c.g}%`}</span></div>
+      <div class="bd">
+        <p class="note" style="margin-top:0">Area 1 runs along the departure track until the PDG reaches the minimum turn
+          altitude; Area 2 splays at 30° to the departure track until the specified turn altitude/height; Area 3 is the
+          remaining turn area. Every distance below is the climb from the datum (DER + ${crit("sidDerH")} m) at the PDG,
+          worked at the displayed 2 dp values.</p>
+        ${body}
+      </div>
+    </div>
+  </div>`;
+}
+function wireOmni(key,procId){
+  document.querySelectorAll(".omni-in").forEach(inp=>inp.addEventListener("change",e=>{
+    ensureProcCfg(key,procId)[e.target.dataset.f]=e.target.value; render();}));
+}
 /* The SID page: the common datum block, then this type's SIDs.
    Results render only after Calculate — the constraint logic reads the whole
    SID (later at-or-below/at restrictions ceiling earlier turns), so partial
@@ -2443,6 +2518,7 @@ function wireProc(){
   if(procId==="ILS"&&S.view.seg==="missed") wireIlsMA(key);
   if(procId==="ILS"&&S.view.seg==="adv") wireIlsAdv(key);
   if(procId==="SIDC"||procId==="SIDPBN") wireSidPage(key,procId);
+  if(procId==="OMNI") wireOmni(key,procId);
   document.querySelectorAll(".proc-in").forEach(inp=>inp.addEventListener("change",e=>{
     ensureProcCfg(key,procId)[e.target.dataset.f]=e.target.value; render();}));
   const src=document.getElementById("rdh-src");
