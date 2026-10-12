@@ -384,6 +384,7 @@ const CRIT_DEFS=[
  {k:"sidDerH", g:"SIDs",               label:"Climb origin above DER (m)",     def:5,   note:""},
  {k:"tnaAbove",g:"SIDs",               label:"TNA above aerodrome elevation (ft)",def:500,note:"Default minimum turn altitude increment."},
  {k:"sidCSec", g:"SIDs",               label:"Value C duration (s)",           def:6,   note:"Seconds of flight in the C calculation."},
+ {k:"omniCentre",g:"SIDs",              label:"Omni Area 3 centre from start of take-off (m)",def:600,note:"PANS-OPS: the turn-area circle is centred on the runway centre line this far from the start of take-off."},
  {k:"sidCap",  g:"SIDs",               label:"SID altitude cap (ft AMSL)",     def:6000,note:"Aerodrome-level cap: a turn with NO ≤/= altitude constraint of its own climbs no higher than this. Override per aerodrome — the override saves with the project."},
  {k:"sidAltRound",g:"SIDs",             label:"Round actual altitude UP to (ft)",def:100, note:"The climb-derived turn altitude is rounded UP to this increment (10, 100, …) before the constraints apply; enter 0 for no rounding. Explicit restriction values and the SID cap are used as entered."},
  {k:"sidWind", g:"SIDs",               label:"Wind (kt)",                       def:30,  note:"Added to TAS in the value C calculation."},
@@ -747,6 +748,9 @@ function compute(){
        Manual fallback lives in cfg.sidCommon when the survey lacks the records. */
     const toda=pts.find(q=>codeInfo(q.code).canon==="TODA_END"&&assocMatches(q.assoc,key))||null;
     const tora=pts.find(q=>codeInfo(q.code).canon==="TORA_END"&&assocMatches(q.assoc,key))||null;
+    const toraStart=pts.find(q=>codeInfo(q.code).canon==="TORA_START"&&assocMatches(q.assoc,key))||null;
+    const rwLenM=(toraStart&&toda&&toraStart.e!=null&&toda.e!=null)
+      ?Math.hypot(toda.e-toraStart.e,toda.n-toraStart.n):null;   // start of take-off → TODA_END, from the survey grid
     const sc=cfg.sidCommon||{};
     let sidElev=null,sidElevSrc="—";
     const te=toda?toda.gM:null, re=tora?tora.gM:null;   // surveyed metres
@@ -759,6 +763,7 @@ function compute(){
     const sid={toda,tora,
       e:toda?toda.e:safeNum(sc.manE), n:toda?toda.n:safeNum(sc.manN),
       elevM:sidElev, elevFt:sidElev!=null?sidElev/FT_M:null,   // m governs; ft derived for published altitudes
+      toraStart, rwLenM,
       elevSrc:sidElevSrc, fromSurvey:!!(toda||tora)};
     runways.push({key,thr:p,thrM,thrFt,llzFromSurvey:!!llz,llzId,llzE,llzN,dist,ils,llzCheck,
                   cfg,ic,procsOn,catsOn,ilsOn,locOn,needLlz,
@@ -1168,7 +1173,7 @@ function viewRunway(d,key){
     if(id==="OMNI"){
       const c=omniCalc(r,d,(r.cfg.proc&&r.cfg.proc.OMNI)||{});
       if(c.need) return "set the SID datum";
-      return `PDG ${c.g}% · Area 1 ${c.d1!=null?c.d1.toFixed(2)+" m":"—"}${c.d2!=null?` · Area 2 ${c.d2.toFixed(2)} m`:""}${c.d3!=null?` · Area 3 ${c.d3.toFixed(2)} m`:""}`;
+      return `PDG ${c.g}% · Area 1 ${c.d1!=null?c.d1.toFixed(2)+" m":"—"}${c.d2!=null?` · Area 2 ${c.d2.toFixed(2)} m`:""}${c.r3!=null?` · Area 3 radius ${c.r3.toFixed(2)} m`:c.d3!=null?` · Area 3 ${c.d3.toFixed(2)} m`:""}`;
     }
     return "configuration to follow";
   };
@@ -2317,7 +2322,12 @@ function omniCalc(r,d,oc){
   const d1=tna!=null?dist(tna):null;
   const a2=r2d(safeNum(oc.alt2)), a3=r2d(safeNum(oc.alt3));
   const d2=dist(a2), d3=dist(a3);
-  return {g,datum,tna,d1,a2,d2,seg2:(d1!=null&&d2!=null)?d2-d1:null,a3,d3};
+  /* Area 3 radius: the climb distance is measured from the DER, but the circle
+     is centred 600 m from the START OF TAKE-OFF — so add the TORA_START →
+     TODA_END length and subtract the centre offset */
+  const rwLen=r2d(safeNum(oc.rwLen))??(r.sid.rwLenM!=null?r2d(r.sid.rwLenM):null);
+  const r3=(d3!=null&&rwLen!=null)?d3+rwLen-crit("omniCentre"):null;
+  return {g,datum,tna,d1,a2,d2,seg2:(d1!=null&&d2!=null)?d2-d1:null,a3,d3,rwLen,r3,rwLenAuto:r.sid.rwLenM};
 }
 function viewOmni(r,d,procId){
   const oc=(r.cfg.proc&&r.cfg.proc[procId])||{};
@@ -2340,11 +2350,15 @@ function viewOmni(r,d,procId){
           <div class="v in"><input type="number" step="1" class="omni-in" data-f="alt2" value="${esc(oc.alt2??"")}"></div>
           <div class="c">${c.a2!=null&&c.tna!=null&&c.a2<c.tna?`<span style="color:#B45309;font-weight:700">below the minimum turn altitude ${c.tna.toFixed(2)} ft — check</span>`:"The altitude/height at which Area 2 ends."}</div></div>
         ${row("Distance to reach it (from the DER)",mNM(c.d2),c.seg2!=null?`Area 2 length beyond Area 1: <b>${c.seg2.toFixed(2)} m</b>.`:"")}
-        <div class="row"><div class="hd2">Area 3 — turn area (circle centred on the centre line, 600 m from the start of take-off)</div></div>
+        <div class="row"><div class="hd2">Area 3 — turn area (circle centred on the centre line, ${crit("omniCentre")} m from the start of take-off)</div></div>
         <div class="row"><div class="k">Required altitude (ft)</div>
           <div class="v in"><input type="number" step="1" class="omni-in" data-f="alt3" value="${esc(oc.alt3??"")}"></div>
           <div class="c">The altitude to be reached in the turn area.</div></div>
-        ${row("Distance to reach it (from the DER)",mNM(c.d3),"")}
+        ${row("Distance to reach it (from the DER)",mNM(c.d3),"The climb distance — measured from the DER.")}
+        <div class="row"><div class="k">TORA_START → TODA_END (m)</div>
+          <div class="v in"><input type="number" step="0.01" class="omni-in" data-f="rwLen" value="${esc(oc.rwLen??"")}" placeholder="${c.rwLenAuto!=null?c.rwLenAuto.toFixed(2):""}"></div>
+          <div class="c">${c.rwLenAuto!=null?`Blank uses the survey grid distance <b>${c.rwLenAuto.toFixed(2)} m</b> (TORA_START → TODA_END records).`:"No TORA_START record in the survey for this runway — enter the distance."}</div></div>
+        ${row("Area 3 radius — from the circle centre",c.r3!=null?mNM(c.r3):"—",c.r3!=null?`Distance from the DER + ${c.rwLen.toFixed(2)} m − the ${crit("omniCentre")} m centre offset.`:"Needs the required altitude and the TORA_START → TODA_END distance.")}
       </div>`;
   return `
   <div class="hub">
