@@ -2308,8 +2308,11 @@ function omniCalc(r,d,oc){
   const g=safeNum(oc.pdg)??crit("sidPdg");
   if(!(g>0)) return {need:"a valid PDG"};
   const datum=r2d(r.sid.elevM)+crit("sidDerH");           // m
+  /* Area 1 top = THE SID minimum turn altitude — taken from the SID common
+     calculation so any TNA override entered on the SID page carries over */
+  const sc=sidCommonCalc(r,d);
   const opFt=d.operative!=null?r2d(d.operative/FT_M):null;
-  const tna=opFt!=null?opFt+crit("tnaAbove"):null;        // Area 1 top — same as the SID minimum turn altitude
+  const tna=(sc&&sc.tna!=null)?sc.tna:(opFt!=null?opFt+crit("tnaAbove"):null);
   const dist=alt=>alt!=null&&alt*FT_M>datum?(alt*FT_M-datum)/(g/100):null;
   const d1=tna!=null?dist(tna):null;
   const a2=r2d(safeNum(oc.alt2)), a3=r2d(safeNum(oc.alt3));
@@ -2330,7 +2333,7 @@ function viewOmni(r,d,procId){
           <div class="v auto">${c.datum.toFixed(2)}</div>
           <div class="c">DER elevation (2 dp) + ${crit("sidDerH")} m — the SID datum.</div></div>
         <div class="row"><div class="hd2">Area 1 — along the departure track to the minimum turn altitude</div></div>
-        ${row("Minimum turn altitude (ft)",c.tna!=null?c.tna.toFixed(2):"—",`Aerodrome elevation + ${crit("tnaAbove")} ft — the same value as the SID minimum turn altitude.`)}
+        ${row("Minimum turn altitude (ft)",c.tna!=null?c.tna.toFixed(2):"—",`The SID minimum turn altitude — including any override entered on the SID page, so the two always agree.`)}
         ${row("Distance to reach it (from the DER)",mNM(c.d1),`(TNA × 0.3048 − datum) ÷ ${(c.g/100).toFixed(3)} — Area 1 ends here.`)}
         <div class="row"><div class="hd2">Area 2 — splays at 30° to the specified turn altitude</div></div>
         <div class="row"><div class="k">Specified turn altitude (ft)</div>
