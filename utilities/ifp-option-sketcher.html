@@ -65,6 +65,18 @@ h1{font-family:var(--f-display);font-weight:600;font-size:22px;letter-spacing:-.
 .opt small{font:500 11px var(--f-mono);color:var(--muted)}
 .opt[aria-current="true"]{border-color:var(--acc);box-shadow:inset 0 -2px 0 var(--acc)}
 .spacer{flex:1}
+.bar{position:relative}
+.projbtn{gap:6px;max-width:280px}
+.projbtn .pk{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.projbtn strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.projpanel{position:absolute;top:calc(100% + 4px);left:0;z-index:25;width:min(430px,calc(100vw - 32px));max-height:75vh;overflow:auto;padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 28px rgba(0,32,57,.18)}
+.projpanel h3{margin:0;font:600 12px var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.projlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.projlist button{width:100%;text-align:left;display:flex;justify-content:space-between;align-items:baseline;gap:10px;border:1px solid var(--grid);background:var(--panel);border-radius:8px;padding:7px 10px;cursor:pointer;font:500 13.5px var(--f-body);color:var(--ink)}
+.projlist button:hover{border-color:var(--acc,var(--track))}
+.projlist button[aria-current="true"]{border-color:var(--acc,var(--track));background:var(--acc-soft,var(--track-soft))}
+.projlist small{font:400 11.5px var(--f-mono);color:var(--muted);white-space:nowrap}
+.pjnew{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--grid);padding-top:10px}
 .btn{font:500 13px var(--f-body);color:var(--ifp-navy);background:var(--panel);border:1px solid var(--line);border-radius:8px;
   min-width:34px;height:32px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
 .btn:hover{border-color:var(--acc);color:var(--acc)}
@@ -203,6 +215,24 @@ details p,details li{max-width:74ch;font-size:14px}
   <p class="sub">Rapid shortlisting of RNAV approach and SID options against PANS-OPS nominal-track criteria. Not for operational use; feasible options go to full construction and obstacle assessment.</p>
 </header>
 <div class="bar">
+  <button type="button" class="btn projbtn" id="b-proj" aria-expanded="false" aria-controls="projpanel" title="Switch, create or manage projects"><span class="pk">Project</span> <strong id="proj-name"></strong> <span aria-hidden="true">▾</span></button>
+  <div class="panel projpanel" id="projpanel" hidden>
+    <h3>Projects <button type="button" class="x" id="pj-x" aria-label="Close">×</button></h3>
+    <ul class="projlist" id="pj-list"></ul>
+    <label class="f"><span class="lab">Rename current project</span><input type="text" id="pj-name" maxlength="80"></label>
+    <div class="row"><button type="button" class="btn" id="pj-newbtn">+ New project</button><button type="button" class="btn" id="pj-dup">Duplicate</button><button type="button" class="btn danger" id="pj-del">Delete</button></div>
+    <div class="pjnew" id="pj-new" hidden>
+      <label class="f"><span class="lab">Project name</span><input type="text" id="pj-nname" maxlength="80" placeholder="For example EGLL 5 year review"></label>
+      <div class="row" style="flex-wrap:nowrap">
+        <label class="f" style="flex:1"><span class="lab">Aerodrome</span><input type="text" class="up" id="pj-ad" list="adlist" placeholder="ICAO" spellcheck="false"></label>
+        <label class="f" style="flex:1"><span class="lab">Runway</span><select id="pj-rwy"></select></label>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="First option type"><label><input type="radio" name="pj-k" value="APCH" checked><span>Approach + missed</span></label><label><input type="radio" name="pj-k" value="SID"><span>SID</span></label></div>
+      <p class="hint" id="pj-hint">A new project starts with one option, which you can reshape or replace by importing a coding table.</p>
+      <button type="button" class="btn pri" id="pj-create">Create project</button>
+    </div>
+    <p class="hint">Projects are kept in this browser. Use Save project to keep a copy as a file or share it.</p>
+  </div>
   <div class="tabs-opt" id="optbar" role="tablist" aria-label="Options"></div>
   <button type="button" class="btn" id="b-new">+ New option</button>
   <button type="button" class="btn" id="b-imp">Import coding table</button>
@@ -1096,7 +1126,40 @@ function defaultProject(){
   if(a)p.options.push(a); if(b)p.options.push(b);
   return p;
 }
-function save(){try{localStorage.setItem(STORE,JSON.stringify(project));}catch(e){}}
+const IDX='ifp-option-sketcher-projects-v1',PKEY=id=>'ifp-option-sketcher-p-'+id,memStore={};
+function lsGet(k){try{const v=localStorage.getItem(k);if(v!=null)return v;}catch(e){}return memStore[k]??null;}
+function lsSet(k,v){memStore[k]=v;try{localStorage.setItem(k,v);}catch(e){}}
+function lsDel(k){delete memStore[k];try{localStorage.removeItem(k);}catch(e){}}
+function normProject(p){if(!p||!p.options||!p.options.length)return null;p.crit=Object.assign(IFP.critDefaults(),p.crit||{});if(!p.cas500){if(!(+p.crit.casVBuf))p.crit.casVBuf=500;p.cas500=1;}
+  p.id=p.id||uid();p.name=p.name||'Untitled project';p.rings=p.rings||[];p.active=Math.min(p.active||0,p.options.length-1);return p;}
+let projIndex={active:null,list:[]};
+function writeIndex(){lsSet(IDX,JSON.stringify(projIndex));}
+function save(){
+  if(!project)return;project.updated=Date.now();lsSet(PKEY(project.id),JSON.stringify(project));
+  let e=projIndex.list.find(x=>x.id===project.id);if(!e){e={id:project.id};projIndex.list.push(e);}
+  Object.assign(e,{name:project.name,n:project.options.length,updated:project.updated});projIndex.active=project.id;writeIndex();
+  const pn=$('proj-name');if(pn)pn.textContent=project.name;
+}
+function loadProject(id){try{return normProject(JSON.parse(lsGet(PKEY(id))));}catch(e){return null;}}
+function initProjects(){
+  try{const ix=JSON.parse(lsGet(IDX));if(ix&&ix.list)projIndex=ix;}catch(e){}
+  projIndex.list=projIndex.list.filter(e=>lsGet(PKEY(e.id))!=null);
+  if(!projIndex.list.length){ // first run: bring across the single saved project, or start with the example
+    const old=load();if(old&&!old.name)old.name='My project';const p=old?normProject(old):normProject(defaultProject());
+    if(!old)p.name='Example – Bournemouth';
+    project=p;save();return;
+  }
+  project=loadProject(projIndex.active)||loadProject(projIndex.list[0].id);
+  if(!project){project=normProject(defaultProject());project.name='Example – Bournemouth';}
+  save();
+}
+function switchProject(p){save();project=normProject(p);undoStack=[];cache.clear();sel=null;qsel=new Set();$('qinfo').hidden=true;update(true);fit();renderProjects();}
+function renderProjects(){
+  const fmtD=t=>t?new Date(t).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'';
+  const L=[...projIndex.list].sort((a,b)=>(b.updated||0)-(a.updated||0));
+  $('pj-list').innerHTML=L.map(e=>`<li><button type="button" data-pj="${e.id}" aria-current="${e.id===project.id}"><span>${esc(e.name)}</span><small>${e.n} option${e.n===1?'':'s'} · ${fmtD(e.updated)}</small></button></li>`).join('');
+  $('pj-name').value=project.name;$('proj-name').textContent=project.name;$('pj-del').disabled=projIndex.list.length<2;
+}
 function load(){try{const s=localStorage.getItem(STORE);if(s){const p=JSON.parse(s);if(p&&p.options&&p.options.length){p.crit=Object.assign(IFP.critDefaults(),p.crit||{});if(!p.cas500){if(!(+p.crit.casVBuf))p.crit.casVBuf=500;p.cas500=1;}return p;}}}catch(e){}return null;}
 const opt=()=>project.options[project.active];
 function snapshot(){undoStack.push(JSON.stringify({o:opt(),i:project.active}));if(undoStack.length>80)undoStack.shift();}
@@ -1652,8 +1715,8 @@ $('no-go').onclick=()=>{const kind=document.querySelector('input[name=nk]:checke
 // export
 function download(name,mime,text){try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:mime}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);toast(`Saved ${name}`);}catch(e){toast('Download is blocked here. Use the downloaded copy of this page to save files.');}}
 const stamp=()=>new Date().toISOString().slice(0,10);
-$('b-save').onclick=()=>download(`ifp-options-${stamp()}.json`,'application/json',JSON.stringify(project,null,1));
-$('f-open').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const p=JSON.parse(await f.text());if(!p.options||!p.options.length)throw new Error('no options');p.crit=Object.assign(IFP.critDefaults(),p.crit||{});if(!p.cas500){if(!(+p.crit.casVBuf))p.crit.casVBuf=500;p.cas500=1;}project=p;project.active=Math.min(project.active||0,p.options.length-1);undoStack=[];cache.clear();sel=null;update(true);fit();toast(`Opened ${f.name}`);}catch(err){toast('That file is not an options project.');}e.target.value='';};
+$('b-save').onclick=()=>download(`${(project.name||'ifp-options').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-')||'ifp-options'}-${stamp()}.json`,'application/json',JSON.stringify(project,null,1));
+$('f-open').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const p=JSON.parse(await f.text());if(!p.options||!p.options.length)throw new Error('no options');p.id=uid();if(!p.name)p.name=f.name.replace(/\.json$/i,'');if(projIndex.list.some(e=>e.name===p.name))p.name+=' (opened)';switchProject(p);toast(`Opened ${f.name} as project “${p.name}”`);}catch(err){toast('That file is not an options project.');}e.target.value='';};
 $('b-copy').onclick=async()=>{const o=opt(),rows=[['Waypoint','Role','Type','Leg to next','Latitude','Longitude','Lat (dec)','Lon (dec)','Constraint','Profile alt ft']];
   o.wps.forEach(w=>{const j=R.N.findIndex(n=>n.id===w.id);rows.push([w.name,w.role||'',w.fo?'Fly-over':'Fly-by',w.leg||'TF',dms(w.lat,'N','S',2),dms(w.lon,'E','W',3),w.lat.toFixed(8),w.lon.toFixed(8),w.alt&&w.alt.t?`${w.alt.t} ${w.alt.ft}`:'',R.alt[j]!=null?Math.round(R.alt[j]):'']);});
   const txt=rows.map(r=>r.join('\t')).join('\n');try{await navigator.clipboard.writeText(txt);toast('Waypoint table copied. Paste into Excel.');}catch(e){const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('Waypoint table copied.');}catch(_){toast('Copy is blocked here.');}ta.remove();}};
@@ -1731,9 +1794,30 @@ $('imp-go').onclick=()=>{
   $('imp').hidden=true;activate(first);update(true);toast(`Imported ${add.length} option${add.length===1?'':'s'}`);
 };
 
+/* ---------- projects panel ---------- */
+$('b-proj').onclick=()=>{const p=$('projpanel'),open=p.hidden;p.hidden=!open;$('b-proj').setAttribute('aria-expanded',String(open));if(open){$('pj-new').hidden=true;renderProjects();}};
+$('pj-x').onclick=()=>{$('projpanel').hidden=true;$('b-proj').setAttribute('aria-expanded','false');};
+$('pj-list').addEventListener('click',e=>{const b=e.target.closest('[data-pj]');if(!b||b.dataset.pj===project.id)return;const p=loadProject(b.dataset.pj);if(!p){toast('That project could not be read.');return;}switchProject(p);$('pj-x').click();toast(`Opened ${p.name}`);});
+$('pj-name').onchange=e=>{const v=e.target.value.trim();if(!v){e.target.value=project.name;return;}project.name=v;save();renderProjects();};
+$('pj-dup').onclick=()=>{const p=JSON.parse(JSON.stringify(project));p.id=uid();p.name=project.name+' (copy)';switchProject(p);toast('Project duplicated');};
+let pjDelArm=0;
+$('pj-del').onclick=()=>{if(projIndex.list.length<2)return;const now=Date.now();if(now-pjDelArm>3000){pjDelArm=now;$('pj-del').textContent='Confirm delete';setTimeout(()=>{$('pj-del').textContent='Delete';},3000);return;}
+  pjDelArm=0;$('pj-del').textContent='Delete';const gone=project.name,id=project.id;projIndex.list=projIndex.list.filter(e=>e.id!==id);lsDel(PKEY(id));
+  const next=[...projIndex.list].sort((a,b)=>(b.updated||0)-(a.updated||0))[0],p=loadProject(next.id);project=null;switchProject(p);toast(`Deleted ${gone}`);};
+function pjFillRwys(){const ad=DATA.ads.get($('pj-ad').value.trim().toUpperCase());$('pj-rwy').innerHTML=ad?ad.rwys.flatMap(r=>r.ends.map(e=>`<option value="${e.d}">RWY ${e.d}</option>`)).join(''):'<option value="">Choose an aerodrome</option>';
+  $('pj-hint').textContent=ad?ad.name:'Type an ICAO code, for example EGLL.';}
+$('pj-newbtn').onclick=()=>{$('pj-new').hidden=false;$('pj-nname').value='';$('pj-ad').value=opt().icao||'';pjFillRwys();$('pj-nname').focus();};
+$('pj-ad').addEventListener('input',pjFillRwys);
+$('pj-create').onclick=()=>{
+  const icao=$('pj-ad').value.trim().toUpperCase(),rw=$('pj-rwy').value,kind=document.querySelector('input[name=pj-k]:checked').value;
+  const o=newOption(kind,icao,rw,`Option A – ${icao} RWY ${rw} ${kind==='SID'?'SID':'approach'}`);
+  if(!o){toast('No runway data for that aerodrome and runway.');return;}
+  const name=$('pj-nname').value.trim()||`${icao} RWY ${rw}`;
+  switchProject({id:uid(),name,v:1,cas500:1,crit:IFP.critDefaults(),options:[o],active:0,rings:[]});$('pj-new').hidden=true;$('pj-x').click();toast(`Created project ${name}`);};
+
 /* ---------- boot ---------- */
 try{loadData(JSON.parse($('aipdata').textContent));}catch(e){$('dsinfo').textContent='No airspace data embedded. Load an AIP KML or KMZ.';}
-project=load()||defaultProject();
+initProjects();
 if(!project.options.length){project=defaultProject();}
 new ResizeObserver(resize).observe(plot);
 try{window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw);}catch(e){}
