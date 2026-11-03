@@ -639,6 +639,8 @@ var IFP=(function(){
     var grads=[]; for(var j=0;j<N.length-1;j++){var ds=(S[j+1]-S[j])*FT; grads.push(ds>0?(alt[j+1]-alt[j])/ds*100:0);}
     var res={N:N,F:F,geo:g,alt:alt,segs:segs,grads:grads,crit:crit};
     var hi=opt.maHi, iMap=-1; N.forEach(function(n,j){if(n.role==='MAPt'&&iMap<0)iMap=j;});
+    // with no highest start altitude set, use the climb's own turn altitude: already that high means turning at the MAPt
+    if((hi==null||hi==='')&&iMap>=0&&N[iMap].leg==='CA'&&N[iMap].caAlt!=null&&isFinite(+N[iMap].caAlt))hi=+N[iMap].caAlt;
     if(opt.kind!=='SID'&&!opt._early&&iMap>=0&&iMap<N.length-1&&hi!=null&&hi!==''&&isFinite(+hi)){
       var lo=alt[iMap];
       if(+hi>lo+0.5){
@@ -1497,8 +1499,8 @@ function renderSetup(){
         <label class="f full"><span class="lab">Then turn towards the first waypoint</span><select id="s-derdir"><option value="" ${!o.derTurnDir?'selected':''}>Shortest</option><option value="L" ${o.derTurnDir==='L'?'selected':''}>Left</option><option value="R" ${o.derTurnDir==='R'?'selected':''}>Right</option></select></label>`
       :`<label class="f"><span class="lab">Missed approach gradient <span class="u">%</span></span><input type="number" id="s-ma" step="0.1" value="${o.maGrad!=null?o.maGrad:project.crit.maGrad}"></label>
         <label class="f"><span class="lab">Missed approach starts, lowest <span class="u">ft (DA/MDA)</span></span><input type="number" id="s-malo" step="10" placeholder="Profile at MAPt" value="${o.maLo!=null&&o.maLo!==''?o.maLo:''}"></label>
-        <label class="f"><span class="lab">Highest <span class="u">ft, earliest turn</span></span><input type="number" id="s-mahi" step="10" placeholder="Optional" value="${o.maHi!=null&&o.maHi!==''?o.maHi:''}"></label>
-        <p class="hint full">The solid track starts the climb from the lowest altitude, which gives the latest turn. The highest altitude gives the earliest turn, drawn dashed, and is checked too.</p>
+        <label class="f"><span class="lab">Highest <span class="u">ft, earliest turn</span></span><input type="number" id="s-mahi" step="10" placeholder="${(()=>{const m=o.wps.find(w=>w.role==='MAPt');return m&&m.leg==='CA'&&m.caAlt!=null?'Turn alt '+m.caAlt:'Optional';})()}" value="${o.maHi!=null&&o.maHi!==''?o.maHi:''}"></label>
+        <p class="hint full">The solid track starts the climb from the lowest altitude, which gives the latest turn. The highest altitude gives the earliest turn, drawn dashed, and is checked too. Left blank, it is the MAPt's climb-then-turn altitude, so the earliest turn is at the MAPt.</p>
         <label class="f full"><span class="lab">Inbound track to first waypoint <span class="u">°T, optional</span></span><input type="number" id="s-in" step="1" placeholder="Leave blank for no turn at the first waypoint" value="${o.inTrk!==''&&o.inTrk!=null?o.inTrk:''}"></label>`}
   </fieldset>
   <fieldset><legend>${o.kind==='SID'?'Departure end of runway':'Landing threshold'}</legend>
