@@ -10,10 +10,16 @@ const PORTAL_CONFIG = {
 // to give it the orange rule; the rest use the neutral rule.
 const ANNOUNCEMENTS = [
   {
+    date: "3 Nov 2026",
+    title: "IFP Option Sketcher",
+    body: "Sketch RNAV approach and SID options over the airspace picture, check nominal-track criteria and compare options side by side before full construction.",
+    isLatest: true,
+  },
+  {
     date: "23 Sep 2026",
     title: "DVOF Duplicate Filter",
     body: "Strip DVOF obstacles that duplicate a CAP1732 surveyed obstacle within a horizontal and height tolerance, and export PDToolkit-ready .pds files.",
-    isLatest: true,
+    
   },
   {
     date: "21 Sep 2026",
