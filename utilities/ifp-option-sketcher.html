@@ -461,7 +461,7 @@ var IFP=(function(){
     {k:'sidTurnHeight',v:394,u:'ft',g:'Departure',l:'Min height above DER before any turn'},
     {k:'sidScreen',v:16,u:'ft',g:'Departure',l:'Height at DER (screen height)'},
     {k:'pdg',v:3.3,u:'%',g:'Departure',l:'Procedure design gradient (default)'},
-    {k:'casVBuf',v:0,u:'ft',g:'Controlled airspace',l:'Vertical buffer above the base of CAS'},
+    {k:'casVBuf',v:500,u:'ft',g:'Controlled airspace',l:'Vertical buffer above the base of CAS'},
     {k:'casLBuf',v:0,u:'NM',g:'Controlled airspace',l:'Lateral buffer inside CAS boundaries'}
   ];
   function critDefaults(){var o={};CRIT.forEach(function(c){o[c.k]=c.v;});return o;}
@@ -1091,13 +1091,13 @@ function newOption(kind,icao,rwyEnd,name){
   return {id:uid(),name:name||`${icao} ${rwyEnd} ${kind==='SID'?'SID':'RNP'}`,kind,icao,rwy:rwyEnd,cat:'C',isa:15,ref,inTrk:'',pdg:null,maGrad:null,maLo:kind==='SID'?'':Math.round((ref.elev+250)/10)*10,maHi:'',derCA:'',derTurnDir:'',speeds:{},banks:{},wps};
 }
 function defaultProject(){
-  const p={v:1,crit:IFP.critDefaults(),options:[],active:0};
+  const p={v:1,cas500:1,crit:IFP.critDefaults(),options:[],active:0};
   const a=newOption('APCH','EGHH','26','Option A – RWY 26 T-bar'), b=newOption('SID','EGHH','26','Option B – RWY 26 SID');
   if(a)p.options.push(a); if(b)p.options.push(b);
   return p;
 }
 function save(){try{localStorage.setItem(STORE,JSON.stringify(project));}catch(e){}}
-function load(){try{const s=localStorage.getItem(STORE);if(s){const p=JSON.parse(s);if(p&&p.options&&p.options.length){p.crit=Object.assign(IFP.critDefaults(),p.crit||{});return p;}}}catch(e){}return null;}
+function load(){try{const s=localStorage.getItem(STORE);if(s){const p=JSON.parse(s);if(p&&p.options&&p.options.length){p.crit=Object.assign(IFP.critDefaults(),p.crit||{});if(!p.cas500){if(!(+p.crit.casVBuf))p.crit.casVBuf=500;p.cas500=1;}return p;}}}catch(e){}return null;}
 const opt=()=>project.options[project.active];
 function snapshot(){undoStack.push(JSON.stringify({o:opt(),i:project.active}));if(undoStack.length>80)undoStack.shift();}
 function undo(){const s=undoStack.pop();if(!s)return;const {o,i}=JSON.parse(s);const k=project.options.findIndex(x=>x.id===o.id);if(k>=0){project.options[k]=o;project.active=k;}update(true);}
@@ -1156,7 +1156,7 @@ function casCheck(res,geo,altArr,sFrom,early){
     if(!lat.length)why='outside the lateral limits of controlled airspace';
     else{const above=lat.filter(a=>a.lof>hm-0.5).sort((x,y)=>x.lof-y.lof)[0],below=lat.filter(a=>a.hif<hm+0.5).sort((x,y)=>y.hif-x.hif)[0];
       if(casAt(lat,g.lon,g.lat,hm)){const base=lat.filter(a=>hm>=a.lof&&hm<=a.hif).sort((x,y)=>x.lof-y.lof)[0];why=lb>0&&!casAt(lat,g.lon,g.lat,Math.max(0,hm-vb))?`within ${fmt(vb)} ft of the base of ${base?base.short:'CAS'}`:`within ${fmt(lb,1)} NM of the CAS boundary`;}
-      else if(above)why=`below the base of ${above.short} (${above.lo}, Class ${above.c})`;
+      else if(above)why=`below${vb>0?', or less than '+fmt(vb)+' ft above,':''} the base of ${above.short} (${above.lo}, Class ${above.c})`;
       else if(below)why=`above the top of ${below.short} (${below.hi})`;
       else why='outside controlled airspace';
       if(vb>0&&casAt(lat,g.lon,g.lat,hm)&&!casAt(lat,g.lon,g.lat,Math.max(0,hm-vb))){const base=lat.filter(a=>hm>=a.lof&&hm<=a.hif).sort((x,y)=>x.lof-y.lof)[0];why=`within ${fmt(vb)} ft of the base of ${base?base.short+' ('+base.lo+')':'CAS'}`;}}
@@ -1653,7 +1653,7 @@ $('no-go').onclick=()=>{const kind=document.querySelector('input[name=nk]:checke
 function download(name,mime,text){try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:mime}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);toast(`Saved ${name}`);}catch(e){toast('Download is blocked here. Use the downloaded copy of this page to save files.');}}
 const stamp=()=>new Date().toISOString().slice(0,10);
 $('b-save').onclick=()=>download(`ifp-options-${stamp()}.json`,'application/json',JSON.stringify(project,null,1));
-$('f-open').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const p=JSON.parse(await f.text());if(!p.options||!p.options.length)throw new Error('no options');p.crit=Object.assign(IFP.critDefaults(),p.crit||{});project=p;project.active=Math.min(project.active||0,p.options.length-1);undoStack=[];cache.clear();sel=null;update(true);fit();toast(`Opened ${f.name}`);}catch(err){toast('That file is not an options project.');}e.target.value='';};
+$('f-open').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const p=JSON.parse(await f.text());if(!p.options||!p.options.length)throw new Error('no options');p.crit=Object.assign(IFP.critDefaults(),p.crit||{});if(!p.cas500){if(!(+p.crit.casVBuf))p.crit.casVBuf=500;p.cas500=1;}project=p;project.active=Math.min(project.active||0,p.options.length-1);undoStack=[];cache.clear();sel=null;update(true);fit();toast(`Opened ${f.name}`);}catch(err){toast('That file is not an options project.');}e.target.value='';};
 $('b-copy').onclick=async()=>{const o=opt(),rows=[['Waypoint','Role','Type','Leg to next','Latitude','Longitude','Lat (dec)','Lon (dec)','Constraint','Profile alt ft']];
   o.wps.forEach(w=>{const j=R.N.findIndex(n=>n.id===w.id);rows.push([w.name,w.role||'',w.fo?'Fly-over':'Fly-by',w.leg||'TF',dms(w.lat,'N','S',2),dms(w.lon,'E','W',3),w.lat.toFixed(8),w.lon.toFixed(8),w.alt&&w.alt.t?`${w.alt.t} ${w.alt.ft}`:'',R.alt[j]!=null?Math.round(R.alt[j]):'']);});
   const txt=rows.map(r=>r.join('\t')).join('\n');try{await navigator.clipboard.writeText(txt);toast('Waypoint table copied. Paste into Excel.');}catch(e){const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('Waypoint table copied.');}catch(_){toast('Copy is blocked here.');}ta.remove();}};
@@ -1704,6 +1704,9 @@ function importEnv(cat){
     uid,crit:project.crit,u,add,FT,altAlong:IFP.altAlong,speedDefault:(c,k)=>IFP.SPEEDS[c][k],segName:k=>IFP.SEGNAME[k]};
 }
 let impItems=[];
+function impCount(){const n=impItems.filter((it,i)=>it.b.option&&$('imp-c'+i)&&$('imp-c'+i).checked).length;
+  $('imp-go').disabled=!n;$('imp-go').textContent=n?`Add ${n} option${n===1?'':'s'}`:'Tick at least one procedure';}
+$('imp-list').addEventListener('change',e=>{if(e.target.matches('input[type=checkbox]'))impCount();});
 function previewImport(procs){
   const cat=$('imp-cat').value,env=importEnv(cat);
   impItems=procs.map(p=>{try{const b=CT.build(p,env);return {p,b};}catch(e){return {p,b:{option:null,notes:[{lvl:'err',msg:'Could not convert: '+e.message}]}};}});
@@ -1712,7 +1715,7 @@ function previewImport(procs){
       ${o?`<span class="legs">${o.wps.map(w=>esc(w.name)+(w.role?' ('+w.role+')':'')+(w.leg==='CA'?' ↑'+w.caAlt:'')).join(' → ')}</span>`:''}
       ${ns.filter(n=>n.lvl!=='info').length?`<ul class="nt">${ns.filter(n=>n.lvl!=='info').map(n=>`<li class="${n.lvl}">${esc(n.msg)}</li>`).join('')}</ul>`:''}</li>`;}).join('');
   const n=impItems.filter(it=>it.b.option).length;
-  $('imp-go').hidden=!n;$('imp-go').textContent=`Add ${n} option${n===1?'':'s'}`;
+  $('imp-go').hidden=!n;impCount();
   $('imp-status').textContent=procs.length?`Found ${procs.length} procedure${procs.length===1?'':'s'}.`:'No coding table found. The file needs a header row with Path Terminator and Waypoint columns.';
 }
 let impFile=null;
