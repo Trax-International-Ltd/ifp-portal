@@ -65,6 +65,14 @@ h1{font-family:var(--f-display);font-weight:600;font-size:22px;letter-spacing:-.
 .opt small{font:500 11px var(--f-mono);color:var(--muted)}
 .opt[aria-current="true"]{border-color:var(--acc);box-shadow:inset 0 -2px 0 var(--acc)}
 .spacer{flex:1}
+.bar{flex-direction:column;align-items:stretch;flex-wrap:nowrap}
+.toolwrap{position:relative}
+.toolrow{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;padding-bottom:2px}
+.toolrow>*{flex:none}
+.toolrow>.spacer{flex:1 1 0;min-width:4px}
+.tsep{width:1px;height:22px;background:var(--grid);margin:0 2px}
+.tabs-opt .opt small{margin-left:2px}
+.opt .nt-ic{font-size:11px;color:var(--muted)}
 .bar{position:relative}
 .projbtn{gap:6px;max-width:280px}
 .projbtn .pk{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -76,6 +84,12 @@ h1{font-family:var(--f-display);font-weight:600;font-size:22px;letter-spacing:-.
 .projlist button:hover{border-color:var(--acc,var(--track))}
 .projlist button[aria-current="true"]{border-color:var(--acc,var(--track));background:var(--acc-soft,var(--track-soft))}
 .projlist small{font:400 11.5px var(--f-mono);color:var(--muted);white-space:nowrap}
+textarea{font:400 13.5px/1.5 var(--f-body);color:var(--ink);background:var(--ifp-field,var(--paper));border:1px solid var(--grid);border-radius:8px;padding:8px 10px;width:100%;min-width:0;resize:vertical;min-height:90px}
+textarea:focus-visible{outline:2px solid var(--acc,var(--track));outline-offset:1px}
+.notehead{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.notehead strong{color:var(--ink);font-weight:600}
+.btn.sm{height:26px;font-size:12px;padding:0 8px}
+td.note1{white-space:normal;max-width:260px;color:var(--muted)}
 .pjnew{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--grid);padding-top:10px}
 .btn{font:500 13px var(--f-body);color:var(--ifp-navy);background:var(--panel);border:1px solid var(--line);border-radius:8px;
   min-width:34px;height:32px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
@@ -215,7 +229,21 @@ details p,details li{max-width:74ch;font-size:14px}
   <p class="sub">Rapid shortlisting of RNAV approach and SID options against PANS-OPS nominal-track criteria. Not for operational use; feasible options go to full construction and obstacle assessment.</p>
 </header>
 <div class="bar">
-  <button type="button" class="btn projbtn" id="b-proj" aria-expanded="false" aria-controls="projpanel" title="Switch, create or manage projects"><span class="pk">Project</span> <strong id="proj-name"></strong> <span aria-hidden="true">▾</span></button>
+ <div class="toolwrap">
+  <div class="toolrow" role="toolbar" aria-label="Project and option tools">
+   <button type="button" class="btn projbtn" id="b-proj" aria-expanded="false" aria-controls="projpanel" title="Switch, create or manage projects"><span class="pk">Project</span> <strong id="proj-name"></strong> <span aria-hidden="true">▾</span></button>
+   <span class="tsep" aria-hidden="true"></span>
+   <button type="button" class="btn" id="b-new">+ New option</button>
+   <button type="button" class="btn" id="b-imp" title="Import a procedure coding table (Excel or AIP PDF)">Import table</button>
+   <button type="button" class="btn" id="b-dup" title="Duplicate the current option">Duplicate</button>
+   <button type="button" class="btn danger" id="b-del" title="Delete the current option">Delete</button>
+   <span class="spacer"></span>
+   <button type="button" class="btn" id="b-undo" title="Undo (Ctrl+Z)">Undo</button>
+   <button type="button" class="btn" id="b-copy" title="Copy the waypoint table for Excel">Copy waypoints</button>
+   <button type="button" class="btn" id="b-kml">Export KML</button>
+   <button type="button" class="btn" id="b-save">Save project</button>
+   <label class="btn" for="f-open">Open project</label><input type="file" id="f-open" class="vh" accept=".json">
+  </div>
   <div class="panel projpanel" id="projpanel" hidden>
     <h3>Projects <button type="button" class="x" id="pj-x" aria-label="Close">×</button></h3>
     <ul class="projlist" id="pj-list"></ul>
@@ -233,17 +261,8 @@ details p,details li{max-width:74ch;font-size:14px}
     </div>
     <p class="hint">Projects are kept in this browser. Use Save project to keep a copy as a file or share it.</p>
   </div>
+ </div>
   <div class="tabs-opt" id="optbar" role="tablist" aria-label="Options"></div>
-  <button type="button" class="btn" id="b-new">+ New option</button>
-  <button type="button" class="btn" id="b-imp">Import coding table</button>
-  <button type="button" class="btn" id="b-dup">Duplicate</button>
-  <button type="button" class="btn danger" id="b-del">Delete</button>
-  <span class="spacer"></span>
-  <button type="button" class="btn" id="b-undo" title="Undo (Ctrl+Z)">Undo</button>
-  <button type="button" class="btn" id="b-copy">Copy waypoint table</button>
-  <button type="button" class="btn" id="b-kml">Export KML</button>
-  <button type="button" class="btn" id="b-save">Save project</button>
-  <label class="btn" for="f-open">Open project</label><input type="file" id="f-open" class="vh" accept=".json">
 </div>
 </div>
 
@@ -256,10 +275,18 @@ details p,details li{max-width:74ch;font-size:14px}
       <button type="button" role="tab" id="tab-wp" aria-selected="true">Waypoint</button>
       <button type="button" role="tab" id="tab-setup" aria-selected="false">Setup</button>
       <button type="button" role="tab" id="tab-crit" aria-selected="false">Criteria</button>
+      <button type="button" role="tab" id="tab-notes" aria-selected="false">Notes</button>
     </div>
 
     <div class="pane" id="pane-wp"></div>
     <div class="pane" id="pane-setup" hidden></div>
+    <div class="pane" id="pane-notes" hidden>
+      <div class="notehead"><label for="n-opt">Notes on <strong id="n-optname"></strong></label><button type="button" class="btn sm" data-stamp="n-opt">Insert date</button></div>
+      <textarea id="n-opt" rows="11" placeholder="Design rationale, constraints, assumptions, stakeholder comments, next steps…"></textarea>
+      <div class="notehead"><label for="n-proj">Project notes</label><button type="button" class="btn sm" data-stamp="n-proj">Insert date</button></div>
+      <textarea id="n-proj" rows="7" placeholder="Scope, sponsor requirements, data sources, decisions across options…"></textarea>
+      <p class="hint" id="n-status">Notes are saved with the project as you type. The first line of each option's notes appears in the comparison table.</p>
+    </div>
     <div class="pane" id="pane-crit" hidden>
       <p class="hint">Criteria apply to every option in this project. Defaults follow Doc 8168 Vol II; check them against the edition and any UK variations you work to.</p>
       <table class="mini crit"><tbody id="critbody"></tbody></table>
@@ -323,7 +350,7 @@ details p,details li{max-width:74ch;font-size:14px}
       <th></th><th>Waypoint</th><th>Role</th><th>Type</th><th>Segment</th><th class="n">Altitude ft</th><th>Constraint</th><th class="n">Course out °T</th><th class="n">Dist NM</th><th class="n">Turn °</th><th class="n">IAS / TAS kt</th><th class="n">Radius NM</th><th class="n">Gradient %</th>
     </tr></thead><tbody id="legbody"></tbody></table></div></section>
     <section class="panel"><div class="tblwrap"><table class="legs"><thead><tr>
-      <th></th><th>Option</th><th>Type</th><th>Runway</th><th>Cat</th><th class="n">Track NM</th><th class="n">Limits</th><th class="n">Checks</th><th>Key figures</th><th>Airspace entered</th>
+      <th></th><th>Option</th><th>Type</th><th>Runway</th><th>Cat</th><th class="n">Track NM</th><th class="n">Limits</th><th class="n">Checks</th><th>Key figures</th><th>Airspace entered</th><th>Notes</th>
     </tr></thead><tbody id="cmpbody"></tbody></table></div></section>
     <details class="panel">
       <summary>How it works</summary>
@@ -1457,7 +1484,7 @@ function worstByNode(){const w={};R.F.forEach(f=>{if(f.j<0)return;const o={err:2
 const ROLES_A=['','IAF','IF','FAF','MAPt','MA','MAHF'], ROLES_S=['','—'];
 function renderOptBar(){
   $('optbar').innerHTML=project.options.map((o,i)=>{const r=cache.get(o.id);const st=r?(r.nErr?'err':r.nWarn?'warn':''):'';
-    return `<button type="button" class="opt ${st}" role="tab" data-i="${i}" aria-current="${i===project.active}"><i></i>${esc(o.name)} <small>${o.kind==='SID'?'SID':'APCH'}</small></button>`;}).join('');
+    return `<button type="button" class="opt ${st}" role="tab" data-i="${i}" aria-current="${i===project.active}"><i></i>${esc(o.name)}${o.notes&&o.notes.trim()?' <span class="nt-ic" title="Has notes">✎</span>':''} <small>${o.kind==='SID'?'SID':'APCH'}</small></button>`;}).join('');
   $('b-del').disabled=project.options.length<2; $('b-undo').disabled=!undoStack.length;
 }
 function renderChip(){
@@ -1498,7 +1525,7 @@ function keyFigs(r){
 function renderCompare(){
   $('cmpbody').innerHTML=project.options.map((o,i)=>{const r=cache.get(o.id);if(!r)return '';const st=r.nErr?'err':r.nWarn?'warn':'';
     return `<tr data-i="${i}" class="${i===project.active?'sel':''}"><td><span class="dot ${st}"></span></td><td><strong>${esc(o.name)}</strong></td><td>${o.kind==='SID'?'SID':'Approach'}</td><td>${o.icao} ${o.rwy}</td><td>${o.cat}</td>
-      <td class="n">${fmt(r.geo.total,1)}</td><td class="n">${r.nErr}</td><td class="n">${r.nWarn}</td><td>${keyFigs(r)}</td><td style="white-space:normal">${r.hits.map(h=>esc(h.a.short)).join(', ')||'None'}</td></tr>`;}).join('');
+      <td class="n">${fmt(r.geo.total,1)}</td><td class="n">${r.nErr}</td><td class="n">${r.nWarn}</td><td>${keyFigs(r)}</td><td style="white-space:normal">${r.hits.map(h=>esc(h.a.short)).join(', ')||'None'}</td><td class="note1" title="${esc(o.notes||'')}">${esc(((o.notes||'').split('\n').map(x=>x.trim()).filter(x=>x&&!/^— .* —$/.test(x))[0]||'').slice(0,90))}</td></tr>`;}).join('');
 }
 function renderWP(){
   const o=opt(),pane=$('pane-wp'),i=o.wps.findIndex(w=>w.id===sel);
@@ -1608,7 +1635,7 @@ function renderCrit(){
 }
 function renderAll(){
   renderOptBar();renderChip();renderFindings();renderLegs();renderCompare();renderRings();
-  if(!$('pane-wp').hidden)renderWP(); if(!$('pane-setup').hidden)renderSetup();
+  if(!$('pane-wp').hidden)renderWP(); if(!$('pane-setup').hidden)renderSetup(); if(!$('pane-notes').hidden)renderNotes();
   const [lo,hi]=R.band;$('bandtxt').textContent=`Only airspace between ${fmt(lo)} and ${fmt(hi)} ft`;
   $('modehint').textContent=mode()==='add'?'Click the chart to add a waypoint after the selected one':'Drag waypoints · Shift-drag snaps to fixes · click + to insert · click airspace for details';
   cv.className=mode()==='add'?'add':'';
@@ -1625,8 +1652,21 @@ function insertAt(idx,p){
   o.wps.splice(idx,0,w);sel=w.id;showTab('wp');update(false);return w;
 }
 function delSel(){const o=opt(),i=o.wps.findIndex(w=>w.id===sel);if(i<0)return;if(o.wps.length<=2){toast('An option needs at least two waypoints.');return;}snapshot();o.wps.splice(i,1);sel=o.wps[Math.min(i,o.wps.length-1)].id;update(false);}
-function showTab(t){['wp','setup','crit'].forEach(k=>{$('tab-'+k).setAttribute('aria-selected',String(k===t));$('pane-'+k).hidden=k!==t;});if(t==='wp')renderWP();if(t==='setup')renderSetup();if(t==='crit')renderCrit();}
-['wp','setup','crit'].forEach(k=>$('tab-'+k).onclick=()=>showTab(k));
+function showTab(t){['wp','setup','crit','notes'].forEach(k=>{$('tab-'+k).setAttribute('aria-selected',String(k===t));$('pane-'+k).hidden=k!==t;});if(t==='wp')renderWP();if(t==='setup')renderSetup();if(t==='crit')renderCrit();if(t==='notes')renderNotes();}
+['wp','setup','crit','notes'].forEach(k=>$('tab-'+k).onclick=()=>showTab(k));
+function renderNotes(){
+  const o=opt();$('n-optname').textContent=o.name;
+  if(document.activeElement!==$('n-opt'))$('n-opt').value=o.notes||'';
+  if(document.activeElement!==$('n-proj'))$('n-proj').value=project.notes||'';
+}
+let noteTimer=0;
+function noteSaved(){clearTimeout(noteTimer);noteTimer=setTimeout(()=>{save();renderCompare();renderOptBar();$('n-status').textContent='Saved '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'. The first line of each option\'s notes appears in the comparison table.';},400);}
+$('n-opt').addEventListener('input',e=>{opt().notes=e.target.value;noteSaved();});
+$('n-proj').addEventListener('input',e=>{project.notes=e.target.value;noteSaved();});
+document.querySelectorAll('[data-stamp]').forEach(b=>b.onclick=()=>{
+  const ta=$(b.dataset.stamp),d=new Date(),stamp=d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  const pre=ta.value&&!ta.value.endsWith('\n')?'\n':'',ins=pre+(ta.value?'\n':'')+'— '+stamp+' —\n';
+  ta.value+=ins;ta.focus();ta.selectionStart=ta.selectionEnd=ta.value.length;ta.dispatchEvent(new Event('input'));});
 
 /* ---------- pointer ---------- */
 let drag=null,panelRaf=0;
@@ -1724,7 +1764,7 @@ $('b-kml').onclick=()=>{
   const pm=[];project.options.forEach(o=>{const r=cache.get(o.id)||computeOpt(o),P=r.P;
     const smp=IFP.sampleTrack(r.geo,0.1).map(q=>{const g=P.inv(q.x,q.y);const h=IFP.altAlong(r,q.s)*0.3048;return `${g.lon.toFixed(7)},${g.lat.toFixed(7)},${h.toFixed(1)}`;}).join(' ');
     const wps=o.wps.map(w=>`<Placemark><name>${esc(w.name)}</name><description>${esc((w.role||'')+' '+(w.fo?'fly-over':'fly-by'))}</description><Point><coordinates>${w.lon.toFixed(8)},${w.lat.toFixed(8)},0</coordinates></Point></Placemark>`).join('');
-    pm.push(`<Folder><name>${esc(o.name)}</name><Placemark><name>${esc(o.name)} nominal track</name><Style><LineStyle><color>ff6f12a8</color><width>3</width></LineStyle></Style><LineString><altitudeMode>absolute</altitudeMode><coordinates>${smp}</coordinates></LineString></Placemark>${wps}</Folder>`);});
+    pm.push(`<Folder><name>${esc(o.name)}</name>${o.notes?`<description>${esc(o.notes)}</description>`:''}<Placemark><name>${esc(o.name)} nominal track</name><Style><LineStyle><color>ff6f12a8</color><width>3</width></LineStyle></Style><LineString><altitudeMode>absolute</altitudeMode><coordinates>${smp}</coordinates></LineString></Placemark>${wps}</Folder>`);});
   download(`ifp-options-${stamp()}.kml`,'application/vnd.google-earth.kml+xml',`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>IFP options ${stamp()}</name>${pm.join('')}</Document></kml>`);};
 $('b-critreset').onclick=()=>{project.crit=IFP.critDefaults();renderCrit();update(true);};
 
