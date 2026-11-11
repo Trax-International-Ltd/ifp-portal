@@ -396,6 +396,19 @@ const CRIT_DEFS=[
  {k:"cioCloseH",g:"Close-in obstacles",   label:"Close-in height above DER (m)",  def:60,  note:"An OIS-penetrating obstacle is CLOSE-IN when elevation + MOC − DER elevation is below this."},
  {k:"cioDvfRad",g:"Close-in obstacles",   label:"DVF match search radius (m)",    def:150, note:"How far around a UK (DVF) obstacle to look for surveyed candidates in the eyeball check."},
  {k:"cioAutoRad",g:"Close-in obstacles",  label:"DVF auto-match distance (m)",    def:1,   note:"A surveyed obstacle within this distance of a DVOF (UK) obstacle is matched automatically — no eyeball needed."},
+ {k:"interOptLen", g:"ILS intermediate", label:"Optimum segment length (NM)",          def:5,   note:"9 km (5 NM) — Doc 8168 Vol II Pt II, 1.3.3.1. A length below this is flagged, not failed."},
+ {k:"interMaxLoc", g:"ILS intermediate", label:"IF — maximum from LOC antenna (NM)",   def:25,  note:"The IF is normally at a distance not exceeding 46 km (25 NM) from the localizer antenna (1.2.3 / 1.3.3.3)."},
+ {k:"interMaxGrad",g:"ILS intermediate", label:"Maximum descent gradient (%)",          def:5.2, note:"Part I, S4 Ch4, 4.3.3.2 — where a descent is necessary."},
+ {k:"interFlatCD", g:"ILS intermediate", label:"Flat section before the FAP — Cat C/D (NM)", def:1.5, note:"Horizontal segment prior to the final approach — 2.8 km (1.5 NM)."},
+ {k:"interFlatAB", g:"ILS intermediate", label:"Flat section — Cat A/B-only procedures (NM)", def:1,  note:"May be reduced to 1.9 km (1.0 NM) where the procedure is specific to Cat A and B."},
+ {k:"interMin1_AB",g:"ILS intermediate", label:"Min LOC→GP, ≤15° or RF — Cat A/B (NM)",   def:1.5, note:"Table II-1-1-1. These minima should only be used where usable airspace is restricted."},
+ {k:"interMin1_CD",g:"ILS intermediate", label:"Min LOC→GP, ≤15° or RF — Cat C/D/E (NM)", def:1.5, note:""},
+ {k:"interMin2_AB",g:"ILS intermediate", label:"Min LOC→GP, 16–30° — Cat A/B (NM)",       def:2,   note:""},
+ {k:"interMin2_CD",g:"ILS intermediate", label:"Min LOC→GP, 16–30° — Cat C/D/E (NM)",     def:2,   note:""},
+ {k:"interMin3_AB",g:"ILS intermediate", label:"Min LOC→GP, 31–60° — Cat A/B (NM)",       def:2,   note:""},
+ {k:"interMin3_CD",g:"ILS intermediate", label:"Min LOC→GP, 31–60° — Cat C/D/E (NM)",     def:2.5, note:""},
+ {k:"interMin4_AB",g:"ILS intermediate", label:"Min LOC→GP, 61–90° / racetrack — Cat A/B (NM)",   def:2,   note:""},
+ {k:"interMin4_CD",g:"ILS intermediate", label:"Min LOC→GP, 61–90° / racetrack — Cat C/D/E (NM)", def:3,   note:""},
  {k:"poBand1", g:"SID turns — AOB & speed", label:"PANS-OPS band 1 top (ft AMSL)", def:1000, note:"Nominal track only: 15° AOB up to here."},
  {k:"poBand2", g:"SID turns — AOB & speed", label:"PANS-OPS band 2 top (ft AMSL)", def:3000, note:"20° AOB between the bands; 25° above."},
  {k:"poAob1",  g:"SID turns — AOB & speed", label:"PANS-OPS AOB — band 1 (°)",         def:15,  note:""},
@@ -441,6 +454,50 @@ function ilsFinalCalc(thrFt,rdhOp,vpaDeg,fafAlt){
   const dD=RDH_ADJ_K*OAS_FTNM*(crit("rdhStd")-rdhOp)*cot;  // RDH adjustment (ft)
   const fapFt=Dft+dD, fapM=fapFt*FT_M, fapNM=fapM/NM_M;   // final NM via Annex 5, not the App C literal
   return {tanTh:t,hgt,fafFt,fafM,fafNM,fafChart,x,y,z,Dnm,Dft,dD,fapFt,fapM,fapNM};
+}
+
+/* ===== ILS intermediate approach — alignment with the LOC course ===== */
+/* Doc 8168 Vol II, Part II, S1 Ch1, 1.3 with Part I, S4 Ch4, 4.3.3:
+   the segment runs from the IF (on the LOC course) to the FAP. Optimum
+   length 9 km (5 NM); minima per Table II-1-1-1 by interception angle —
+   to be used only where usable airspace is restricted; the IF normally
+   within 25 NM of the LOC antenna. Any descent at not more than 5.2%,
+   completed before a horizontal section of 1.5 NM (Cat C/D — 1.0 NM for
+   Cat A/B-only procedures) held at the FAF procedure altitude to the FAP. */
+const INTER_BANDS=[
+  ["1","≤ 15°, or RF turn to the LOC course"],
+  ["2","16° – 30°"],
+  ["3","31° – 60°"],
+  ["4","61° – 90°, or within a racetrack / reversal"],
+];
+function interCalc(r,iv){
+  if(!r.finalCalc) return {need:"the Final approach tab (FAF procedure altitude → FAP distance)"};
+  const ifAlt=safeNum(iv.alt), ifDist=safeNum(iv.dist);
+  if(ifAlt==null||ifDist==null) return {need:"the IF altitude and its distance from THR"};
+  const fapNM=r.finalCalc.fapNM, faf=safeNum(r.faf);
+  const len=ifDist-fapNM;                                   // IF → FAP along the LOC course
+  const cd=!r.catsOn.length||r.catsOn.some(c=>c==="C"||c==="D");  // governing Table II-1-1-1 column (conservative when none declared)
+  const minLen=crit("interMin"+(iv.angle||"1")+(cd?"_CD":"_AB"));
+  const flat=cd?crit("interFlatCD"):crit("interFlatAB");
+  const locNM=r.dist!=null?ifDist+r.dist/NM_M:null;         // IF → LOC antenna (the LLZ sits beyond the far end)
+  const drop=ifAlt-faf;                                     // ft to lose before the flat section
+  const avail=len-flat;                                     // NM available for the descent
+  const descEndNM=fapNM+flat;                               // descent complete by here (from THR)
+  let grad=null, ckGrad=null;
+  if(drop>=0){
+    if(drop===0){grad=0; ckGrad=true;}
+    else if(avail>0){grad=(drop*FT_M)/(avail*NM_M)*100; ckGrad=grad<=crit("interMaxGrad")+1e-9;}
+    else ckGrad=false;                                      // no room left once the flat section is held
+  }
+  const reqLen=drop>0?(drop*FT_M)/(crit("interMaxGrad")/100)/NM_M+flat:flat;  // shortest segment that fits this descent
+  return {ifAlt,ifDist,fapNM,faf,len,cd,minLen,flat,locNM,drop,avail,grad,descEndNM,reqLen,
+    ckOrder:len>0,
+    ckMin:len>=minLen-1e-9,
+    ckOpt:len>=crit("interOptLen")-1e-9,
+    ckLoc:locNM==null?null:locNM<=crit("interMaxLoc")+1e-9,
+    ckInc:Math.abs(ifAlt/100-Math.round(ifAlt/100))<1e-9,   // Part I 4.2 — 100-ft increments
+    ckDesc:drop>=0,
+    ckGrad};
 }
 
 /* ============ ILS missed approach — Turn at Altitude (TNA) ============ */
@@ -1483,6 +1540,8 @@ function viewProc(d,key,procId,seg){
     body=viewIlsMA(r);
   } else if(procId==="ILS" && seg==="adv"){
     body=viewIlsAdv(r,d);
+  } else if(procId==="ILS" && seg==="inter"){
+    body=viewIlsInter(r,d);
   } else if(procId==="ILS" && seg==="final"){
     const ic=r.ic;
     const vpaCls=r.vpaCheck==="ok"||r.vpaCheck==="optimum"?"chk-ok":(r.vpaCheck?"chk-bad":"");
@@ -1620,6 +1679,136 @@ function viewProc(d,key,procId,seg){
     ${segs.map(([s,label])=>`<button class="${s===seg?"on":""}" data-seg="${s}">${esc(label)}</button>`).join("")}
   </div>
   ${body}`;
+}
+/* ---------- ILS intermediate approach view ---------- */
+function viewIlsInter(r,d){
+  const iv={method:"ALIGN",exists:"",alt:"",dist:"",angle:"1",...(r.ic.inter||{})};
+  const rf=iv.method==="RF";
+  const methodCard=`
+      <div class="card">
+        <div class="hd">Method</div>
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">Construction method</div>
+            <div class="v in"><select class="inter-in" data-f="method" style="width:100%;max-width:235px">
+              <option value="ALIGN"${rf?"":" selected"}>Alignment with LOC</option>
+              <option value="RF"${rf?" selected":""}>RF turn to LOC</option></select></div>
+            <div class="c">PANS-OPS II-1-1, 1.3.2 — the segment is aligned with the localizer course except when an RF turn is used.</div></div>
+          <div class="row"><div class="k">Is there an IF?</div>
+            <div class="v in"><select class="inter-in" data-f="exists">
+              <option value=""${iv.exists===""?" selected":""}></option>
+              <option${iv.exists==="Yes"?" selected":""}>Yes</option>
+              <option${iv.exists==="No"?" selected":""}>No</option></select></div>
+            <div class="c">Part I 4.1.2 — the segment begins either at a designated IF, or on completion of a DR track, reversal or racetrack procedure.</div></div>
+        </div></div>
+      </div>`;
+  if(rf) return `<div class="hub">${methodCard}
+      <div class="card"><div class="bd"><p class="note" style="margin:0"><b>RF turn to the LOC course</b> —
+        criteria (II-1-1, 1.3.6 and Appendix D) to follow. This workspace is where they will live.</p></div></div>
+    </div>`;
+  if(iv.exists==="No") return `<div class="hub">${methodCard}
+      <div class="card"><div class="bd"><p class="note" style="margin:0"><b>No IF designated</b> — the intermediate segment then
+        begins on completion of a DR track, reversal or racetrack procedure (Part I 4.1.2 b). The alignment-method
+        calculations on this tab need a designated IF on the LOC course.</p></div></div>
+    </div>`;
+  if(iv.exists!=="Yes") return `<div class="hub">${methodCard}
+      <div class="card"><div class="bd"><p class="note" style="margin:0">Answer <b>Is there an IF?</b> to continue —
+        the IF altitude, its distance from THR and the interception angle follow from it.</p></div></div>
+    </div>`;
+  const inputCard=`
+      <div class="card">
+        <div class="hd">Intermediate fix (IF)</div>
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">IF procedure altitude (ft)</div>
+            <div class="v in"><input type="number" step="1" class="inter-in" data-f="alt" value="${esc(iv.alt)}"></div>
+            <div class="c">Established in 100-ft increments (Part I 4.2).</div></div>
+          <div class="row"><div class="k">IF distance from THR (NM)</div>
+            <div class="v in"><input type="number" step="0.01" class="inter-in" data-f="dist" value="${esc(iv.dist)}"></div>
+            <div class="c">Along the LOC course.</div></div>
+          <div class="row"><div class="k">Interception angle with the LOC</div>
+            <div class="v in"><select class="inter-in" data-f="angle" style="width:100%;max-width:235px">
+              ${INTER_BANDS.map(([b,label])=>`<option value="${b}"${(iv.angle||"1")===b?" selected":""}>${esc(label)}</option>`).join("")}</select></div>
+            <div class="c">The angle at which the initial approach track joins the intermediate track — sets the Table II-1-1-1 minimum.</div></div>
+        </div></div>
+      </div>`;
+  const c=interCalc(r,iv);
+  if(c.need) return `<div class="hub">${methodCard}${inputCard}
+      <div class="card full"><div class="bd"><p class="note" style="margin:0">Waiting for: <b>${esc(c.need)}</b>.</p></div></div>
+    </div>`;
+  const optL=crit("interOptLen"), maxG=crit("interMaxGrad"), maxLoc=crit("interMaxLoc");
+  const all=c.ckOrder&&c.ckMin&&c.ckLoc!==false&&c.ckDesc&&c.ckGrad===true&&c.ckInc;
+  const lenPill=!c.ckOrder?`<span class="pill bad">IF is not beyond the FAP</span>`
+    :!c.ckMin?`<span class="pill bad">below the minimum ${c.minLen.toFixed(2)} NM</span>`
+    :!c.ckOpt?`<span class="pill warn">below the optimum ${optL.toFixed(2)} NM</span>`
+    :`<span class="pill ok">≥ optimum ${optL.toFixed(2)} NM</span>`;
+  const bandTbl=`<div class="tbl-wrap auto-h" style="margin-top:10px"><table>
+      <thead><tr><th>Table II-1-1-1 — interception angle</th><th style="text-align:center">Cat A/B/H</th><th style="text-align:center">Cat C/D/E</th></tr></thead>
+      <tbody>${INTER_BANDS.map(([b,label])=>{
+        const on=b===(iv.angle||"1");
+        const cell=(v,gov)=>`<td class="num auto"${gov?' style="font-weight:700;text-decoration:underline"':""}>${v.toFixed(2)}</td>`;
+        return `<tr${on?' style="background:var(--input-y)"':""}><td class="t">${on?"<b>"+esc(label)+"</b>":esc(label)}</td>${
+          cell(crit("interMin"+b+"_AB"),on&&!c.cd)}${cell(crit("interMin"+b+"_CD"),on&&c.cd)}</tr>`;}).join("")}
+      </tbody></table></div>
+      <p class="note" style="margin:8px 0 0">Minimum distance between localizer and glide path interceptions — these minima
+      should only be used where usable airspace is restricted (1.3.3.3). The governing value is underlined.</p>`;
+  const segCard=`
+      <div class="card full">
+        <div class="hd">Segment — IF to FAP<span class="right"><span class="pill ${all?"ok":"bad"}">${all?"meets the criteria":"does not meet the criteria"}</span></span></div>
+        <div class="bd"><div class="kv" style="margin-bottom:0">
+          <div class="row"><div class="k">FAP distance from THR (NM)</div>
+            <div class="v auto">${c.fapNM.toFixed(2)}</div>
+            <div class="c">From the Final approach tab (earth curvature) — the intermediate segment ends here.</div></div>
+          <div class="row"><div class="k">IF distance from THR (NM)</div>
+            <div class="v auto">${c.ifDist.toFixed(2)}</div><div class="c"></div></div>
+          <div class="row"><div class="k">Segment length IF → FAP (NM)</div>
+            <div class="v auto ${c.ckOrder&&c.ckMin?"chk-ok":"chk-bad"}"><b>${c.len.toFixed(2)}</b> ${lenPill}</div>
+            <div class="c">${(c.len*NM_M).toFixed(2)} m. Optimum 9 km (${optL.toFixed(2)} NM) — 1.3.3.1.</div></div>
+          <div class="row"><div class="k">Minimum length — Table II-1-1-1 (NM)</div>
+            <div class="v auto">${c.minLen.toFixed(2)}</div>
+            <div class="c">Governing column Cat ${c.cd?"C/D/E":"A/B"}${r.catsOn.length?"":" (no categories declared — the conservative column governs)"}, for the selected interception angle.</div></div>
+          <div class="row"><div class="k">IF from the LOC antenna (NM)</div>
+            <div class="v auto ${c.ckLoc===false?"chk-bad":""}">${c.locNM!=null?c.locNM.toFixed(2)+(c.ckLoc?` <span class="pill ok">≤ ${maxLoc.toFixed(2)} NM</span>`:` <span class="pill bad">exceeds ${maxLoc.toFixed(2)} NM</span>`):`— <span class="pill warn">THR → LLZ distance not available</span>`}</div>
+            <div class="c">IF–THR + THR–LLZ (${c.locNM!=null?(r.dist/NM_M).toFixed(2)+" NM from the survey":"enter the localizer on the Final approach tab"}). The IF is normally within 46 km (25 NM) of the antenna.</div></div>
+        </div>${bandTbl}</div>
+      </div>`;
+  const descCard=`
+      <div class="card full">
+        <div class="hd">Descent — with the flat section held to the FAP</div>
+        <div class="bd"><div class="kv" style="margin-bottom:0">
+          <div class="row"><div class="k">IF procedure altitude (ft)</div>
+            <div class="v auto ${c.ckInc?"":"chk-bad"}">${f2(c.ifAlt)}${c.ckInc?"":` <span class="pill bad">not a 100-ft increment — Part I 4.2</span>`}</div>
+            <div class="c"></div></div>
+          <div class="row"><div class="k">FAF procedure altitude (ft)</div>
+            <div class="v auto">${f2(c.faf)}</div>
+            <div class="c">From the Final approach tab — held through the flat section to the glide path at the FAP.</div></div>
+          <div class="row"><div class="k">Height to lose (ft)</div>
+            <div class="v auto ${c.ckDesc?"":"chk-bad"}">${f2(c.drop)}${c.ckDesc?"":` <span class="pill bad">IF is below the FAF altitude</span>`}</div>
+            <div class="c">${(c.drop*FT_M).toFixed(2)} m.</div></div>
+          <div class="row"><div class="k">Flat section before the FAP (NM)</div>
+            <div class="v auto">${c.flat.toFixed(2)}</div>
+            <div class="c">${c.cd?`Cat C/D operative — ${crit("interFlatCD").toFixed(2)} NM (2.8 km)`:`Cat A/B-only procedure — may be reduced to ${crit("interFlatAB").toFixed(2)} NM (1.9 km)`} — Part I 4.3.3.2.</div></div>
+          <div class="row"><div class="k">Descent complete by (NM from THR)</div>
+            <div class="v auto">${c.descEndNM.toFixed(2)}</div>
+            <div class="c">FAP + flat section.</div></div>
+          <div class="row"><div class="k">Distance available for the descent (NM)</div>
+            <div class="v auto ${c.drop>0&&c.avail<=0?"chk-bad":""}">${c.avail.toFixed(2)}</div>
+            <div class="c">Segment length − flat section = ${(c.avail*NM_M).toFixed(2)} m.</div></div>
+          <div class="row"><div class="k">Descent gradient (%)</div>
+            <div class="v auto ${c.ckGrad===true?"chk-ok":(c.ckGrad===false?"chk-bad":"")}"><b>${c.grad!=null?c.grad.toFixed(2):"—"}</b> ${
+              c.ckGrad===true?`<span class="pill ok">≤ maximum ${maxG.toFixed(2)}%</span>`
+              :c.ckGrad===false?`<span class="pill bad">${c.grad!=null?"exceeds the maximum "+maxG.toFixed(2)+"%":"no distance left for the descent"}</span>`:""}</div>
+            <div class="c">(height × 0.3048) ÷ (distance × 1852) — maximum ${maxG.toFixed(2)}% where a descent is necessary.</div></div>
+          ${c.ckGrad===false?`<div class="row"><div class="k">Minimum IF distance for this descent (NM)</div>
+            <div class="v auto"><b>${(c.fapNM+c.reqLen).toFixed(2)}</b></div>
+            <div class="c">FAP + descent at ${maxG.toFixed(2)}% (${c.reqLen.toFixed(2)} NM incl. the flat section) — or raise the glide path / lower the IF altitude.</div></div>`:""}
+        </div></div>
+      </div>`;
+  return `<div class="hub">${methodCard}${inputCard}${segCard}${descCard}</div>`;
+}
+function wireIlsInter(key){
+  document.querySelectorAll(".inter-in").forEach(inp=>inp.addEventListener("change",e=>{
+    const pc=ensureProcCfg(key,"ILS");
+    if(!pc.inter) pc.inter={method:"ALIGN",exists:"",alt:"",dist:"",angle:"1"};
+    pc.inter[e.target.dataset.f]=e.target.value; render();}));
 }
 /* ---------- ILS missed approach (TNA) view ---------- */
 function getMaView(r){
@@ -2534,6 +2723,7 @@ function wireProc(){
     go("proc",key,procId,b.dataset.seg)));
   if(procId==="ILS"&&S.view.seg==="missed") wireIlsMA(key);
   if(procId==="ILS"&&S.view.seg==="adv") wireIlsAdv(key);
+  if(procId==="ILS"&&S.view.seg==="inter") wireIlsInter(key);
   if(procId==="SIDC"||procId==="SIDPBN") wireSidPage(key,procId);
   if(procId==="OMNI") wireOmni(key,procId);
   document.querySelectorAll(".proc-in").forEach(inp=>inp.addEventListener("change",e=>{
