@@ -356,7 +356,7 @@ function segsFor(procId){
    the Design criteria page (dashboard) lets the user override any of them, and
    overrides persist in the project. crit(key) resolves override-or-default.  */
 const CRIT_DEFS=[
- {k:"isaDev",  g:"Atmosphere",        label:"ISA deviation (°C)",              def:15,  note:"VAR in the PANS-OPS TAS formula — missed approach TAS and SID value C."},
+ {k:"isaDev",  g:"Atmosphere",        label:"ISA deviation (°C)",              def:15,  note:"VAR in the PANS-OPS TAS formula (MA TAS, SID value C) and ΔISA in the App D ΔhT height error (RF method)."},
  {k:"rdhStd",  g:"ILS final approach", label:"Standard RDH (ft)",              def:50,  note:"h in the App C FAP formula and the RDH comparison."},
  {k:"vpaMin",  g:"ILS final approach", label:"Glide path — minimum (°)",       def:2.5, note:""},
  {k:"vpaOpt",  g:"ILS final approach", label:"Glide path — optimum (°)",       def:3.0, note:""},
@@ -409,6 +409,10 @@ const CRIT_DEFS=[
  {k:"interMin3_CD",g:"ILS intermediate", label:"Min LOC→GP, 31–60° — Cat C/D/E (NM)",     def:2.5, note:""},
  {k:"interMin4_AB",g:"ILS intermediate", label:"Min LOC→GP, 61–90° / racetrack — Cat A/B (NM)",   def:2,   note:""},
  {k:"interMin4_CD",g:"ILS intermediate", label:"Min LOC→GP, 61–90° / racetrack — Cat C/D/E (NM)", def:3,   note:""},
+ {k:"rfMperFt", g:"ILS intermediate", label:"RF method — metres per foot",          def:0.3048, note:"Annex 5 exact — the Earth radius (6 371 000 m) and L are converted to ft by DIVIDING by this in the Appendix D formulas. (The trial-calculation workbook multiplied by 3.2808 instead.)"},
+ {k:"rfAlpha",  g:"ILS intermediate", label:"RF method — GP alignment factor α",   def:0.075,  note:"App D eq (8): 0.075 for ILS Cat I/II and MLS; 0.04 for ILS Cat III; 0 for GLS/LPV."},
+ {k:"rfMaxSeg", g:"ILS intermediate", label:"RF method — max total segment (NM)",  def:10,     note:"The total intermediate segment with an RF turn shall not exceed 18.5 km (10 NM) — 1.3.6.2."},
+ {k:"rfCat23Min",g:"ILS intermediate", label:"RF method — CAT II/III end fix to THR (NM)", def:5, note:"Minimum distance between the end fix of the RF turn and the landing threshold for CAT II and III operations — 9.3 km (5 NM) — 1.3.6.2."},
  {k:"poBand1", g:"SID turns — AOB & speed", label:"PANS-OPS band 1 top (ft AMSL)", def:1000, note:"Nominal track only: 15° AOB up to here."},
  {k:"poBand2", g:"SID turns — AOB & speed", label:"PANS-OPS band 2 top (ft AMSL)", def:3000, note:"20° AOB between the bands; 25° above."},
  {k:"poAob1",  g:"SID turns — AOB & speed", label:"PANS-OPS AOB — band 1 (°)",         def:15,  note:""},
@@ -498,6 +502,49 @@ function interCalc(r,iv){
     ckInc:Math.abs(ifAlt/100-Math.round(ifAlt/100))<1e-9,   // Part I 4.2 — 100-ft increments
     ckDesc:drop>=0,
     ckGrad};
+}
+
+/* ===== ILS intermediate — RF turn to the LOC course (Appendix D) ===== */
+/* Doc 8168 Vol II, Pt II, S1 Ch1, Appendix D, equations (1)–(9), ported
+   formula-for-formula from the Min Distance LOC - RF worksheet. The capture
+   segment of length L runs from the FACF (end fix of the RF turn, on the
+   LOC course) to the FAP at vertical angle θ. The criterion (eq 9):
+       hGP,FACF − hFACF ≥ RSS(ΔhT, ASE, GCE)
+   App D para 12 asks for iteration on θ / L — the tool solves the equality
+   exactly instead: highest θ for a given L, or lowest L for a given θ.
+   All heights in ft; r and L enter in ft via ÷ 0.3048 (the rfMperFt
+   criteria value — Annex 5 exact; the source worksheet used × 3.2808).   */
+function rfShared(r){
+  const altFAP=safeNum(r.faf), ltp=r2d(r.thrFt), rdh=r.rdhOperative, gpa=r.vpa;
+  if(altFAP==null||ltp==null||rdh==null||gpa==null||!(gpa>0)) return null;
+  const f=1/crit("rfMperFt"), R=6371000*f, RAD=Math.PI/180;
+  const hFAP=altFAP-ltp;                                                     // eq (1)
+  const dist=(R*Math.PI/180)*((Math.acos(Math.cos(gpa*RAD)*((R+rdh+ltp)/(R+hFAP+ltp)))/RAD)-gpa);  // eq (2), ft
+  return {altFAP,ltp,rdh,gpa,f,R,hFAP,dist,distM:dist*FT_M,distNM:dist*FT_M/NM_M};
+}
+function rfEval(sh,Lnm,hFACF){
+  const RAD=Math.PI/180, Lft=(Lnm*NM_M)*sh.f;
+  const hGP=(sh.R+sh.rdh+sh.ltp)*(Math.cos(sh.gpa*RAD)/Math.cos(((sh.dist+Lft)*180/(sh.R*Math.PI)+sh.gpa)*RAD))-sh.R-sh.ltp;  // eq (5)
+  const ase=-8.8e-8*Math.pow(sh.ltp+hFACF,2)+6.5e-3*(sh.ltp+hFACF)+50;      // eq (7)
+  const gce=(sh.dist+Lft)*(Math.tan(sh.gpa*RAD)-Math.tan((sh.gpa-crit("rfAlpha")*sh.gpa)*RAD));  // eq (8)
+  const lam=-0.00198;
+  const hT=(crit("isaDev")/lam)*Math.log(1+lam*(hFACF/(288.15+lam*sh.ltp)));  // eq (6)
+  const rss=Math.sqrt(hT*hT+ase*ase+gce*gce);
+  return {Lft,hGP,ase,gce,hT,rss,margin:hGP-hFACF};
+}
+function rfSolveAlt(sh,Lnm){            // highest hFACF for a given L — eq (9) as an equality
+  const hGP=rfEval(sh,Lnm,0).hGP;       // hGP depends on L only
+  let h=hGP;
+  for(let i=0;i<100;i++){const h2=hGP-rfEval(sh,Lnm,h).rss; if(Math.abs(h2-h)<1e-10){h=h2;break;} h=h2;}
+  return h;
+}
+function rfSolveL(sh,hFACF){            // lowest L (NM) for a given FACF height — eq (9) as an equality
+  const g=L=>{const e=rfEval(sh,L,hFACF); return e.hGP-hFACF-e.rss;};
+  let lo=0,hi=40;
+  if(g(hi)<0) return null;
+  if(g(lo)>=0) return 0;
+  for(let i=0;i<80;i++){const mid=(lo+hi)/2; if(g(mid)>=0) hi=mid; else lo=mid;}
+  return hi;
 }
 
 /* ============ ILS missed approach — Turn at Altitude (TNA) ============ */
@@ -1693,18 +1740,62 @@ function viewIlsInter(r,d){
               <option value="ALIGN"${rf?"":" selected"}>Alignment with LOC</option>
               <option value="RF"${rf?" selected":""}>RF turn to LOC</option></select></div>
             <div class="c">PANS-OPS II-1-1, 1.3.2 — the segment is aligned with the localizer course except when an RF turn is used.</div></div>
-          <div class="row"><div class="k">Is there an IF?</div>
+          ${rf?"":`<div class="row"><div class="k">Is there an IF?</div>
             <div class="v in"><select class="inter-in" data-f="exists">
               <option value=""${iv.exists===""?" selected":""}></option>
               <option${iv.exists==="Yes"?" selected":""}>Yes</option>
               <option${iv.exists==="No"?" selected":""}>No</option></select></div>
-            <div class="c">Part I 4.1.2 — the segment begins either at a designated IF, or on completion of a DR track, reversal or racetrack procedure.</div></div>
+            <div class="c">Part I 4.1.2 — the segment begins either at a designated IF, or on completion of a DR track, reversal or racetrack procedure.</div></div>`}
         </div></div>
       </div>`;
-  if(rf) return `<div class="hub">${methodCard}
-      <div class="card"><div class="bd"><p class="note" style="margin:0"><b>RF turn to the LOC course</b> —
-        criteria (II-1-1, 1.3.6 and Appendix D) to follow. This workspace is where they will live.</p></div></div>
+  if(rf){
+    const sh=rfShared(r);
+    let sharedCard;
+    if(!sh){
+      const missing=[];
+      if(safeNum(r.faf)==null) missing.push("FAF procedure altitude");
+      if(r.thrFt==null) missing.push("THR elevation");
+      if(r.rdhOperative==null) missing.push("RDH");
+      if(r.vpa==null||!(r.vpa>0)) missing.push("glide path angle");
+      sharedCard=`<div class="card"><div class="bd"><p class="note" style="margin:0">Waiting for:
+        <b>${esc(missing.join(", "))}</b> — from the Final approach tab. The Appendix D computation starts from them.</p></div></div>`;
+    } else {
+      const incFAP=Math.abs(sh.altFAP/100-Math.round(sh.altFAP/100))<1e-9;
+      sharedCard=`
+      <div class="card">
+        <div class="hd">FAP — Appendix D shared values<span class="right">equations (1) and (2)</span></div>
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">altFAP (ft)</div>
+            <div class="v auto ${incFAP?"":"chk-bad"}">${f2(sh.altFAP)}${incFAP?"":` <span class="pill bad">not a 100-ft increment</span>`}</div>
+            <div class="c">FAF procedure altitude — Final approach tab. Promulgated at 100-ft intervals (App D para 3).</div></div>
+          <div class="row"><div class="k">LTPelev (ft)</div>
+            <div class="v auto">${f2(sh.ltp)}</div>
+            <div class="c">THR elevation — surveyed metres ÷ 0.3048, to the displayed 2 dp.</div></div>
+          <div class="row"><div class="k">RDH (ft) · GPA (°)</div>
+            <div class="v auto">${f2(sh.rdh)} · ${f2(sh.gpa)}</div>
+            <div class="c">Operative RDH and glide path angle — Final approach tab.</div></div>
+          <div class="row"><div class="k">hFAP (ft)</div>
+            <div class="v auto">${f2(sh.hFAP)}</div>
+            <div class="c">altFAP − LTPelev — eq (1).</div></div>
+          <div class="row"><div class="k">distFAP (ft · m · NM)</div>
+            <div class="v auto"><b>${sh.dist.toFixed(2)}</b> · ${sh.distM.toFixed(2)} · ${sh.distNM.toFixed(2)}</div>
+            <div class="c">Spherical-earth FAP distance from THR — eq (2).</div></div>
+          <div class="row"><div class="k">r of the Earth (ft)</div>
+            <div class="v auto">${sh.R.toFixed(2)}</div>
+            <div class="c">6 371 000 m ÷ ${crit("rfMperFt")} — Annex 5 exact (the rfMperFt criteria value, also used for L).</div></div>
+          <div class="row"><div class="k">α · ΔISA (°C)</div>
+            <div class="v auto">${crit("rfAlpha")} · ${crit("isaDev")}</div>
+            <div class="c">GP alignment factor (eq 8) and the ΔhT temperature deviation (eq 6) — Design criteria page.</div></div>
+        </div></div>
+      </div>`;
+    }
+    const fixes=(iv.rf&&iv.rf.fixes&&iv.rf.fixes.length)?iv.rf.fixes:[{trans:"",fix:"",mode:"ALT",L:"",alt:"",minAlt:""}];
+    const fixCards=sh?fixes.map((fx,i)=>rfFixCard(r,sh,fx,i)).join(""):"";
+    return `<div class="hub">${methodCard}${sharedCard}${fixCards}
+      ${sh?`<div class="card full" style="background:none;box-shadow:none;border:0"><div class="bd" style="padding:0">
+        <button class="act" id="rf-add">Add RF end fix</button></div></div>`:""}
     </div>`;
+  }
   if(iv.exists==="No") return `<div class="hub">${methodCard}
       <div class="card"><div class="bd"><p class="note" style="margin:0"><b>No IF designated</b> — the intermediate segment then
         begins on completion of a DR track, reversal or racetrack procedure (Part I 4.1.2 b). The alignment-method
@@ -1804,11 +1895,104 @@ function viewIlsInter(r,d){
       </div>`;
   return `<div class="hub">${methodCard}${inputCard}${segCard}${descCard}</div>`;
 }
+function rfFixCard(r,sh,fx,i){
+  const mode=fx.mode==="DIST"?"DIST":"ALT";
+  const L=safeNum(fx.L), alt=safeNum(fx.alt), minAlt=safeNum(fx.minAlt);
+  let res=null, err=null;
+  if(mode==="ALT"){
+    if(L!=null&&L>0){
+      const h=rfSolveAlt(sh,L), e=rfEval(sh,L,h);
+      const th=Math.atan2(h-sh.hFAP,e.Lft)*180/Math.PI;
+      const prom=Math.floor((h+sh.ltp)/100)*100;
+      res={L,h,e,th,exact:h+sh.ltp,prom,top:prom,facfNM:(sh.dist+e.Lft)*FT_M/NM_M};
+      if(h<sh.hFAP-1e-9) err="the distance does not support a capture even level at the FAP altitude — increase L";
+    }
+  } else if(alt!=null){
+    const h=alt-sh.ltp, Lmin=rfSolveL(sh,h);
+    if(Lmin==null) err="no distance up to 40 NM satisfies the capture criterion for this altitude";
+    else {
+      const e=rfEval(sh,Lmin,h);
+      res={L:Lmin,h,e,th:Lmin>0?Math.atan2(h-sh.hFAP,e.Lft)*180/Math.PI:0,exact:alt,prom:null,top:alt,facfNM:(sh.dist+e.Lft)*FT_M/NM_M};
+    }
+  }
+  const row=(k,v,c)=>`<div class="row"><div class="k">${k}</div><div class="v auto">${v}</div><div class="c">${c||""}</div></div>`;
+  const inRow=(k,inner,c)=>`<div class="row"><div class="k">${k}</div><div class="v in">${inner}</div><div class="c">${c||""}</div></div>`;
+  let body=`
+      ${inRow("Procedure / transition",`<input type="text" class="rf-in cell-in" data-i="${i}" data-f="trans" value="${esc(fx.trans??"")}" placeholder="e.g. MOHIG 1A" style="width:130px">`,"")}
+      ${inRow("RF end fix (FACF)",`<input type="text" class="rf-in cell-in" data-i="${i}" data-f="fix" value="${esc(fx.fix??"")}" placeholder="e.g. UXFID" style="width:130px">`,"The end fix of the RF turn, on the LOC course.")}
+      ${inRow("Solve for",`<select class="rf-in" data-f="mode" data-i="${i}" style="width:100%;max-width:235px">
+          <option value="ALT"${mode==="ALT"?" selected":""}>Max altitude — L given</option>
+          <option value="DIST"${mode==="DIST"?" selected":""}>Min distance — alt given</option></select>`,
+        "App D para 11 — highest θ for a given L, or lowest L for a given θ.")}
+      ${mode==="ALT"
+        ?inRow("L — FACF → FAP (NM)",`<input type="number" step="0.01" class="rf-in" data-i="${i}" data-f="L" value="${esc(fx.L??"")}">`,"The capture segment length.")
+        :inRow("FACF altitude (ft)",`<input type="number" step="1" class="rf-in" data-i="${i}" data-f="alt" value="${esc(fx.alt??"")}">`,"The altitude to protect — promulgated, 100-ft increments.")}
+      ${inRow("Min altitude (ft)",`<input type="number" step="1" class="rf-in" data-i="${i}" data-f="minAlt" value="${esc(fx.minAlt??"")}">`,"Bottom of the altitude window at the fix (1.3.6.3) — e.g. the GP intercept altitude.")}`;
+  if(err) body+=row("Result",`<span class="pill bad">${esc(err)}</span>`,"");
+  else if(!res) body+=row("Result","—",mode==="ALT"?"Enter L.":"Enter the FACF altitude.");
+  else {
+    const e=res.e;
+    body+=`
+      ${row("θ (°)",res.th.toFixed(2),"Implied vertical barometric angle of the capture segment — eq (4).")}
+      ${row("hFACF (ft)",f2(res.h),"Procedure height at the FACF above LTP.")}
+      ${row("hGP,FACF (ft)",f2(e.hGP),"Height of the theoretical glide path at the FACF — eq (5).")}
+      ${row("ΔhT · ASE · GCE (ft)",`${e.hT.toFixed(2)} · ${e.ase.toFixed(2)} · ${e.gce.toFixed(2)}`,"Temperature height error (eq 6), altimeter system error (eq 7), GP construction error (eq 8).")}
+      ${row("RSS (ft)",f2(e.rss),"Root sum square of the three errors.")}
+      ${row("hGP,FACF − hFACF (ft)",`${f2(e.margin)} <span class="pill ${e.margin>=e.rss-1e-6?"ok":"bad"}">${e.margin>=e.rss-1e-6?"≥ RSS — capture from below":"&lt; RSS"}</span>`,"Eq (9) — solved as an equality, so the margin equals the RSS at the limit.")}`;
+    if(mode==="ALT")
+      body+=row(`<b>${esc(fx.fix||"FACF")} max altitude (ft)</b>`,
+        `<b>${res.prom.toFixed(2)}</b> <span style="color:var(--muted)">(exact ${res.exact.toFixed(2)})</span>`,
+        "Rounded DOWN to 100 ft for promulgation — App D para 3.");
+    else
+      body+=row(`<b>${esc(fx.fix||"FACF")} min distance L (NM)</b>`,
+        `<b>${res.L.toFixed(2)}</b>`,
+        "Lowest L satisfying eq (9) — round UP for fix placement.");
+    const incTop=res.top!=null&&Math.abs(res.top/100-Math.round(res.top/100))<1e-9;
+    let win;
+    if(minAlt==null) win=`— <span class="pill warn">enter the minimum altitude</span>`;
+    else if(minAlt>res.top+1e-9) win=`<span class="pill bad">min ${f2(minAlt)} is above the max ${f2(res.top)}</span>`;
+    else if(Math.abs(minAlt-res.top)<1e-9) win=`<b>AT ${f2(res.top)}</b>`;
+    else win=`<b>${f2(minAlt)} – ${f2(res.top)}</b>`;
+    body+=row("Altitude window at the fix",win,
+      "1.3.6.3 — the constraint at the end fix of the RF turn is a window; equal top and bottom become an AT altitude."+(incTop?"":" Top is not a 100-ft increment."));
+    const checks=[];
+    checks.push(res.L<=crit("rfMaxSeg")+1e-9
+      ?`<span class="pill ok">L ≤ ${crit("rfMaxSeg").toFixed(2)} NM</span>`
+      :`<span class="pill bad">L exceeds the ${crit("rfMaxSeg").toFixed(2)} NM maximum total segment</span>`);
+    checks.push(res.facfNM>=crit("rfCat23Min")-1e-9
+      ?`<span class="pill ok">FACF ${res.facfNM.toFixed(2)} NM from THR — CAT II/III ok</span>`
+      :`<span class="pill warn">FACF ${res.facfNM.toFixed(2)} NM from THR — below ${crit("rfCat23Min").toFixed(2)} NM, not available for CAT II/III</span>`);
+    body+=row("Checks",checks.join(" "),
+      "1.3.6.2 — the total intermediate segment (including the RF turn) shall not exceed 18.5 km (10 NM); for CAT II/III the end fix shall be at least 9.3 km (5 NM) from the threshold.");
+  }
+  return `
+      <div class="card">
+        <div class="hd">${esc(fx.trans||("RF end fix "+(i+1)))}${fx.fix?` — ${esc(fx.fix)}`:""}
+          <span class="right"><a href="#" class="rf-del" data-i="${i}" style="color:#fff;opacity:.8">remove</a></span></div>
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">${body}</div></div>
+      </div>`;
+}
 function wireIlsInter(key){
-  document.querySelectorAll(".inter-in").forEach(inp=>inp.addEventListener("change",e=>{
+  const getIv=()=>{
     const pc=ensureProcCfg(key,"ILS");
     if(!pc.inter) pc.inter={method:"ALIGN",exists:"",alt:"",dist:"",angle:"1"};
-    pc.inter[e.target.dataset.f]=e.target.value; render();}));
+    return pc.inter;
+  };
+  const getFixes=()=>{
+    const iv=getIv();
+    iv.rf=iv.rf||{};
+    if(!iv.rf.fixes||!iv.rf.fixes.length) iv.rf.fixes=[{trans:"",fix:"",mode:"ALT",L:"",alt:"",minAlt:""}];
+    return iv.rf.fixes;
+  };
+  document.querySelectorAll(".inter-in").forEach(inp=>inp.addEventListener("change",e=>{
+    getIv()[e.target.dataset.f]=e.target.value; render();}));
+  document.querySelectorAll(".rf-in").forEach(inp=>inp.addEventListener("change",e=>{
+    const fx=getFixes()[+e.target.dataset.i];
+    if(fx) fx[e.target.dataset.f]=e.target.value; render();}));
+  const add=document.getElementById("rf-add");
+  if(add) add.addEventListener("click",()=>{getFixes().push({trans:"",fix:"",mode:"ALT",L:"",alt:"",minAlt:""}); render();});
+  document.querySelectorAll(".rf-del").forEach(a=>a.addEventListener("click",e=>{
+    e.preventDefault(); getFixes().splice(+e.target.dataset.i,1); render();}));
 }
 /* ---------- ILS missed approach (TNA) view ---------- */
 function getMaView(r){
