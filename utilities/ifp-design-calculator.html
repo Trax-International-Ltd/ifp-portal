@@ -413,6 +413,9 @@ const CRIT_DEFS=[
  {k:"rfAlpha",  g:"ILS intermediate", label:"RF method — GP alignment factor α",   def:0.075,  note:"App D eq (8): 0.075 for ILS Cat I/II and MLS; 0.04 for ILS Cat III; 0 for GLS/LPV."},
  {k:"rfMaxSeg", g:"ILS intermediate", label:"RF method — max total segment (NM)",  def:10,     note:"The total intermediate segment with an RF turn shall not exceed 18.5 km (10 NM) — 1.3.6.2."},
  {k:"rfCat23Min",g:"ILS intermediate", label:"RF method — CAT II/III end fix to THR (NM)", def:5, note:"Minimum distance between the end fix of the RF turn and the landing threshold for CAT II and III operations — 9.3 km (5 NM) — 1.3.6.2."},
+ {k:"npaOptGrad",g:"Non-precision final", label:"Optimum descent gradient (%)",     def:5.2, note:"Part I, S4, Ch5, 5.3.1.1 — minimum/optimum for an NPA with FAF (3° precision)."},
+ {k:"npaMaxAB",  g:"Non-precision final", label:"Maximum gradient — Cat A/B (%)",   def:6.5, note:"5.3.1.2 — beyond this needs an aeronautical study and special approval."},
+ {k:"npaMaxCDE", g:"Non-precision final", label:"Maximum gradient — Cat C/D/E (%)", def:6.1, note:""},
  {k:"vmcAlt",  g:"Visual manoeuvring (circling)", label:"TAS altitude above aerodrome (ft)", def:1000, note:"7.2.3 — TAS is computed at aerodrome elevation + 300 m (1 000 ft), at ISA + the ISA deviation value."},
  {k:"vmcWind", g:"Visual manoeuvring (circling)", label:"Wind factor (kt)",                 def:25,   note:"±46 km/h (25 kt) throughout the turn — 7.2.2 b)."},
  {k:"vmcBank", g:"Visual manoeuvring (circling)", label:"Bank angle (°)",                   def:20,   note:"20° average achieved, or the bank giving the max rate of turn — whichever is the LESSER bank (7.2.2 c)."},
@@ -494,11 +497,12 @@ const INTER_BANDS=[
   ["3","31° – 60°"],
   ["4","61° – 90°, or within a racetrack / reversal"],
 ];
-function interCalc(r,iv){
-  if(!r.finalCalc) return {need:"the Final approach tab (FAF procedure altitude → FAP distance)"};
+function interCalc(r,iv,end){            // end: {nm,faf,need} — LOC-only runs the segment to its own FAF
+  if(end){ if(end.nm==null||end.faf==null) return {need:end.need||"the LOC final tab"}; }
+  else if(!r.finalCalc) return {need:"the Final approach tab (FAF procedure altitude → FAP distance)"};
   const ifAlt=safeNum(iv.alt), ifDist=safeNum(iv.dist);
   if(ifAlt==null||ifDist==null) return {need:"the IF altitude and its distance from THR"};
-  const fapNM=r.finalCalc.fapNM, faf=safeNum(r.faf);
+  const fapNM=end?end.nm:r.finalCalc.fapNM, faf=end?end.faf:safeNum(r.faf);
   const len=ifDist-fapNM;                                   // IF → FAP along the LOC course
   const cd=!r.catsOn.length||r.catsOn.some(c=>c==="C"||c==="D");  // governing Table II-1-1-1 column (conservative when none declared)
   const minLen=crit("interMin"+(iv.angle||"1")+(cd?"_CD":"_AB"));
@@ -1761,6 +1765,12 @@ function viewProc(d,key,procId,seg){
     body=viewOmni(r,d,procId);
   } else if(procId==="SIDC"||procId==="SIDPBN"){
     body=viewSidPage(r,d,procId);
+  } else if(procId==="LOC" && seg==="final"){
+    body=viewLocFinal(r,d);
+  } else if(procId==="LOC" && seg==="inter"){
+    body=viewLocInter(r,d);
+  } else if(procId==="LOC" && seg==="initial"){
+    body=viewLocInitial(r,d);
   } else if(procId==="ILS" && seg==="missed"){
     body=viewIlsMA(r);
   } else if(procId==="ILS" && seg==="adv"){
@@ -1905,9 +1915,179 @@ function viewProc(d,key,procId,seg){
   </div>
   ${body}`;
 }
+/* ---------- LOC only — final / intermediate / initial ---------- */
+/* Where an ILS exists the LOC-only procedure usually shares its parameters,
+   promulgated as a gradient (%) rather than an angle (°) — each tab asks.
+   Without an ILS the same questions are asked directly, and no FAP is
+   computed (non-precision: the segment ends at the FAF).                 */
+function npaMaxGrad(r){ return (!r.catsOn.length||r.catsOn.some(c=>c==="C"||c==="D"))?crit("npaMaxCDE"):crit("npaMaxAB"); }
+function locFinalData(r){
+  const lc=(r.cfg.proc&&r.cfg.proc.LOC)||{};
+  const use=r.ilsOn?(lc.useIls||""):"No";       // no ILS → straight to the questions
+  if(use==="Yes"){
+    if(!r.finalCalc||r.vpa==null||!(r.vpa>0)) return {use,src:"ILS",missing:true};
+    return {use,src:"ILS",rdh:r.rdhOperative,angle:r.vpa,grad:Math.tan(r.vpa*Math.PI/180)*100,
+            faf:safeNum(r.faf),calc:r.finalCalc};
+  }
+  if(use!=="No") return {use};
+  const rdh=safeNum(lc.rdh), grad=safeNum(lc.grad), faf=safeNum(lc.faf);
+  if(rdh==null||grad==null||!(grad>0)||faf==null||r.thrFt==null)
+    return {use,src:"OWN",rdh,grad,faf,missing:true};
+  const angle=Math.atan(grad/100)*180/Math.PI;
+  return {use,src:"OWN",rdh,grad,angle,faf,calc:ilsFinalCalc(r.thrFt,rdh,angle,faf)};
+}
+function locGradPill(r,grad){
+  if(grad==null) return "";
+  const opt=crit("npaOptGrad"), max=npaMaxGrad(r);
+  if(grad>max+1e-9) return ` <span class="pill bad">exceeds the maximum ${max.toFixed(2)}% — aeronautical study & special approval (5.3.1.2)</span>`;
+  if(grad<opt-1e-9) return ` <span class="pill warn">below the minimum/optimum ${opt.toFixed(2)}%</span>`;
+  return ` <span class="pill ok">within ${opt.toFixed(2)}–${max.toFixed(2)}%</span>`;
+}
+function viewLocFinal(r,d){
+  const lc=(r.cfg.proc&&r.cfg.proc.LOC)||{};
+  const f=locFinalData(r);
+  const cards=[];
+  if(r.ilsOn) cards.push(`
+      <div class="card">
+        <div class="hd">Parameters</div>
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">Use the ILS parameters?</div>
+            <div class="v in"><select class="locf-use">
+              <option value=""${f.use===""?" selected":""}></option>
+              <option${f.use==="Yes"?" selected":""}>Yes</option>
+              <option${f.use==="No"?" selected":""}>No</option></select></div>
+            <div class="c">Most LOC-only procedures share the ILS RDH, descent path and FAF — promulgated as a gradient (%) rather than an angle (°).</div></div>
+          ${f.use==="Yes"?`
+          <div class="row"><div class="k">RDH — operative (ft)</div>
+            <div class="v auto">${f2(f.rdh)}</div><div class="c">From the ILS Final approach tab.</div></div>
+          <div class="row"><div class="k">Descent gradient (%)</div>
+            <div class="v auto"><b>${f.grad!=null?f.grad.toFixed(2):"—"}</b>${locGradPill(r,f.grad)}</div>
+            <div class="c">tan(${esc(r.vpa)}°) × 100 — the ILS glide path expressed as a gradient.</div></div>
+          <div class="row"><div class="k">FAF procedure altitude (ft)</div>
+            <div class="v auto">${f.faf!=null?f2(f.faf):"—"}</div><div class="c">From the ILS procedure — shared.</div></div>`:""}
+        </div></div>
+      </div>`);
+  if(f.use==="No") cards.push(`
+      <div class="card">
+        <div class="hd">LOC-only parameters</div>
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">RDH / crossing height (ft)</div>
+            <div class="v in"><input type="number" step="0.01" class="locf-in" data-f="rdh" value="${esc(lc.rdh??"")}"></div>
+            <div class="c">Reference height over THR for the nominal descent profile.</div></div>
+          <div class="row"><div class="k">Descent gradient (%)</div>
+            <div class="v in"><input type="number" step="0.01" class="locf-in" data-f="grad" value="${esc(lc.grad??"")}"></div>
+            <div class="c">Optimum ${crit("npaOptGrad").toFixed(2)}% · maximum ${npaMaxGrad(r).toFixed(2)}% for the operative categories${f.grad!=null&&f.grad>0?` · equivalent angle ${(Math.atan(f.grad/100)*180/Math.PI).toFixed(2)}°`:""}.</div></div>
+          <div class="row"><div class="k">Gradient check</div>
+            <div class="v auto">${f.grad!=null?`${f.grad.toFixed(2)}%${locGradPill(r,f.grad)}`:"—"}</div><div class="c"></div></div>
+          <div class="row"><div class="k">FAF procedure altitude (ft)</div>
+            <div class="v in"><input type="number" step="1" class="locf-in" data-f="faf" value="${esc(lc.faf??"")}"></div>
+            <div class="c"></div></div>
+        </div></div>
+      </div>`);
+  if(f.use==="") cards.push(`
+      <div class="card"><div class="bd"><p class="note" style="margin:0">Answer <b>Use the ILS parameters?</b> to continue —
+        Yes shares the ILS RDH, descent path and FAF; No asks the same questions for a standalone LOC-only profile.</p></div></div>`);
+  else if(f.missing){
+    const miss=f.src==="ILS"
+      ?"the ILS parameters (RDH, glide path angle, FAF altitude on the ILS Final approach tab)"
+      :"RDH, descent gradient and FAF procedure altitude"+(r.thrFt==null?" (and THR elevation from the survey)":"");
+    cards.push(`<div class="card full"><div class="hd">FAF — track length from THR</div>
+      <div class="bd"><p class="note" style="margin:0">Waiting for: <b>${miss}</b>.</p></div></div>`);
+  } else if(f.calc){
+    const c=f.calc;
+    cards.push(`
+      <div class="card full">
+        <div class="hd">FAF — track length from THR<span class="right">nominal descent from the RDH datum — no FAP for a non-precision final</span></div>
+        <div class="bd"><div class="kv" style="margin-bottom:0">
+          <div class="row"><div class="k">Height of FAF above RDH datum (ft)</div>
+            <div class="v auto">${c.hgt.toFixed(2)}</div>
+            <div class="c">FAF altitude − THR elevation − RDH.</div></div>
+          <div class="row"><div class="k">Descent gradient (%) · angle (°)</div>
+            <div class="v auto">${f.grad.toFixed(2)} · ${f.angle.toFixed(2)}</div>
+            <div class="c">${f.src==="ILS"?"Shared with the ILS.":"tan θ = gradient ÷ 100."}</div></div>
+          <div class="row"><div class="k">FAF track length from THR (m)</div>
+            <div class="v auto">${c.fafM.toFixed(2)}</div>
+            <div class="c">Height above the RDH datum ÷ tan θ.</div></div>
+          <div class="row"><div class="k">FAF track length (NM, unrounded)</div>
+            <div class="v auto">${c.fafNM.toFixed(2)}</div><div class="c"></div></div>
+          <div class="row"><div class="k">FAF — rounded for chart (NM)</div>
+            <div class="v auto"><b>${c.fafChart.toFixed(1)}</b></div>
+            <div class="c">Rounded UP to 0.1 NM, as on the ILS tab.</div></div>
+        </div></div>
+      </div>`);
+  }
+  return `<div class="hub">${cards.join("")}</div>`;
+}
+function viewLocInter(r,d){
+  const lc=(r.cfg.proc&&r.cfg.proc.LOC)||{};
+  const li=lc.inter||{};
+  const use=r.ilsOn?(li.useIls||""):"No";
+  const q=r.ilsOn?`
+  <div class="hub">
+      <div class="card full">
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">Use the ILS intermediate?</div>
+            <div class="v in"><select class="locint-use">
+              <option value=""${use===""?" selected":""}></option>
+              <option${use==="Yes"?" selected":""}>Yes</option>
+              <option${use==="No"?" selected":""}>No</option></select></div>
+            <div class="c">${use==="Yes"?"Shared with the ILS procedure — anything changed below changes the ILS intermediate too.":"Yes shares the ILS intermediate segment; No asks the same questions against the LOC-only FAF."}</div></div>
+        </div></div>
+      </div>
+  </div>`:"";
+  if(use==="") return q+`<div class="hub"><div class="card"><div class="bd"><p class="note" style="margin:0">Answer
+    <b>Use the ILS intermediate?</b> to continue.</p></div></div></div>`;
+  if(use==="Yes") return q+viewIlsInter(r,d);
+  const f=locFinalData(r);
+  const end={nm:f.calc?f.calc.fafNM:null,faf:f.calc?f.faf:null,
+             need:"the LOC final tab (parameters → FAF track length)"};
+  const iv={method:"ALIGN",exists:"",alt:"",dist:"",angle:"1",...li};
+  return q+viewIlsInter(r,d,{iv,end});
+}
+function viewLocInitial(r,d){
+  const lc=(r.cfg.proc&&r.cfg.proc.LOC)||{};
+  const ini=lc.ini||{};
+  if(!r.ilsOn) return `<div class="card"><div class="bd"><p class="note" style="margin:0">LOC only — <b>Initial approach</b>:
+    criteria and calculations to follow. This workspace is where they will live.</p></div></div>`;
+  const use=ini.useIls||"";
+  return `<div class="hub">
+      <div class="card full">
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">Use the ILS initial?</div>
+            <div class="v in"><select class="locini-use">
+              <option value=""${use===""?" selected":""}></option>
+              <option${use==="Yes"?" selected":""}>Yes</option>
+              <option${use==="No"?" selected":""}>No</option></select></div>
+            <div class="c">Yes follows the ILS initial segment; No keeps a standalone LOC-only initial.</div></div>
+        </div></div>
+      </div>
+      <div class="card full"><div class="bd"><p class="note" style="margin:0">${
+        use==="Yes"?"<b>Following the ILS initial.</b> The ILS initial workspace is still to come — when it arrives, this tab mirrors it."
+        :use==="No"?"<b>Standalone LOC-only initial.</b> Criteria and calculations to follow — this tab will ask the same questions as the ILS initial when that workspace arrives."
+        :"Answer <b>Use the ILS initial?</b> to continue."}</p></div></div>
+  </div>`;
+}
+function wireLocFinal(key){
+  document.querySelectorAll(".locf-use").forEach(sel=>sel.addEventListener("change",e=>{
+    ensureProcCfg(key,"LOC").useIls=e.target.value; render();}));
+  document.querySelectorAll(".locf-in").forEach(inp=>inp.addEventListener("change",e=>{
+    ensureProcCfg(key,"LOC")[e.target.dataset.f]=e.target.value; render();}));
+}
+function wireLocInter(key){
+  document.querySelectorAll(".locint-use").forEach(sel=>sel.addEventListener("change",e=>{
+    const pc=ensureProcCfg(key,"LOC"); pc.inter=pc.inter||{}; pc.inter.useIls=e.target.value; render();}));
+  const pc=ensureProcCfg(key,"LOC");
+  wireIlsInter(key,(pc.inter&&pc.inter.useIls)==="Yes"?"ILS":"LOC");
+}
+function wireLocInitial(key){
+  document.querySelectorAll(".locini-use").forEach(sel=>sel.addEventListener("change",e=>{
+    const pc=ensureProcCfg(key,"LOC"); pc.ini=pc.ini||{}; pc.ini.useIls=e.target.value; render();}));
+}
+
 /* ---------- ILS intermediate approach view ---------- */
-function viewIlsInter(r,d){
-  const iv={method:"ALIGN",exists:"",alt:"",dist:"",angle:"1",...(r.ic.inter||{})};
+function viewIlsInter(r,d,loc){           // loc: {iv,end,need} — the LOC-only intermediate reuses this view
+  const iv=loc?loc.iv:{method:"ALIGN",exists:"",alt:"",dist:"",angle:"1",...(r.ic.inter||{})};
+  const EP=loc?"FAF":"FAP";
   const rf=iv.method==="RF";
   const methodCard=`
       <div class="card">
@@ -1927,6 +2107,11 @@ function viewIlsInter(r,d){
         </div></div>
       </div>`;
   if(rf){
+    if(loc) return `<div class="hub">${methodCard}
+      <div class="card"><div class="bd"><p class="note" style="margin:0"><b>RF turn to the LOC course</b> — the Appendix D
+        minimum capture distances protect glide path interception, so they are computed with the ILS parameters. Set the
+        intermediate to <b>use the ILS</b>, or use the alignment method for the LOC-only segment.</p></div></div>
+    </div>`;
     const sh=rfShared(r);
     let sharedCard;
     if(!sh){
@@ -1999,13 +2184,13 @@ function viewIlsInter(r,d){
             <div class="c">The angle at which the initial approach track joins the intermediate track — sets the Table II-1-1-1 minimum.</div></div>
         </div></div>
       </div>`;
-  const c=interCalc(r,iv);
+  const c=interCalc(r,iv,loc&&loc.end);
   if(c.need) return `<div class="hub">${methodCard}${inputCard}
       <div class="card full"><div class="bd"><p class="note" style="margin:0">Waiting for: <b>${esc(c.need)}</b>.</p></div></div>
     </div>`;
   const optL=crit("interOptLen"), maxG=crit("interMaxGrad"), maxLoc=crit("interMaxLoc");
   const all=c.ckOrder&&c.ckMin&&c.ckLoc!==false&&c.ckDesc&&c.ckGrad===true&&c.ckInc;
-  const lenPill=!c.ckOrder?`<span class="pill bad">IF is not beyond the FAP</span>`
+  const lenPill=!c.ckOrder?`<span class="pill bad">IF is not beyond the ${EP}</span>`
     :!c.ckMin?`<span class="pill bad">below the minimum ${c.minLen.toFixed(2)} NM</span>`
     :!c.ckOpt?`<span class="pill warn">below the optimum ${optL.toFixed(2)} NM</span>`
     :`<span class="pill ok">≥ optimum ${optL.toFixed(2)} NM</span>`;
@@ -2021,14 +2206,14 @@ function viewIlsInter(r,d){
       should only be used where usable airspace is restricted (1.3.3.3). The governing value is underlined.</p>`;
   const segCard=`
       <div class="card full">
-        <div class="hd">Segment — IF to FAP<span class="right"><span class="pill ${all?"ok":"bad"}">${all?"meets the criteria":"does not meet the criteria"}</span></span></div>
+        <div class="hd">Segment — IF to ${EP}<span class="right"><span class="pill ${all?"ok":"bad"}">${all?"meets the criteria":"does not meet the criteria"}</span></span></div>
         <div class="bd"><div class="kv" style="margin-bottom:0">
-          <div class="row"><div class="k">FAP distance from THR (NM)</div>
+          <div class="row"><div class="k">${EP} distance from THR (NM)</div>
             <div class="v auto">${c.fapNM.toFixed(2)}</div>
-            <div class="c">From the Final approach tab (earth curvature) — the intermediate segment ends here.</div></div>
+            <div class="c">From ${loc?"the LOC final tab (FAF track length)":"the Final approach tab (earth curvature)"} — the intermediate segment ends here.</div></div>
           <div class="row"><div class="k">IF distance from THR (NM)</div>
             <div class="v auto">${c.ifDist.toFixed(2)}</div><div class="c"></div></div>
-          <div class="row"><div class="k">Segment length IF → FAP (NM)</div>
+          <div class="row"><div class="k">Segment length IF → ${EP} (NM)</div>
             <div class="v auto ${c.ckOrder&&c.ckMin?"chk-ok":"chk-bad"}"><b>${c.len.toFixed(2)}</b> ${lenPill}</div>
             <div class="c">${(c.len*NM_M).toFixed(2)} m. Optimum 9 km (${optL.toFixed(2)} NM) — 1.3.3.1.</div></div>
           <div class="row"><div class="k">Minimum length — Table II-1-1-1 (NM)</div>
@@ -2041,23 +2226,23 @@ function viewIlsInter(r,d){
       </div>`;
   const descCard=`
       <div class="card full">
-        <div class="hd">Descent — with the flat section held to the FAP</div>
+        <div class="hd">Descent — with the flat section held to the ${EP}</div>
         <div class="bd"><div class="kv" style="margin-bottom:0">
           <div class="row"><div class="k">IF procedure altitude (ft)</div>
             <div class="v auto ${c.ckInc?"":"chk-bad"}">${f2(c.ifAlt)}${c.ckInc?"":` <span class="pill bad">not a 100-ft increment — Part I 4.2</span>`}</div>
             <div class="c"></div></div>
           <div class="row"><div class="k">FAF procedure altitude (ft)</div>
             <div class="v auto">${f2(c.faf)}</div>
-            <div class="c">From the Final approach tab — held through the flat section to the glide path at the FAP.</div></div>
+            <div class="c">From ${loc?"the LOC final tab":"the Final approach tab"} — held through the flat section to ${loc?"the FAF":"the glide path at the FAP"}.</div></div>
           <div class="row"><div class="k">Height to lose (ft)</div>
             <div class="v auto ${c.ckDesc?"":"chk-bad"}">${f2(c.drop)}${c.ckDesc?"":` <span class="pill bad">IF is below the FAF altitude</span>`}</div>
             <div class="c">${(c.drop*FT_M).toFixed(2)} m.</div></div>
-          <div class="row"><div class="k">Flat section before the FAP (NM)</div>
+          <div class="row"><div class="k">Flat section before the ${EP} (NM)</div>
             <div class="v auto">${c.flat.toFixed(2)}</div>
             <div class="c">${c.cd?`Cat C/D operative — ${crit("interFlatCD").toFixed(2)} NM (2.8 km)`:`Cat A/B-only procedure — may be reduced to ${crit("interFlatAB").toFixed(2)} NM (1.9 km)`} — Part I 4.3.3.2.</div></div>
           <div class="row"><div class="k">Descent complete by (NM from THR)</div>
             <div class="v auto">${c.descEndNM.toFixed(2)}</div>
-            <div class="c">FAP + flat section.</div></div>
+            <div class="c">${EP} + flat section.</div></div>
           <div class="row"><div class="k">Distance available for the descent (NM)</div>
             <div class="v auto ${c.drop>0&&c.avail<=0?"chk-bad":""}">${c.avail.toFixed(2)}</div>
             <div class="c">Segment length − flat section = ${(c.avail*NM_M).toFixed(2)} m.</div></div>
@@ -2068,7 +2253,7 @@ function viewIlsInter(r,d){
             <div class="c">(height × 0.3048) ÷ (distance × 1852) — maximum ${maxG.toFixed(2)}% where a descent is necessary.</div></div>
           ${c.ckGrad===false?`<div class="row"><div class="k">Minimum IF distance for this descent (NM)</div>
             <div class="v auto"><b>${(c.fapNM+c.reqLen).toFixed(2)}</b></div>
-            <div class="c">FAP + descent at ${maxG.toFixed(2)}% (${c.reqLen.toFixed(2)} NM incl. the flat section) — or raise the glide path / lower the IF altitude.</div></div>`:""}
+            <div class="c">${EP} + descent at ${maxG.toFixed(2)}% (${c.reqLen.toFixed(2)} NM incl. the flat section) — or ${loc?"steepen the final descent":"raise the glide path"} / lower the IF altitude.</div></div>`:""}
         </div></div>
       </div>`;
   return `<div class="hub">${methodCard}${inputCard}${segCard}${descCard}</div>`;
@@ -2150,9 +2335,10 @@ function rfFixCard(r,sh,fx,i){
         <div class="bd"><div class="kv compact" style="margin-bottom:0">${body}</div></div>
       </div>`;
 }
-function wireIlsInter(key){
+function wireIlsInter(key,procId){
+  procId=procId||"ILS";
   const getIv=()=>{
-    const pc=ensureProcCfg(key,"ILS");
+    const pc=ensureProcCfg(key,procId);
     if(!pc.inter) pc.inter={method:"ALIGN",exists:"",alt:"",dist:"",angle:"1"};
     return pc.inter;
   };
@@ -3086,6 +3272,9 @@ function wireProc(){
   if(procId==="ILS"&&S.view.seg==="missed") wireIlsMA(key);
   if(procId==="ILS"&&S.view.seg==="adv") wireIlsAdv(key);
   if(procId==="ILS"&&S.view.seg==="inter") wireIlsInter(key);
+  if(procId==="LOC"&&S.view.seg==="final") wireLocFinal(key);
+  if(procId==="LOC"&&S.view.seg==="inter") wireLocInter(key);
+  if(procId==="LOC"&&S.view.seg==="initial") wireLocInitial(key);
   if(procId==="SIDC"||procId==="SIDPBN") wireSidPage(key,procId);
   if(procId==="OMNI") wireOmni(key,procId);
   document.querySelectorAll(".proc-in").forEach(inp=>inp.addEventListener("change",e=>{
