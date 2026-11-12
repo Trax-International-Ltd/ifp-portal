@@ -416,6 +416,20 @@ const CRIT_DEFS=[
  {k:"npaOptGrad",g:"Non-precision final", label:"Optimum descent gradient (%)",     def:5.2, note:"Part I, S4, Ch5, 5.3.1.1 — minimum/optimum for an NPA with FAF (3° precision)."},
  {k:"npaMaxAB",  g:"Non-precision final", label:"Maximum gradient — Cat A/B (%)",   def:6.5, note:"5.3.1.2 — beyond this needs an aeronautical study and special approval."},
  {k:"npaMaxCDE", g:"Non-precision final", label:"Maximum gradient — Cat C/D/E (%)", def:6.1, note:""},
+ {k:"sraThrHgt", g:"SRA (SRE)", label:"Height at THR (ft)",                    def:50,  note:"CAP785B / 6.4.6 — ranges relative to touchdown assume 15 m (50 ft) over the threshold."},
+ {k:"sraMinAngle",g:"SRA (SRE)", label:"Minimum descent angle (°)",             def:3,   note:"CAP785B — SRAs shall be designed to a minimum of 3°."},
+ {k:"sraTermThr", g:"SRA (SRE)", label:"Standard termination range (NM from TD)", def:2,  note:"UK GEN 1.7 (6.5): terminated 2 NM before TOUCHDOWN, except where 1 NM is specifically approved; 0.5 NM or less for approved high-resolution equipment."},
+ {k:"sraTermApp", g:"SRA (SRE)", label:"Approved termination range (NM from TD)", def:1,  note:"UK GEN 1.7 — where specifically approved."},
+ {k:"sraTermHr",  g:"SRA (SRE)", label:"High-resolution termination (NM from TD)",def:0.5,note:"UK Addition 6.6 — approved high-resolution SRE."},
+ {k:"sraHrTalk",  g:"SRA (SRE)", label:"High-resolution talk-down from (NM)",     def:4,  note:"UK 6.6 a — continuous talk-down from 4 NM with ranges and advisory heights every 0.5 NM."},
+ {k:"sraFinMin",  g:"SRA (SRE)", label:"Final approach area — min length (NM)", def:3,   note:"6.4.3 — minimum 6 km (3 NM)."},
+ {k:"sraFinMax",  g:"SRA (SRE)", label:"Final approach area — max length (NM)", def:6,   note:"6.4.3 — should not exceed 11 km (6 NM)."},
+ {k:"sraMaxD",    g:"SRA (SRE)", label:"Maximum distance from antenna (NM)",    def:20,  note:"6.4.3 — maximum D is 37 km (20 NM), subject to radar accuracy."},
+ {k:"sraMoc",     g:"SRA (SRE)", label:"Final MOC (ft)",                        def:246, note:"6.4.4 — 75 m (246 ft)."},
+ {k:"sraNearDist",g:"SRA (SRE)", label:"Fine rounding inside (NM from TD)",     def:2,   note:"6.4.6 — inside 4 km (2 NM) from touchdown levels round UP to 10 ft; beyond, out to 100 ft."},
+ {k:"sraRoundNear",g:"SRA (SRE)", label:"Rounding increment inside (ft)",       def:10,  note:""},
+ {k:"sraRoundFar", g:"SRA (SRE)", label:"Rounding increment beyond (ft)",       def:100, note:""},
+ {k:"sraTarTol",  g:"SRA (SRE)", label:"TAR total fix tolerance (± NM)",        def:0.8, note:"Table I-2-2-3 — RSS of video map, azimuth, flight technical and controller tolerances, within 37 km (20 NM)."},
  {k:"vmcAlt",  g:"Visual manoeuvring (circling)", label:"TAS altitude above aerodrome (ft)", def:1000, note:"7.2.3 — TAS is computed at aerodrome elevation + 300 m (1 000 ft), at ISA + the ISA deviation value."},
  {k:"vmcWind", g:"Visual manoeuvring (circling)", label:"Wind factor (kt)",                 def:25,   note:"±46 km/h (25 kt) throughout the turn — 7.2.2 b)."},
  {k:"vmcBank", g:"Visual manoeuvring (circling)", label:"Bank angle (°)",                   def:20,   note:"20° average achieved, or the bank giving the max rate of turn — whichever is the LESSER bank (7.2.2 c)."},
@@ -627,6 +641,91 @@ function vmcCalc(d){
   return {aeroFt,altTas,cats,procs};
 }
 
+/* ====== SRA (SRE — PANS-OPS Pt II, S2, Ch 6 + UK AIP GEN 1.7) ====== */
+/* CAP785B: designed to a minimum of 3°, ranges published relative to
+   TOUCHDOWN assuming 15 m (50 ft) over the threshold (exceptionally from
+   the threshold). Touchdown sits 50 ÷ tan θ beyond THR, so the level at
+   range R from touchdown is THR elevation + R·tan θ. Levels each 1 or
+   ½ NM, rounded UP — 100 ft, or 10 ft inside 2 NM of touchdown (6.4.6).
+   UK GEN 1.7: terminated 2 NM before TOUCHDOWN (1 NM where specifically
+   approved; 0.5 NM or less for approved high-resolution SRE, UK 6.6, with
+   talk-down from 4 NM and levels every ½ NM); for a 2 NM SRA the MAPt may
+   be designated 1 NM before touchdown. The obstacle area begins at the FAF
+   and ends at the MAPt (UK 6.4.3). Width each side: standard (1.0 + 0.1·D)
+   NM; high resolution W/2 = 1.9 + 0.1·D km for D > 10 km, else
+   0.3 + 0.26·D km (UK 6.6.1), D from the antenna, max 20 NM; primary 50%
+   with 25% secondaries each side, MOC 75 m in the primary reducing to
+   zero at the secondary edges (UK 6.6.2).                               */
+function sraRadarPt(d){
+  if(!S.sra.pid) return null;
+  return d.pts.find(q=>String(q.id)===String(S.sra.pid))||null;
+}
+function sraCalc(r,d,sc){
+  if(r.thrFt==null) return {need:"THR elevation (survey)"};
+  const angle=safeNum(sc.angle), faf=safeNum(sc.faf), term=safeNum(sc.term);
+  const step=sc.step==="0.5"?0.5:1;
+  const fromThr=sc.ref==="THR", hires=sc.equip==="HR";
+  if(angle==null||!(angle>0)) return {need:"the descent angle"};
+  const RAD=Math.PI/180, tanTh=Math.tan(angle*RAD);
+  const thrH=crit("sraThrHgt");
+  const tdFt=thrH/tanTh, tdM=tdFt*FT_M, tdNM=tdM/NM_M;      // touchdown beyond THR
+  const out={angle,tanTh,grad:tanTh*100,thrH,tdFt,tdM,tdNM,step,fromThr,hires,
+             ckAngle:angle>=crit("sraMinAngle")-1e-9};
+  if(faf==null||term==null) {out.need2="the FAF range and the termination distance"; return out;}
+  const termRef=fromThr?term-tdNM:term;                      // termination (NM from touchdown) in the published reference
+  const lvl=R=>{                                             // R in the published reference
+    const dTD=fromThr?R+tdNM:R;                              // range from touchdown
+    const hgt=(dTD*NM_M/FT_M)*tanTh;                         // height above THR elevation
+    const alt=r.thrFt+hgt;
+    const inc=dTD<crit("sraNearDist")-1e-9?crit("sraRoundNear"):crit("sraRoundFar");
+    return {R,dTD,dThr:dTD-tdNM,hgt,alt,inc,
+            pubAlt:Math.ceil(alt/inc-1e-9)*inc, pubHgt:Math.ceil(hgt/inc-1e-9)*inc};
+  };
+  const rows=[];
+  const talk=crit("sraHrTalk");
+  for(let R=Math.ceil((termRef-1e-9)/0.5)*0.5; R<=faf+1e-9; R+=0.5){
+    if(Math.abs(R-termRef)<1e-9) continue;                   // the termination row carries this level
+    const dTD=fromThr?R+tdNM:R;
+    const whole=Math.abs(R-Math.round(R))<1e-9;
+    if(hires? (dTD<=talk+1e-9||whole) : (step===0.5||whole)) rows.push(lvl(r2d(R)));
+  }
+  rows.reverse();                                            // chart order — FAF first
+  out.rows=rows; out.term=lvl(termRef); out.fafRow=lvl(faf);
+  const maptTD=safeNum(sc.maptAt)??term;                     // UK 6.5 — MAPt may be designated before touchdown short of termination
+  out.maptDes=Math.abs(maptTD-term)>1e-9;
+  out.mapt=out.maptDes?lvl(fromThr?maptTD-tdNM:maptTD):out.term;
+  out.finLen=out.fafRow.dTD-out.mapt.dTD;                    // FAF → MAPt, NM (UK 6.4.3 — area ends at the MAPt)
+  out.ckFin=out.finLen>=crit("sraFinMin")-1e-9&&out.finLen<=crit("sraFinMax")+1e-9;
+  out.termTier=term<0?"bad"
+    :term>=crit("sraTermThr")-1e-9?"std"
+    :term>=crit("sraTermApp")-1e-9?"app"
+    :"hr";                                                   // ≤ approved range — high-resolution criteria (UK 6.6)
+  out.ckTermValid=term>=0;
+  // radar geometry — positions along the extended centre line from the survey grid
+  const rp=sraRadarPt(d);
+  if(rp&&rp.e!=null&&rp.n!=null&&r.thr&&r.thr.e!=null){
+    const g={dThrM:Math.hypot(rp.e-r.thr.e,rp.n-r.thr.n)};
+    g.dThrNM=g.dThrM/NM_M;
+    const toda=r.sid&&r.sid.toda;
+    if(toda&&toda.e!=null){
+      const dx=toda.e-r.thr.e, dy=toda.n-r.thr.n, len=Math.hypot(dx,dy);
+      const u={x:dx/len,y:dy/len};                           // THR → rollout direction (touchdown side)
+      const pos=dTD=>({x:r.thr.e+u.x*(tdM-dTD*NM_M), y:r.thr.n+u.y*(tdM-dTD*NM_M)});
+      const dAt=dTD=>{const q=pos(dTD); return Math.hypot(rp.e-q.x,rp.n-q.y)/NM_M;};
+      g.dFaf=dAt(out.fafRow.dTD); g.dMapt=dAt(out.mapt.dTD);
+      const w2=D=>{                                          // half-width, NM
+        if(!hires) return 1+0.1*D;                           // standard — (1.0 + 0.1·D) NM
+        const km=D*NM_M/1000;                                // UK 6.6.1 — in km
+        return (km>10?1.9+0.1*km:0.3+0.26*km)*1000/NM_M;
+      };
+      g.wFaf=w2(g.dFaf); g.wMapt=w2(g.dMapt);
+      g.ckD=Math.max(g.dFaf,g.dMapt)<=crit("sraMaxD")+1e-9;
+    }
+    out.geo=g;
+  }
+  return out;
+}
+
 /* ============ ILS missed approach — Turn at Altitude (TNA) ============ */
 /* Ported from the ILS_MA worksheet, formula for formula:
    SOC alt (ft)      = OCA − HL(m) ÷ 0.3048            (HL always in metres; Annex 5 exact)
@@ -746,6 +845,7 @@ const S = {
   manualLlz:{},                 // runway -> {ident,e,n}
   criteria:{},                  // design-criteria overrides (blank = defaults)
   vmc:{ocaOv:{},obs:{}},        // circling: per-proc OCA overrides, per-cat highest obstacle (m)
+  sra:{pid:"",confirmed:false}, // SRA: the survey point confirmed as the radar antenna
   view:{name:"hub", rwy:null},
 };
 
@@ -1765,6 +1865,8 @@ function viewProc(d,key,procId,seg){
     body=viewOmni(r,d,procId);
   } else if(procId==="SIDC"||procId==="SIDPBN"){
     body=viewSidPage(r,d,procId);
+  } else if(procId==="SRA" && seg==="final"){
+    body=viewSraFinal(r,d);
   } else if(procId==="LOC" && seg==="final"){
     body=viewLocFinal(r,d);
   } else if(procId==="LOC" && seg==="inter"){
@@ -1915,6 +2017,176 @@ function viewProc(d,key,procId,seg){
   </div>
   ${body}`;
 }
+/* ---------- SRA final approach view ---------- */
+function viewSraFinal(r,d){
+  const sc=(r.cfg.proc&&r.cfg.proc.SRA)||{};
+  const scv={angle:"3",faf:"",term:String(crit("sraTermThr")),step:"1",ref:"TD",equip:"STD",maptAt:"",...sc};
+  const rp=sraRadarPt(d);
+  const filter=(S._sraFilter||"").toUpperCase();
+  const matches=d.pts.filter(q=>{
+    if(!filter) return false;
+    return String(q.id).toUpperCase().includes(filter)||q.code.includes(filter)
+      ||String(q.ident||"").toUpperCase().includes(filter)||String(q.assoc||"").toUpperCase().includes(filter);
+  }).slice(0,40);
+  const radarCard=`
+      <div class="card">
+        <div class="hd">Radar antenna — from the survey</div>
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">Search the survey</div>
+            <div class="v in"><input type="text" id="sra-filter" value="${esc(S._sraFilter||"")}" placeholder="code / ident / ID"></div>
+            <div class="c">Find the radar head record (type code or ident), then pick and confirm it.</div></div>
+          ${filter?`
+          <div class="row"><div class="k">Matching points</div>
+            <div class="v in"><select id="sra-sel" style="width:100%;max-width:235px">
+              <option value=""></option>
+              ${matches.map(q=>`<option value="${esc(String(q.id))}"${String(q.id)===String(S.sra.pid)?" selected":""}>${esc(String(q.id))} · ${esc(q.code)} · ${esc(q.ident||q.assoc||"")}</option>`).join("")}
+            </select></div>
+            <div class="c">${matches.length?`${matches.length} match(es)${matches.length===40?" (first 40)":""}.`:"no matches."}</div></div>`:""}
+          ${rp?`
+          <div class="row"><div class="k">Selected point</div>
+            <div class="v auto"><b>${esc(String(rp.id))}</b> · ${esc(rp.code)} · ${esc(rp.ident||rp.assoc||"")}</div>
+            <div class="c">E ${f3(rp.e)} · N ${f3(rp.n)} · elev ${rp.gM!=null?f3(rp.gM)+" m":"—"}</div></div>
+          <div class="row"><div class="k">Confirmed as the radar antenna?</div>
+            <div class="v in"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="sra-conf"${S.sra.confirmed?" checked":""}> ${S.sra.confirmed?"confirmed":"not yet confirmed"}</label></div>
+            <div class="c">Your declaration — the point drives the area-width and fix-tolerance checks below.</div></div>
+          <div class="row"><div class="k">Antenna → THR ${esc(r.key)} (NM)</div>
+            <div class="v auto">${r.thr&&r.thr.e!=null?(Math.hypot(rp.e-r.thr.e,rp.n-r.thr.n)/NM_M).toFixed(2):"—"}</div>
+            <div class="c">${r.thr&&r.thr.e!=null?(Math.hypot(rp.e-r.thr.e,rp.n-r.thr.n)).toFixed(2)+" m, from the survey grid.":""}</div></div>`
+          :`<div class="row"><div class="k">Selected point</div><div class="v auto">—</div>
+            <div class="c">No radar point selected yet.</div></div>`}
+        </div></div>
+      </div>`;
+  const c=sraCalc(r,d,scv);
+  const profileCard=`
+      <div class="card">
+        <div class="hd">Descent profile<span class="right">from touchdown — CAP785B</span></div>
+        <div class="bd"><div class="kv compact" style="margin-bottom:0">
+          <div class="row"><div class="k">Descent angle (°)</div>
+            <div class="v in"><input type="number" step="0.01" class="sra-in" data-f="angle" value="${esc(scv.angle)}"></div>
+            <div class="c">CAP785B — minimum ${crit("sraMinAngle").toFixed(2)}°.${c.ckAngle===false?"":""}</div></div>
+          ${c.need?"":`
+          <div class="row"><div class="k">Angle check · gradient (%)</div>
+            <div class="v auto ${c.ckAngle?"chk-ok":"chk-bad"}">${c.ckAngle?`<span class="pill ok">≥ ${crit("sraMinAngle").toFixed(2)}°</span>`:`<span class="pill bad">below the CAP785B minimum ${crit("sraMinAngle").toFixed(2)}°</span>`} ${c.grad.toFixed(2)}%${locGradPill(r,c.grad)}</div>
+            <div class="c">tan θ × 100 — Part I 5.3 limits apply (6.4.5).</div></div>
+          <div class="row"><div class="k">Touchdown beyond THR</div>
+            <div class="v auto">${c.tdM.toFixed(2)} m · ${c.tdNM.toFixed(2)} NM</div>
+            <div class="c">${crit("sraThrHgt").toFixed(0)} ft ÷ tan θ — where the nominal path reaches threshold elevation.</div></div>`}
+          <div class="row"><div class="k">Radar equipment</div>
+            <div class="v in"><select class="sra-in" data-f="equip" style="width:100%;max-width:235px">
+              <option value="STD"${scv.equip!=="HR"?" selected":""}>Standard SRE</option>
+              <option value="HR"${scv.equip==="HR"?" selected":""}>High resolution (UK 6.6)</option></select></div>
+            <div class="c">UK Addition 6.6 — approved high-resolution SRE: talk-down from ${crit("sraHrTalk").toFixed(0)} NM with levels every ½ NM, termination ${crit("sraTermHr").toFixed(1)} NM or less, and its own area formula.</div></div>
+          <div class="row"><div class="k">Ranges published from</div>
+            <div class="v in"><select class="sra-in" data-f="ref" style="width:100%;max-width:235px">
+              <option value="TD"${scv.ref!=="THR"?" selected":""}>Touchdown (standard)</option>
+              <option value="THR"${scv.ref==="THR"?" selected":""}>Threshold (exceptional)</option></select></div>
+            <div class="c">CAP785B — exceptionally, where local constraints dictate, ranges are notified from the threshold.</div></div>
+          <div class="row"><div class="k">FAF range (NM)</div>
+            <div class="v in"><input type="number" step="0.5" class="sra-in" data-f="faf" value="${esc(scv.faf)}"></div>
+            <div class="c">From ${scv.ref==="THR"?"the threshold":"touchdown"} — final begins at this radar fix (6.4.1).</div></div>
+          <div class="row"><div class="k">Termination range (NM from TD)</div>
+            <div class="v in"><input type="number" step="0.5" class="sra-in" data-f="term" value="${esc(scv.term)}"></div>
+            <div class="c">UK GEN 1.7 — ${crit("sraTermThr").toFixed(2)} NM before touchdown; ${crit("sraTermApp").toFixed(2)} NM where specifically approved; ${crit("sraTermHr").toFixed(1)} NM or less for approved high-resolution equipment.</div></div>
+          <div class="row"><div class="k">MAPt designated at (NM from TD)</div>
+            <div class="v in"><input type="number" step="0.5" class="sra-in" data-f="maptAt" value="${esc(scv.maptAt)}" placeholder="${esc(scv.term)}"></div>
+            <div class="c">Blank = at the termination range. UK 6.5 — where operationally advantageous, the MAPt for a 2 NM SRA may be designated ${crit("sraTermApp").toFixed(0)} NM before touchdown.</div></div>
+          ${scv.equip==="HR"?`
+          <div class="row"><div class="k">Level interval</div>
+            <div class="v auto">1 NM · ½ NM inside ${crit("sraHrTalk").toFixed(0)} NM</div>
+            <div class="c">UK 6.6 a — continuous talk-down from ${crit("sraHrTalk").toFixed(0)} NM with ranges and advisory heights every ½ NM.</div></div>`:`
+          <div class="row"><div class="k">Level interval</div>
+            <div class="v in"><select class="sra-in" data-f="step" style="width:100%;max-width:235px">
+              <option value="1"${scv.step!=="0.5"?" selected":""}>Each 1 NM</option>
+              <option value="0.5"${scv.step==="0.5"?" selected":""}>Each ½ NM</option></select></div>
+            <div class="c">6.4.6 — levels each 2 or 1 km (1 or ½ NM).</div></div>`}
+        </div></div>
+      </div>`;
+  let tableCard="";
+  if(c.need||c.need2){
+    tableCard=`<div class="card full"><div class="hd">Ranges & advisory levels</div>
+      <div class="bd"><p class="note" style="margin:0">Waiting for: <b>${esc(c.need||c.need2)}</b>.</p></div></div>`;
+  } else {
+    const refL=c.fromThr?"THR":"TD";
+    const rowH=x=>`<tr${Math.abs(x.R-c.fafRow.R)<1e-9?' style="font-weight:700"':''}>
+      <td class="num auto">${x.R.toFixed(2)}</td><td class="num auto">${x.dThr.toFixed(2)}</td>
+      <td class="num auto">${x.hgt.toFixed(2)}</td><td class="num auto">${x.alt.toFixed(2)}</td>
+      <td class="num auto"><b>${x.pubAlt.toFixed(0)}</b></td><td class="num auto">${x.pubHgt.toFixed(0)}</td></tr>`;
+    tableCard=`
+      <div class="card full">
+        <div class="hd">Ranges & advisory levels<span class="right">altitude = THR elev ${r.thrFt.toFixed(2)} ft + range-from-TD × tan θ</span></div>
+        <div class="bd">
+        <div class="tbl-wrap auto-h"><table>
+          <thead><tr><th>Range from ${refL} (NM)</th><th>From THR (NM)</th><th>Height above THR elev (ft)</th>
+            <th>Altitude (ft)</th><th>Published altitude (ft)</th><th>Published height (ft)</th></tr></thead>
+          <tbody>
+            ${c.rows.map(rowH).join("")}
+            <tr style="background:var(--input-y)"><td class="num auto">${c.term.R.toFixed(2)}</td>
+              <td class="num auto">${c.term.dThr.toFixed(2)}</td><td class="num auto">${c.term.hgt.toFixed(2)}</td>
+              <td class="num auto">${c.term.alt.toFixed(2)}</td><td class="num auto"><b>${c.term.pubAlt.toFixed(0)}</b></td>
+              <td class="num auto">${c.term.pubHgt.toFixed(0)} · <b>SRA terminates${c.maptDes?"":" — MAPt"}</b></td></tr>
+            ${c.maptDes?`<tr style="background:var(--input-y)"><td class="num auto">${c.mapt.R.toFixed(2)}</td>
+              <td class="num auto">${c.mapt.dThr.toFixed(2)}</td><td class="num auto">${c.mapt.hgt.toFixed(2)}</td>
+              <td class="num auto">${c.mapt.alt.toFixed(2)}</td><td class="num auto"><b>${c.mapt.pubAlt.toFixed(0)}</b></td>
+              <td class="num auto">${c.mapt.pubHgt.toFixed(0)} · <b>MAPt (designated — UK 6.5)</b></td></tr>`:""}
+          </tbody></table></div>
+        <p class="note" style="margin:8px 0 0">The FAF row is bold. Published levels are rounded UP to ${crit("sraRoundFar").toFixed(0)} ft,
+          or to ${crit("sraRoundNear").toFixed(0)} ft inside ${crit("sraNearDist").toFixed(2)} NM of touchdown (6.4.6) — precomputed for the
+          radar controller and published in the AIP. CAP785B: ranges are relative to touchdown assuming ${crit("sraThrHgt").toFixed(0)} ft over
+          the threshold${c.fromThr?" — <b>this table is in the exceptional threshold reference</b>":""}.</p>
+        </div>
+      </div>`;
+  }
+  let chkCard="";
+  if(!c.need&&!c.need2){
+    const g=c.geo;
+    chkCard=`
+      <div class="card full">
+        <div class="hd">Final approach area & checks<span class="right">6.4.3 / 6.4.4 / Table I-2-2-3</span></div>
+        <div class="bd"><div class="kv" style="margin-bottom:0">
+          <div class="row"><div class="k">Final length — FAF to MAPt (NM)</div>
+            <div class="v auto ${c.ckFin?"chk-ok":"chk-bad"}"><b>${c.finLen.toFixed(2)}</b> <span class="pill ${c.ckFin?"ok":"bad"}">${c.ckFin?`within ${crit("sraFinMin").toFixed(2)}–${crit("sraFinMax").toFixed(2)} NM`:(c.finLen<crit("sraFinMin")?`below the minimum ${crit("sraFinMin").toFixed(2)} NM`:`beyond the maximum ${crit("sraFinMax").toFixed(2)} NM`)}</span></div>
+            <div class="c"></div></div>
+          <div class="row"><div class="k">Termination</div>
+            <div class="v auto ${c.termTier==="bad"?"chk-bad":(c.termTier==="std"?"chk-ok":"")}">${
+              c.termTier==="bad"?`<span class="pill bad">negative range — not permitted</span>`
+              :c.termTier==="std"?`<span class="pill ok">standard — ${crit("sraTermThr").toFixed(2)} NM before touchdown</span>`
+              :c.termTier==="app"?`<span class="pill warn">${crit("sraTermApp").toFixed(2)} NM — requires specific approval (UK 6.5)</span>`
+              :`<span class="pill ${c.hires?"ok":"warn"}">${c.hires?"high-resolution — 0.5 NM or less (UK 6.6)":"inside "+crit("sraTermApp").toFixed(2)+" NM — approved high-resolution equipment only (UK 6.6)"}</span>`}</div>
+            <div class="c">The obstacle clearance area begins at the FAF and ends at the MAPt (UK 6.4.3).</div></div>
+          <div class="row"><div class="k">MOC — final approach area (ft)</div>
+            <div class="v auto">${crit("sraMoc").toFixed(2)}</div>
+            <div class="c">${c.hires?"75 m (246 ft) in the primary area (50% of the width), reducing to zero at the outer edges of the 25% secondary areas (UK 6.6.1/6.6.2); missed approach secondaries 25% at the MAPt reducing to zero at the SOC (UK 6.6.3)."
+              :"75 m (246 ft) — 6.4.4."} Obstacle assessment to follow with the OCA/H work. When vectoring to an instrument approach within the area specified on the ATC Surveillance Minimum Altitude Chart, MOC may be reduced to 150 m (500 ft) — UK 6.1.1/6.2.3.</div></div>
+          ${g?`
+          <div class="row"><div class="k">Antenna → FAF · MAPt, D (NM)</div>
+            <div class="v auto ${g.dFaf!=null?(g.ckD?"chk-ok":"chk-bad"):""}">${g.dFaf!=null?`${g.dFaf.toFixed(2)} · ${g.dMapt.toFixed(2)} ${g.ckD?`<span class="pill ok">≤ ${crit("sraMaxD").toFixed(2)} NM</span>`:`<span class="pill bad">exceeds ${crit("sraMaxD").toFixed(2)} NM</span>`}`:"— (no TODA_END record to set the track direction)"}</div>
+            <div class="c">Positions on the extended centre line from the survey grid${S.sra.confirmed?"":" — <b>radar point not yet confirmed</b>"}.</div></div>
+          ${g.dFaf!=null?`
+          <div class="row"><div class="k">Area half-width W/2 at FAF · MAPt (NM)</div>
+            <div class="v auto">${g.wFaf.toFixed(2)} · ${g.wMapt.toFixed(2)}</div>
+            <div class="c">${c.hires?"W/2 = 1.9 + 0.1 D km for D > 10 km, else 0.3 + 0.26 D km (UK 6.6.1), shown in NM":"W/2 = (1.0 + 0.1 D) NM — 6.4.3"}.</div></div>`:""}
+          <div class="row"><div class="k">TAR total fix tolerance (NM)</div>
+            <div class="v auto">± ${crit("sraTarTol").toFixed(2)}</div>
+            <div class="c">Table I-2-2-3 — within 20 NM of the antenna; applies to the FAF and MAPt radar fixes.</div></div>`
+          :`<div class="row"><div class="k">Radar geometry</div>
+            <div class="v auto">—</div>
+            <div class="c">Select and confirm the radar antenna point to compute D, the area widths and the fix-tolerance context.</div></div>`}
+        </div></div>
+      </div>`;
+  }
+  return `<div class="hub">${radarCard}${profileCard}${tableCard}${chkCard}</div>`;
+}
+function wireSraFinal(key){
+  const flt=document.getElementById("sra-filter");
+  if(flt) flt.addEventListener("input",e=>{S._sraFilter=e.target.value;render();});
+  const sel=document.getElementById("sra-sel");
+  if(sel) sel.addEventListener("change",e=>{S.sra.pid=e.target.value;S.sra.confirmed=false;render();});
+  const conf=document.getElementById("sra-conf");
+  if(conf) conf.addEventListener("change",e=>{S.sra.confirmed=e.target.checked;render();});
+  document.querySelectorAll(".sra-in").forEach(inp=>inp.addEventListener("change",e=>{
+    ensureProcCfg(key,"SRA")[e.target.dataset.f]=e.target.value; render();}));
+}
+
 /* ---------- LOC only — final / intermediate / initial ---------- */
 /* Where an ILS exists the LOC-only procedure usually shares its parameters,
    promulgated as a gradient (%) rather than an angle (°) — each tab asks.
@@ -3272,6 +3544,7 @@ function wireProc(){
   if(procId==="ILS"&&S.view.seg==="missed") wireIlsMA(key);
   if(procId==="ILS"&&S.view.seg==="adv") wireIlsAdv(key);
   if(procId==="ILS"&&S.view.seg==="inter") wireIlsInter(key);
+  if(procId==="SRA"&&S.view.seg==="final") wireSraFinal(key);
   if(procId==="LOC"&&S.view.seg==="final") wireLocFinal(key);
   if(procId==="LOC"&&S.view.seg==="inter") wireLocInter(key);
   if(procId==="LOC"&&S.view.seg==="initial") wireLocInitial(key);
@@ -3406,7 +3679,7 @@ function projectPayload(){
     vertRef:S.vertRef, points:S.points,
     decisions:{tolMatch:S.tolMatch, manualAEP:S.manualAEP,
                codeOverrides:S.codeOverrides, rwyCfg:S.rwyCfg, manualLlz:S.manualLlz, criteria:S.criteria,
-               vmc:S.vmc}};
+               vmc:S.vmc, sra:S.sra}};
 }
 function applyProject(p){
   if(!p||!String(p.tool||"").startsWith("IFP Design")||!Array.isArray(p.points))
@@ -3419,6 +3692,7 @@ function applyProject(p){
   S.codeOverrides=dcs.codeOverrides||{}; S.manualLlz=dcs.manualLlz||{};
   S.criteria=dcs.criteria||{};
   S.vmc=dcs.vmc||{ocaOv:{},obs:{}};
+  S.sra=dcs.sra||{pid:"",confirmed:false};
   if(S.criteria.wind!=null){   // short-lived global wind key → per-procedure keys
     if(S.criteria.maWind==null) S.criteria.maWind=S.criteria.wind;
     if(S.criteria.sidWind==null) S.criteria.sidWind=S.criteria.wind;
