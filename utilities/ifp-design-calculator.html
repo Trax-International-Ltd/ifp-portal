@@ -662,7 +662,7 @@ function sraRadarPt(d){
 }
 function sraCalc(r,d,sc){
   if(r.thrFt==null) return {need:"THR elevation (survey)"};
-  const angle=safeNum(sc.angle), faf=safeNum(sc.faf), term=safeNum(sc.term);
+  const angle=safeNum(sc.angle), term=safeNum(sc.term);
   const step=sc.step==="0.5"?0.5:1;
   const fromThr=sc.ref==="THR", hires=sc.equip==="HR";
   if(angle==null||!(angle>0)) return {need:"the descent angle"};
@@ -671,7 +671,17 @@ function sraCalc(r,d,sc){
   const tdFt=thrH/tanTh, tdM=tdFt*FT_M, tdNM=tdM/NM_M;      // touchdown beyond THR
   const out={angle,tanTh,grad:tanTh*100,thrH,tdFt,tdM,tdNM,step,fromThr,hires,
              ckAngle:angle>=crit("sraMinAngle")-1e-9};
-  if(faf==null||term==null) {out.need2="the FAF range and the termination distance"; return out;}
+  let faf;
+  if(sc.fafBy==="ALT"){                                      // range calculated from a THR-referenced altitude
+    const fa=safeNum(sc.fafAlt);
+    if(fa!=null){
+      out.fafAlt=fa;
+      out.fafTD=((fa-r.thrFt)/tanTh)*FT_M/NM_M;              // (alt − THR elev) ÷ tan θ → NM from touchdown
+      faf=fromThr?out.fafTD-tdNM:out.fafTD;
+      if(!(out.fafTD>0)){out.need2="a FAF altitude above the threshold elevation"; return out;}
+    }
+  } else faf=safeNum(sc.faf);
+  if(faf==null||term==null) {out.need2="the FAF (range or altitude) and the termination range"; return out;}
   const termRef=fromThr?term-tdNM:term;                      // termination (NM from touchdown) in the published reference
   const lvl=R=>{                                             // R in the published reference
     const dTD=fromThr?R+tdNM:R;                              // range from touchdown
@@ -684,13 +694,15 @@ function sraCalc(r,d,sc){
   const rows=[];
   const talk=crit("sraHrTalk");
   for(let R=Math.ceil((termRef-1e-9)/0.5)*0.5; R<=faf+1e-9; R+=0.5){
-    if(Math.abs(R-termRef)<1e-9) continue;                   // the termination row carries this level
+    if(Math.abs(R-termRef)<1e-9||Math.abs(R-faf)<1e-9) continue;  // the termination and FAF rows carry these levels
     const dTD=fromThr?R+tdNM:R;
     const whole=Math.abs(R-Math.round(R))<1e-9;
     if(hires? (dTD<=talk+1e-9||whole) : (step===0.5||whole)) rows.push(lvl(r2d(R)));
   }
   rows.reverse();                                            // chart order — FAF first
-  out.rows=rows; out.term=lvl(termRef); out.fafRow=lvl(faf);
+  out.term=lvl(termRef); out.fafRow=lvl(sc.fafBy==="ALT"?faf:r2d(faf));
+  rows.unshift(out.fafRow);
+  out.rows=rows;
   const maptTD=safeNum(sc.maptAt)??term;                     // UK 6.5 — MAPt may be designated before touchdown short of termination
   out.maptDes=Math.abs(maptTD-term)>1e-9;
   out.mapt=out.maptDes?lvl(fromThr?maptTD-tdNM:maptTD):out.term;
@@ -2020,7 +2032,7 @@ function viewProc(d,key,procId,seg){
 /* ---------- SRA final approach view ---------- */
 function viewSraFinal(r,d){
   const sc=(r.cfg.proc&&r.cfg.proc.SRA)||{};
-  const scv={angle:"3",faf:"",term:String(crit("sraTermThr")),step:"1",ref:"TD",equip:"STD",maptAt:"",...sc};
+  const scv={angle:"3",faf:"",fafBy:"R",fafAlt:"",term:String(crit("sraTermThr")),step:"1",ref:"TD",equip:"STD",maptAt:"",...sc};
   const rp=sraRadarPt(d);
   const filter=(S._sraFilter||"").toUpperCase();
   const matches=d.pts.filter(q=>{
@@ -2081,9 +2093,22 @@ function viewSraFinal(r,d){
               <option value="TD"${scv.ref!=="THR"?" selected":""}>Touchdown (standard)</option>
               <option value="THR"${scv.ref==="THR"?" selected":""}>Threshold (exceptional)</option></select></div>
             <div class="c">CAP785B — exceptionally, where local constraints dictate, ranges are notified from the threshold.</div></div>
+          <div class="row"><div class="k">FAF defined by</div>
+            <div class="v in"><select class="sra-in" data-f="fafBy" style="width:100%;max-width:235px">
+              <option value="R"${scv.fafBy!=="ALT"?" selected":""}>Range (NM)</option>
+              <option value="ALT"${scv.fafBy==="ALT"?" selected":""}>Altitude (ft) → range</option></select></div>
+            <div class="c">The range can be calculated from a THR-referenced altitude on the nominal path.</div></div>
+          ${scv.fafBy==="ALT"?`
+          <div class="row"><div class="k">FAF altitude (ft)</div>
+            <div class="v in"><input type="number" step="1" class="sra-in" data-f="fafAlt" value="${esc(scv.fafAlt)}"></div>
+            <div class="c">Altitude on the nominal path (QNH) — e.g. the platform altitude.</div></div>
+          ${c.fafTD!=null?`
+          <div class="row"><div class="k">FAF range — calculated (NM)</div>
+            <div class="v auto"><b>${(c.fromThr?c.fafTD-c.tdNM:c.fafTD).toFixed(2)}</b> from ${c.fromThr?"THR":"TD"} · ${(c.fromThr?c.fafTD:c.fafTD-c.tdNM).toFixed(2)} from ${c.fromThr?"TD":"THR"}</div>
+            <div class="c">(altitude − THR elev ${r.thrFt!=null?r.thrFt.toFixed(2):"—"} ft) ÷ tan θ.</div></div>`:""}`:`
           <div class="row"><div class="k">FAF range (NM)</div>
             <div class="v in"><input type="number" step="0.5" class="sra-in" data-f="faf" value="${esc(scv.faf)}"></div>
-            <div class="c">From ${scv.ref==="THR"?"the threshold":"touchdown"} — final begins at this radar fix (6.4.1).</div></div>
+            <div class="c">From ${scv.ref==="THR"?"the threshold":"touchdown"} — final begins at this radar fix (6.4.1).</div></div>`}
           <div class="row"><div class="k">Termination range (NM from TD)</div>
             <div class="v in"><input type="number" step="0.5" class="sra-in" data-f="term" value="${esc(scv.term)}"></div>
             <div class="c">UK GEN 1.7 — ${crit("sraTermThr").toFixed(2)} NM before touchdown; ${crit("sraTermApp").toFixed(2)} NM where specifically approved; ${crit("sraTermHr").toFixed(1)} NM or less for approved high-resolution equipment.</div></div>
