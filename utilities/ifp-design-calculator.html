@@ -413,6 +413,26 @@ const CRIT_DEFS=[
  {k:"rfAlpha",  g:"ILS intermediate", label:"RF method — GP alignment factor α",   def:0.075,  note:"App D eq (8): 0.075 for ILS Cat I/II and MLS; 0.04 for ILS Cat III; 0 for GLS/LPV."},
  {k:"rfMaxSeg", g:"ILS intermediate", label:"RF method — max total segment (NM)",  def:10,     note:"The total intermediate segment with an RF turn shall not exceed 18.5 km (10 NM) — 1.3.6.2."},
  {k:"rfCat23Min",g:"ILS intermediate", label:"RF method — CAT II/III end fix to THR (NM)", def:5, note:"Minimum distance between the end fix of the RF turn and the landing threshold for CAT II and III operations — 9.3 km (5 NM) — 1.3.6.2."},
+ {k:"vmcAlt",  g:"Visual manoeuvring (circling)", label:"TAS altitude above aerodrome (ft)", def:1000, note:"7.2.3 — TAS is computed at aerodrome elevation + 300 m (1 000 ft), at ISA + the ISA deviation value."},
+ {k:"vmcWind", g:"Visual manoeuvring (circling)", label:"Wind factor (kt)",                 def:25,   note:"±46 km/h (25 kt) throughout the turn — 7.2.2 b)."},
+ {k:"vmcBank", g:"Visual manoeuvring (circling)", label:"Bank angle (°)",                   def:20,   note:"20° average achieved, or the bank giving the max rate of turn — whichever is the LESSER bank (7.2.2 c)."},
+ {k:"vmcRate", g:"Visual manoeuvring (circling)", label:"Max rate of turn (°/s)",           def:3,    note:""},
+ {k:"vmcIas_A",g:"Visual manoeuvring (circling)", label:"Max circling IAS — Cat A (kt)",    def:100,  note:"Tables I-4-1-1 / I-4-1-2 — maximum speeds for visual manoeuvring."},
+ {k:"vmcIas_B",g:"Visual manoeuvring (circling)", label:"Max circling IAS — Cat B (kt)",    def:135,  note:""},
+ {k:"vmcIas_C",g:"Visual manoeuvring (circling)", label:"Max circling IAS — Cat C (kt)",    def:180,  note:""},
+ {k:"vmcIas_D",g:"Visual manoeuvring (circling)", label:"Max circling IAS — Cat D (kt)",    def:205,  note:""},
+ {k:"vmcStr_A",g:"Visual manoeuvring (circling)", label:"Straight segment — Cat A (NM)",    def:0.3,  note:"Constant, independent of aerodrome elevation (Tables I-4-7-1 / I-4-7-2)."},
+ {k:"vmcStr_B",g:"Visual manoeuvring (circling)", label:"Straight segment — Cat B (NM)",    def:0.4,  note:""},
+ {k:"vmcStr_C",g:"Visual manoeuvring (circling)", label:"Straight segment — Cat C (NM)",    def:0.5,  note:""},
+ {k:"vmcStr_D",g:"Visual manoeuvring (circling)", label:"Straight segment — Cat D (NM)",    def:0.6,  note:""},
+ {k:"vmcMoc_A",g:"Visual manoeuvring (circling)", label:"Circling MOC — Cat A (ft)",        def:295,  note:"Table I-4-7-3 — 90 m (295 ft)."},
+ {k:"vmcMoc_B",g:"Visual manoeuvring (circling)", label:"Circling MOC — Cat B (ft)",        def:295,  note:"90 m (295 ft)."},
+ {k:"vmcMoc_C",g:"Visual manoeuvring (circling)", label:"Circling MOC — Cat C (ft)",        def:394,  note:"120 m (394 ft)."},
+ {k:"vmcMoc_D",g:"Visual manoeuvring (circling)", label:"Circling MOC — Cat D (ft)",        def:394,  note:"120 m (394 ft)."},
+ {k:"vmcLow_A",g:"Visual manoeuvring (circling)", label:"Lower limit OCH — Cat A (ft)",     def:394,  note:"Table I-4-7-3 — 120 m (394 ft) above aerodrome elevation."},
+ {k:"vmcLow_B",g:"Visual manoeuvring (circling)", label:"Lower limit OCH — Cat B (ft)",     def:492,  note:"150 m (492 ft)."},
+ {k:"vmcLow_C",g:"Visual manoeuvring (circling)", label:"Lower limit OCH — Cat C (ft)",     def:591,  note:"180 m (591 ft)."},
+ {k:"vmcLow_D",g:"Visual manoeuvring (circling)", label:"Lower limit OCH — Cat D (ft)",     def:689,  note:"210 m (689 ft)."},
  {k:"poBand1", g:"SID turns — AOB & speed", label:"PANS-OPS band 1 top (ft AMSL)", def:1000, note:"Nominal track only: 15° AOB up to here."},
  {k:"poBand2", g:"SID turns — AOB & speed", label:"PANS-OPS band 2 top (ft AMSL)", def:3000, note:"20° AOB between the bands; 25° above."},
  {k:"poAob1",  g:"SID turns — AOB & speed", label:"PANS-OPS AOB — band 1 (°)",         def:15,  note:""},
@@ -547,6 +567,62 @@ function rfSolveL(sh,hFACF){            // lowest L (NM) for a given FACF height
   return hi;
 }
 
+/* ========= Visual manoeuvring (circling) — Part I, S4, Chapter 7 ========= */
+/* Radii (7.2.2 / 7.2.3): max circling IAS → TAS at aerodrome + 1 000 ft,
+   ISA+15, plus 25 kt wind; bank 20° or the bank giving 3°/s, whichever is
+   the lesser bank; R from THR = 2r + straight segment. TAS + wind is taken
+   to whole knots and R chains from the 2 dp radius, which reproduces the
+   PANS-OPS example Tables I-4-7-1 and I-4-7-2 exactly.
+   OCA/H (7.3 / Table I-4-7-3): circling OCA per procedure and category is
+   the highest of procedure OCA, aerodrome + lower limit for OCH, and, when
+   entered, highest obstacle + MOC. Cat H is excluded (7.1.3).            */
+const VMC_VIS={A:"1.9 km (1.0 NM)",B:"2.8 km (1.5 NM)",C:"3.7 km (2.0 NM)",D:"4.6 km (2.5 NM)"};
+function vmcCalc(d){
+  if(d.operative==null) return {need:"operative aerodrome elevation"};
+  const aeroFt=r2d(d.operative/FT_M);                 // published aerodrome elevation (2 dp)
+  const altTas=aeroFt+crit("vmcAlt");
+  const RAD=Math.PI/180;
+  const cats=CATS.map(cat=>{
+    const ias=crit("vmcIas_"+cat);
+    const tas=maTas(ias,altTas,crit("isaDev"),0);
+    const v=Math.round(tas+crit("vmcWind"));          // whole knots — as Tables I-4-7-1/2
+    const rate=Math.min(crit("vmcRate"),3431*Math.tan(crit("vmcBank")*RAD)/(Math.PI*v));
+    const rTurn=v/(20*Math.PI*rate);
+    const straight=crit("vmcStr_"+cat);
+    const R=r2d(2*r2d(rTurn)+straight);               // 2 dp chain — matches the tables
+    const moc=crit("vmcMoc_"+cat), low=crit("vmcLow_"+cat);
+    const obsM=safeNum((S.vmc.obs||{})[cat]);
+    return {cat,ias,tas,v,rate,rTurn,straight,R,Rm:R*NM_M,moc,low,
+            ocaLow:aeroFt+low,obsM,ocaObs:obsM!=null?r2d(obsM/FT_M)+moc:null,vis:VMC_VIS[cat]};
+  });
+  const gk=gradKey(crit("macgBase"));
+  const procs=[];
+  for(const r of d.runways){
+    for(const pid of r.procsOn){
+      if(!APPROACH_IDS.includes(pid)) continue;
+      const perCat={};
+      for(const cat of CATS){
+        if(!r.catsOn.includes(cat)){perCat[cat]=null;continue;}
+        let auto=null;
+        if(pid==="ILS"){
+          const dz=r.ic&&r.ic.ma&&r.ic.ma.designs&&r.ic.ma.designs.C1;
+          if(dz){migrateOca(dz); auto=safeNum(dz.oca?.[gk]?.[cat]);}
+        }
+        const ovKey=r.key+"|"+pid+"|"+cat;
+        const ov=safeNum((S.vmc.ocaOv||{})[ovKey]);
+        const procOca=ov??auto;
+        const cc=cats.find(x=>x.cat===cat);
+        let oca=null,gov=null;
+        for(const [g,v] of [["procedure OCA",procOca],["lower limit",cc.ocaLow],["obstacle + MOC",cc.ocaObs]])
+          if(v!=null&&(oca==null||v>oca)){oca=v;gov=g;}
+        perCat[cat]={auto,ov,procOca,oca,och:oca!=null?oca-aeroFt:null,gov,ovKey};
+      }
+      procs.push({key:r.key,pid,label:(PROC_TYPES.find(([p])=>p===pid)||[])[1]||pid,perCat});
+    }
+  }
+  return {aeroFt,altTas,cats,procs};
+}
+
 /* ============ ILS missed approach — Turn at Altitude (TNA) ============ */
 /* Ported from the ILS_MA worksheet, formula for formula:
    SOC alt (ft)      = OCA − HL(m) ÷ 0.3048            (HL always in metres; Annex 5 exact)
@@ -665,6 +741,7 @@ const S = {
   rwyCfg:{},                    // runway -> {cats:{A..D}, procs:{ILS,LOC,...}, ils:{rdh...}} — preserved across reloads
   manualLlz:{},                 // runway -> {ident,e,n}
   criteria:{},                  // design-criteria overrides (blank = defaults)
+  vmc:{ocaOv:{},obs:{}},        // circling: per-proc OCA overrides, per-cat highest obstacle (m)
   view:{name:"hub", rwy:null},
 };
 
@@ -964,6 +1041,7 @@ function render(){
     case "codes":  m.innerHTML=viewCodes(d);  wireCodes(); break;
     case "crit":   m.innerHTML=viewCrit();     wireCrit(); break;
     case "cio":    m.innerHTML=viewCio(d,S.view.rwy); wireCio(); break;
+    case "vmc":    m.innerHTML=viewVmc(d); wireVmc(); break;
     case "rwy":    m.innerHTML=viewRunway(d,S.view.rwy); wireRunway(); break;
     case "proc":   m.innerHTML=viewProc(d,S.view.rwy,S.view.proc,S.view.seg); wireProc(); break;
     default:       m.innerHTML=viewHub(d);    wireHub(); break;
@@ -975,7 +1053,7 @@ function renderNav(d){
   if(!d){ nav.innerHTML=""; return; }
   const items=[["hub","Dashboard"]];
   const procLabel=id=>PROC_TYPES.find(([p])=>p===id)?.[1]||id;
-  const pageNames={elev:"Aerodrome elevation",points:"Survey points",codes:"Survey codes",crit:"Design criteria"};
+  const pageNames={elev:"Aerodrome elevation",points:"Survey points",codes:"Survey codes",crit:"Design criteria",vmc:"Visual manoeuvring (circling)"};
   if(S.view.name==="cio") pageNames.cio=`RWY ${S.view.rwy} · Close-in obstacles`;
   let tail="";
   if(pageNames[S.view.name]) tail=`<a href="#" class="here">${pageNames[S.view.name]}</a>`;
@@ -1039,6 +1117,98 @@ function wireImport(){
 
 /* ---------- dashboard hub ---------- */
 /* ---------------- Design criteria page ---------------- */
+/* ---------- visual manoeuvring (circling) ---------- */
+function viewVmc(d){
+  const c=vmcCalc(d);
+  if(c.need) return `<h2>Visual manoeuvring (circling)</h2>
+    <div class="card"><div class="bd"><p class="note" style="margin:0">Waiting for: <b>${esc(c.need)}</b>.</p></div></div>`;
+  const th=CATS.map(cat=>`<th style="text-align:center">Cat ${cat}</th>`).join("");
+  const row=(label,fn)=>`<tr><td class="t">${label}</td>${c.cats.map(x=>`<td class="num auto">${fn(x)}</td>`).join("")}</tr>`;
+  const radii=`
+    <div class="card full">
+      <div class="hd">Area radii<span class="right">7.2 — TAS at aerodrome + ${crit("vmcAlt").toFixed(0)} ft · ISA + ${crit("isaDev")}°C · ±${crit("vmcWind").toFixed(0)} kt</span></div>
+      <div class="bd">
+        <div class="tbl-wrap auto-h"><table>
+          <thead><tr><th></th>${th}</tr></thead>
+          <tbody>
+            ${row("Max IAS — visual manoeuvring (kt)",x=>x.ias.toFixed(2))}
+            ${row(`TAS at ${c.altTas.toFixed(2)} ft (kt)`,x=>x.tas.toFixed(2))}
+            ${row("TAS + wind factor (whole kt)",x=>x.v.toFixed(0))}
+            ${row("Rate of turn (°/s)",x=>x.rate.toFixed(2))}
+            ${row("Radius of turn r (NM)",x=>r2d(x.rTurn).toFixed(2))}
+            ${row("Straight segment (NM)",x=>x.straight.toFixed(2))}
+            ${row("<b>Radius from THR, R = 2r + straight (NM)</b>",x=>`<b>${x.R.toFixed(2)}</b>`)}
+            ${row("R (m)",x=>x.Rm.toFixed(2))}
+          </tbody>
+        </table></div>
+        <p class="note" style="margin:8px 0 0">Bank ${crit("vmcBank").toFixed(0)}° average achieved, or the bank giving ${crit("vmcRate").toFixed(0)}°/s —
+          whichever is the lesser bank (7.2.2 c). TAS + wind is taken to whole knots and R chains from the 2 dp radius, as in
+          Tables I-4-7-1 / I-4-7-2. The area is arcs of radius R from the centre of the threshold of each usable runway, joined by
+          tangents (7.2.1.1). Category H is excluded (7.1.3).</p>
+      </div>
+    </div>`;
+  const t3=`
+    <div class="card full">
+      <div class="hd">Lowest OCH — Table I-4-7-3<span class="right">MOC · lower limit · minimum visibility</span></div>
+      <div class="bd">
+        <div class="tbl-wrap auto-h"><table>
+          <thead><tr><th></th>${th}</tr></thead>
+          <tbody>
+            ${row("Minimum obstacle clearance, MOC (ft)",x=>x.moc.toFixed(2))}
+            ${row("Lower limit for OCH above aerodrome (ft)",x=>x.low.toFixed(2))}
+            ${row(`<b>Lowest OCA (ft)</b> — aerodrome ${c.aeroFt.toFixed(2)} + lower limit`,x=>`<b>${x.ocaLow.toFixed(2)}</b>`)}
+            ${row("Minimum visibility",x=>x.vis)}
+            <tr><td class="t">Highest obstacle in the circling area (m) — optional</td>${c.cats.map(x=>`<td class="num"><input type="number" step="0.01" class="vmc-obs cell-in" data-cat="${x.cat}" value="${esc((S.vmc.obs||{})[x.cat]??"")}" style="width:96px"></td>`).join("")}</tr>
+            ${row("Obstacle OCA = elevation + MOC (ft)",x=>x.ocaObs!=null?x.ocaObs.toFixed(2):"—")}
+          </tbody>
+        </table></div>
+        <p class="note" style="margin:8px 0 0">Each category uses its own radius, so the governing obstacle can differ by category —
+          enter each category's highest obstacle elevation in surveyed metres (ft = ÷ 0.3048, to 2 dp, + MOC). Left blank, the
+          obstacle line stays out of the comparison below. A sector with a prominent obstacle may only be ignored under 7.4, and
+          circling must then be prohibited in that sector on the published procedure.</p>
+      </div>
+    </div>`;
+  let procCard;
+  if(!c.procs.length) procCard=`
+    <div class="card full"><div class="bd"><p class="note" style="margin:0">No approach procedures are declared on any runway yet —
+      tick them on the runway panels and each one's circling values will appear here.</p></div></div>`;
+  else{
+    const h1=`<tr><th rowspan="2">Procedure</th>${CATS.map(cat=>`<th colspan="3" style="text-align:center">Cat ${cat}</th>`).join("")}</tr>`;
+    const h2=`<tr>${CATS.map(()=>`<th style="text-align:center">Proc OCA</th><th style="text-align:center">VMC OCA</th><th style="text-align:center">OCH</th>`).join("")}</tr>`;
+    const rows=c.procs.map(p=>`<tr><td class="t" style="white-space:nowrap"><b>${esc(p.key)}</b> ${esc(p.label)}</td>${CATS.map(cat=>{
+      const pc=p.perCat[cat];
+      if(!pc) return `<td colspan="3" style="color:var(--muted);text-align:center">—</td>`;
+      const inp=`<input type="number" step="0.01" class="vmc-oca" data-k="${esc(pc.ovKey)}" value="${esc((S.vmc.ocaOv||{})[pc.ovKey]??"")}" placeholder="${pc.auto!=null?pc.auto:""}" style="width:78px">`;
+      const vm=pc.oca!=null?`<b>${pc.oca.toFixed(2)}</b><div class="mono" style="font-size:10px;color:var(--muted)">${esc(pc.gov)}</div>`:"—";
+      return `<td class="num">${inp}</td><td class="num auto">${vm}</td><td class="num auto">${pc.och!=null?pc.och.toFixed(2):"—"}</td>`;
+    }).join("")}</tr>`).join("");
+    procCard=`
+    <div class="card full">
+      <div class="hd">VMC per approach procedure<span class="right">highest of: procedure OCA · lowest OCA · obstacle + MOC</span></div>
+      <div class="bd">
+        <div class="tbl-wrap auto-h"><table>
+          <thead>${h1}${h2}</thead><tbody>${rows}</tbody>
+        </table></div>
+        <p class="note" style="margin:8px 0 0"><b>Proc OCA</b> — for an ILS, the CAT I OCA at ${crit("macgBase").toFixed(1)}% from that
+          procedure's Missed approach tab is used when the box is blank (shown greyed); overtype to use another value, and type the OCA
+          directly for procedure types whose workspaces are still to come. All values ft. <b>VMC OCH</b> is above the aerodrome elevation
+          ${c.aeroFt.toFixed(2)} ft. The OCA/H promulgated for the circling procedure is approach or missed approach, whichever is
+          greater (7.6); no rounding is applied here.</p>
+      </div>
+    </div>`;
+  }
+  return `<h2>Visual manoeuvring (circling)</h2>
+  <p class="note">Part I, Section 4, Chapter 7 — alignment or descent-gradient criteria for straight-in cannot be met, so the
+    aircraft manoeuvres visually after the instrument approach. All values below follow the Design criteria page.</p>
+  <div class="hub">${radii}${t3}${procCard}</div>`;
+}
+function wireVmc(){
+  document.querySelectorAll(".vmc-obs").forEach(inp=>inp.addEventListener("change",e=>{
+    S.vmc.obs=S.vmc.obs||{}; S.vmc.obs[e.target.dataset.cat]=e.target.value; render();}));
+  document.querySelectorAll(".vmc-oca").forEach(inp=>inp.addEventListener("change",e=>{
+    S.vmc.ocaOv=S.vmc.ocaOv||{}; S.vmc.ocaOv[e.target.dataset.k]=e.target.value; render();}));
+}
+
 function viewCrit(){
   const groups=[...new Set(CRIT_DEFS.map(x=>x.g))];
   const body=groups.map(g=>`
@@ -1155,6 +1325,14 @@ function viewHub(d){
         <p class="note" style="margin:0;flex:1;min-width:260px">ISA deviation, wind, gradients, height losses, PANS-OPS speeds and the
           other design values live here — edit once and every calculation follows. Nothing is hardcoded.</p>
         <button class="act" id="open-crit" style="padding:6px 16px">Open</button>
+      </div>
+    </div>
+    <div class="card full">
+      <div class="hd">Visual manoeuvring (circling)<span class="right">Part I, S4, Chapter 7</span></div>
+      <div class="bd" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <p class="note" style="margin:0;flex:1;min-width:260px">Aerodrome-level circling: area radii per category from the operative
+          elevation, the Table I-4-7-3 lowest OCH, and the circling OCA/H for each approach procedure.</p>
+        <button class="act" data-go="vmc" style="padding:6px 16px">Open</button>
       </div>
     </div>
     <div class="card full">
@@ -3038,7 +3216,8 @@ function projectPayload(){
     icao:S.icao, fileName:S.fileName, company:S.company, procDate:S.procDate,
     vertRef:S.vertRef, points:S.points,
     decisions:{tolMatch:S.tolMatch, manualAEP:S.manualAEP,
-               codeOverrides:S.codeOverrides, rwyCfg:S.rwyCfg, manualLlz:S.manualLlz, criteria:S.criteria}};
+               codeOverrides:S.codeOverrides, rwyCfg:S.rwyCfg, manualLlz:S.manualLlz, criteria:S.criteria,
+               vmc:S.vmc}};
 }
 function applyProject(p){
   if(!p||!String(p.tool||"").startsWith("IFP Design")||!Array.isArray(p.points))
@@ -3050,6 +3229,7 @@ function applyProject(p){
   S.tolMatch=dcs.tolMatch??0.005; S.manualAEP=dcs.manualAEP??"";
   S.codeOverrides=dcs.codeOverrides||{}; S.manualLlz=dcs.manualLlz||{};
   S.criteria=dcs.criteria||{};
+  S.vmc=dcs.vmc||{ocaOv:{},obs:{}};
   if(S.criteria.wind!=null){   // short-lived global wind key → per-procedure keys
     if(S.criteria.maWind==null) S.criteria.maWind=S.criteria.wind;
     if(S.criteria.sidWind==null) S.criteria.sidWind=S.criteria.wind;
